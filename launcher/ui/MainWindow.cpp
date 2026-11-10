@@ -2128,6 +2128,13 @@ void MainWindow::renameSelectedInstance(const QString& newName)
 
 void MainWindow::zeroScreenshot(const QString& path, const QString& page)
 {
+    // Dev aid: ZERO_SCREENSHOT_THEME=<theme id> (e.g. zero-minecraft) applies that application theme before grabbing.
+    if (const QString themeId = qEnvironmentVariable("ZERO_SCREENSHOT_THEME"); !themeId.isEmpty()) {
+        if (APPLICATION->themeManager()->isValidApplicationTheme(themeId))
+            APPLICATION->themeManager()->setApplicationTheme(themeId, false);
+        else
+            qWarning() << "ZERO_SCREENSHOT_THEME: unknown theme" << themeId;
+    }
     const bool library = page == QLatin1String("library");
     m_shell->setCurrentPage(library ? QStringLiteral("library") : page == QLatin1String("tools") ? QStringLiteral("tools") : QStringLiteral("home"));
     QSize size(1280, 800);

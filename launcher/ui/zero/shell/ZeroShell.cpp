@@ -2,10 +2,13 @@
 #include "ZeroShell.h"
 
 #include <QHBoxLayout>
+#include <QPainter>
 #include <QStackedWidget>
 #include "AccountChip.h"
 #include "ui/zero/ZeroMotion.h"
 #include "ui/zero/ZeroNavRail.h"
+#include "ui/zero/ZeroPaint.h"
+#include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTokens.h"
 
 namespace Zero {
@@ -19,6 +22,17 @@ ZeroShell::ZeroShell(QWidget* parent) : QWidget(parent), m_rail(new ZeroNavRail(
     layout->addWidget(m_stack, 1);
 
     connect(m_rail, &ZeroNavRail::currentChanged, this, &ZeroShell::showPage);
+    connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
+}
+
+void ZeroShell::paintEvent(QPaintEvent*)
+{
+    // Textured themes carry the stone tile behind the (transparent) pages; flat themes let the window color show.
+    const auto& t = Theme::current();
+    if (!t.texture)
+        return;
+    QPainter p(this);
+    Paint::paintBackground(p, rect(), t.bg);
 }
 
 void ZeroShell::addPage(const QString& id, const QString& iconName, const QString& label, QWidget* page)

@@ -889,8 +889,12 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroMotion.h
     ui/zero/ZeroNavRail.cpp
     ui/zero/ZeroNavRail.h
+    ui/zero/ZeroPaint.cpp
+    ui/zero/ZeroPaint.h
     ui/zero/ZeroPageHeader.cpp
     ui/zero/ZeroPageHeader.h
+    ui/zero/ZeroPixelFont.cpp
+    ui/zero/ZeroPixelFont.h
     ui/zero/ZeroSpinner.cpp
     ui/zero/ZeroSpinner.h
     ui/zero/ZeroStyle.cpp

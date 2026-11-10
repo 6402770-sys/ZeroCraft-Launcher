@@ -3,6 +3,7 @@
 
 #include <QMouseEvent>
 #include <QPainter>
+#include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroThemeState.h"
 
 namespace Zero {
@@ -42,7 +43,7 @@ void IconTile::paintEvent(QPaintEvent*)
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setPen(Qt::NoPen);
     p.setBrush(m_clickable && underMouse() ? t.higher : t.elevated);
-    p.drawRoundedRect(QRectF(rect()), Tokens::radiusLg, Tokens::radiusLg);
+    p.drawPath(Paint::panelPath(QRectF(rect()), t.radiusLg));
     if (!m_iconImage.isNull()) {
         const QRect target((width() - m_icon) / 2, (height() - m_icon) / 2, m_icon, m_icon);
         m_iconImage.paint(&p, target);

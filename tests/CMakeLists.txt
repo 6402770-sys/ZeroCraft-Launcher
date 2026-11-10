@@ -27,6 +27,8 @@ set(TEST_SOURCES
     XmlLogs_test.cpp
     Commandline_test.cpp
     ZeroStyle_test.cpp
+    ZeroTheme_test.cpp
+    ZeroPixelFont_test.cpp
     ZeroFormat_test.cpp
     CrashDetective_test.cpp
 )

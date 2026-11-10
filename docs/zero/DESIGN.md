@@ -82,3 +82,65 @@ Legacy Prism pages keep Prism's icon themes; ZERO defaults the icon theme to `fl
 - Shell: `[NavRail | Page]`. Pages scroll vertically inside; the rail never scrolls.
 - Content max width 1280 px on Home; Library uses full width.
 - Never show a control that does nothing. Unfinished destinations are hidden, not stubbed.
+
+---
+
+# Design v2 (Mission 002, 2026-11-10) — binding
+
+## Theme engine
+- A theme is a `Zero::ThemeSpec` (`ZeroTokens.h`). Fields beyond colors: `id`, `name`, `accent2`, `highlight`,
+  radius scale (`radiusSm/Md/Lg/Xl`), `corners` (`Rounded` | `Notched`), `bevel`, `texture`, `pixelRoles`
+  (type roles drawn with the built-in "ZERO Pixel" font). Widgets read only `Zero::Theme::current()` and repaint on
+  `Theme::changed()`. Painted panels use `Zero::Paint::panelPath(rect, radius)` so the corner style follows the theme.
+- Each spec is an `ITheme` in Prism's ThemeManager (`zero-obsidian`, `zero-minecraft`), persisted by the existing
+  `ApplicationTheme` setting, switchable live. Stylesheet = `obsidian.qss` (base, token placeholders) + optional
+  per-theme overlay (`minecraft.qss`). Future custom themes = another spec (+ overlay).
+
+## Minecraft Theme (`zero-minecraft`)
+Overworld at night, carved in stone. Readable first; the personality lives in surfaces, edges and a few pixel details.
+
+| Token | Hex | Meaning |
+|---|---|---|
+| bg | `#16171A` | deep deepslate |
+| surface / surfaceHover | `#1F2125` / `#25282D` | dark stone |
+| elevated / higher / pressed | `#2B2E33` / `#33373D` / `#3A3F46` | charcoal stone |
+| border / borderStrong | `#393D44` / `#4A4F57` | |
+| bevelDark | `#0D0E10` | block shadow edge (bottom/right of raised controls) |
+| accent / hover / pressed / onAccent | `#67B84A` / `#78C95A` / `#4F9A35` / `#0E1A09` | grass |
+| accent2 | `#4FD0D6` | diamond (focus ring, links, selection indicator) |
+| highlight | `#E6B83E` | gold (favorites, featured) |
+| text / textSecondary / textTertiary | `#EFEBE0` / `#A8A397` / `#757067` | warm white / stone greys |
+| success / warning / danger / info | `#3CC77A` / `#E6B83E` / `#E25A4F` / `#5DB3E8` | emerald / gold / redstone / lapis |
+
+- Shape: radius 2/2/3/4; painted panels use **notched corners** (a 2 px pixel step instead of a curve).
+- **Bevel**: raised controls (buttons, cards, nav pill) have a 1 px light top edge (white 7%) and a 2–3 px `bevelDark`
+  bottom edge; pressing a button collapses the bevel and moves the label down 2 px (block press).
+- **Texture**: window and sidebar backgrounds carry a deterministic, procedurally generated stone tile (4 px "pixels",
+  ±4/255 luminance noise). Never behind text-dense surfaces (cards, inputs, menus stay flat).
+- **ZERO Pixel** font: original 5×7 bitmap glyphs (printable ASCII) compiled into a TrueType font at runtime
+  (`ZeroPixelFont`), license-clean. Used only for the wordmark, page titles and overlines. Body text stays Segoe UI.
+- Pixel details: XP-style segmented progress on the Play button while launching, gem-shaped status marks in toasts.
+  No creatures, no block textures copied from the game, no proprietary assets.
+
+## Motion language
+Purposeful, fast, never blocking input. All motion goes through `Zero::Motion`.
+
+| Token | ms | Use |
+|---|---|---|
+| durPress | 90 | press feedback |
+| durFast | 140 | hover, toggles, chips |
+| durBase | 200 | page enter, panels, indicator glide |
+| durSlow | 280 | dialogs, palette, toasts |
+| durTheme | 360 | theme transition (Minecraft pixel dissolve 420) |
+
+Easing: enter `OutCubic`, exit `InCubic`, glide/emphasis `OutQuint`, release `OutBack` (overshoot ≤ 1.3).
+- Setting `ZeroMotion` = `system` (default, follows Windows "Animation effects") | `on` | `off`. Off = every transition
+  is instant; activity indicators (spinner, launch sweep) still run because they carry information.
+- Transitions use snapshot overlays (`QWidget::grab()` painted over the live UI, mouse-transparent), so the real
+  widgets are interactive immediately and layouts never animate. Effects are removed when a transition ends.
+- No looping animation unless something is actually in progress.
+
+Signature motions: nav indicator glide · page enter (fade + 10 px rise) · card lift on hover (−2 px, shadow grows) ·
+press ripple on ZERO buttons (Obsidian) / block press (Minecraft) · Play → Launching sweep → Running ·
+theme crossfade (Obsidian) / pixel dissolve (Minecraft) · toast slide-in, stack glide, slide-out ·
+command palette rise · grid/list crossfade.

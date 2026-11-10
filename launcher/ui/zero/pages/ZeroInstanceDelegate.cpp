@@ -11,6 +11,7 @@
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
 #include "ui/zero/ZeroStyle.h"
+#include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroThemeState.h"
 
 namespace Zero {
@@ -66,8 +67,7 @@ void ZeroInstanceDelegate::paint(QPainter* painter, const QStyleOptionViewItem& 
 
     const QRect cell = option.rect;
     const QRectF card = QRectF(cell).adjusted(0.5, 0.5, -0.5, -0.5);
-    QPainterPath cardPath;
-    cardPath.addRoundedRect(card, Tokens::radiusLg, Tokens::radiusLg);
+    const QPainterPath cardPath = Paint::panelPath(card, t.radiusLg);
 
     const QColor bg = selected ? t.elevated : (hover ? t.surfaceHover : t.surface);
     const QColor border = selected ? t.accent : (hover ? t.borderStrong : t.border);
@@ -82,6 +82,7 @@ void ZeroInstanceDelegate::paint(QPainter* painter, const QStyleOptionViewItem& 
     painter->setPen(QPen(border, 1));
     painter->setBrush(Qt::NoBrush);
     painter->drawPath(cardPath);
+    Paint::paintBevel(*painter, QRectF(cell), false);
 
     const QIcon icon = qvariant_cast<QIcon>(index.data(Qt::DecorationRole));
     const QRect iconRect(cell.left() + (cell.width() - kIconSize) / 2, cell.top() + (kIconAreaHeight - kIconSize) / 2, kIconSize, kIconSize);

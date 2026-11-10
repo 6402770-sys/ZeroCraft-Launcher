@@ -1,0 +1,240 @@
+/* ZERO Minecraft Theme - overlay stylesheet.
+ * Appended to obsidian.qss by Zero::Style::styleSheet() when the active ThemeSpec has id "minecraft", so every rule
+ * here either re-declares a base rule (same selector, later = wins) or is more specific than it. Token placeholders
+ * only (wrapped in at-signs): never hand-edit colors. Spec: docs/zero/DESIGN.md "Design v2".
+ * Radii already follow the spec (2/2/3/4), so base rules using the radius tokens are square-ish without help.
+ * Qt cannot express a notched corner in QSS: panels painted in C++ use Zero::Paint::panelPath for that. */
+
+/* ===== Type: the pixel font has a single (regular) weight; a bolder request would be faked and blur the pixels ===== */
+QLabel[zeroRole="title"]    { font-weight: 400; }
+QLabel[zeroRole="overline"] { font-weight: 400; }
+
+/* ===== Buttons: raised blocks. Border-box height stays 32 (1 top + 28 + 3 bottom); pressed = 1 top + 2 pad + 28 + 1 ===== */
+QPushButton, QToolButton {
+    border-radius: @radiusMd@;
+    border-top: 1px solid @bevelLight@;
+    border-left: 1px solid @bevelLight@;
+    border-right: 1px solid @bevelDark@;
+    border-bottom: 3px solid @bevelDark@;
+    min-height: @controlInnerBevel@;
+}
+QPushButton:flat {
+    border: 1px solid transparent;
+    min-height: @controlInner@;
+}
+
+QPushButton[zeroVariant="secondary"], QToolButton[zeroVariant="secondary"] {
+    border-top-color: @bevelLight@;
+    border-left-color: @bevelLight@;
+    border-right-color: @bevelDark@;
+    border-bottom-color: @bevelDark@;
+}
+
+QPushButton[zeroVariant="primary"], QToolButton[zeroVariant="primary"],
+QPushButton[zeroVariant="primary"]:hover, QToolButton[zeroVariant="primary"]:hover {
+    border-top-color: @accentHover@;
+    border-left-color: @accentHover@;
+    border-right-color: @bevelDark@;
+    border-bottom-color: @bevelDark@;
+}
+
+/* Flat variants carry no bevel. */
+QPushButton[zeroVariant="ghost"], QToolButton[zeroVariant="ghost"],
+QPushButton[zeroVariant="danger"], QToolButton[zeroVariant="danger"] {
+    border: 1px solid transparent;
+    min-height: @controlInner@;
+}
+
+QPushButton[zeroSize="lg"], QToolButton[zeroSize="lg"] {
+    min-height: @controlInnerBevelLg@;
+}
+QPushButton[zeroVariant="ghost"][zeroSize="lg"], QToolButton[zeroVariant="ghost"][zeroSize="lg"],
+QPushButton[zeroVariant="danger"][zeroSize="lg"], QToolButton[zeroVariant="danger"][zeroSize="lg"] {
+    min-height: @controlInnerLg@;
+}
+
+/* Keyboard focus: diamond ring on the lit edges. */
+QPushButton:focus, QToolButton:focus {
+    border-top-color: @accent2@;
+    border-left-color: @accent2@;
+    border-right-color: @accent2@;
+}
+QPushButton[zeroVariant="ghost"]:focus, QToolButton[zeroVariant="ghost"]:focus {
+    border-color: @accent2@;
+}
+
+/* Block press: the bevel collapses to 1 px and the label drops 2 px; the border-box height does not change. */
+QPushButton:pressed, QToolButton:pressed, QPushButton:checked, QToolButton:checked {
+    border-top-color: @bevelDark@;
+    border-left-color: @bevelDark@;
+    border-right-color: @bevelDark@;
+    border-bottom: 1px solid @bevelDark@;
+    padding-top: 2px;
+}
+QPushButton[zeroVariant="secondary"]:pressed, QToolButton[zeroVariant="secondary"]:pressed,
+QPushButton[zeroVariant="primary"]:pressed, QToolButton[zeroVariant="primary"]:pressed {
+    border-top-color: @bevelDark@;
+    border-left-color: @bevelDark@;
+    border-right-color: @bevelDark@;
+    border-bottom: 1px solid @bevelDark@;
+    padding-top: 2px;
+}
+QPushButton[zeroVariant="ghost"]:pressed, QToolButton[zeroVariant="ghost"]:pressed,
+QPushButton[zeroVariant="danger"]:pressed, QToolButton[zeroVariant="danger"]:pressed,
+QPushButton[zeroVariant="ghost"]:checked, QToolButton[zeroVariant="ghost"]:checked {
+    border: 1px solid transparent;
+    padding-top: 0;
+}
+QToolBar QToolButton, QToolBar QToolButton:pressed, QToolBar QToolButton:checked {
+    border: 1px solid transparent;
+    padding-top: 0;
+    min-height: @controlInner@;
+}
+QTabBar QToolButton, QTabBar QToolButton:pressed {
+    border: none;
+    padding-top: 0;
+}
+
+/* ===== Sunken inputs ===== */
+QLineEdit, QAbstractSpinBox, QComboBox {
+    background-color: @bg@;
+    border-top: 2px solid @bevelDark@;
+    border-left: 1px solid @bevelDark@;
+    border-right: 1px solid @border@;
+    border-bottom: 1px solid @borderStrong@;
+    min-height: @controlInnerSunken@;
+}
+QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover {
+    border-top-color: @bevelDark@;
+    border-left-color: @bevelDark@;
+    border-right-color: @borderStrong@;
+    border-bottom-color: @textTertiary@;
+}
+QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus, QComboBox:on {
+    border-color: @accent2@;
+}
+QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {
+    background-color: @surface@;
+    border-color: @border@;
+}
+QComboBox QLineEdit, QAbstractSpinBox QLineEdit {
+    background-color: transparent;
+    border: none;
+    min-height: 0;
+}
+QTextEdit, QPlainTextEdit, QTextBrowser {
+    background-color: @bg@;
+    border-top: 2px solid @bevelDark@;
+    border-left: 1px solid @bevelDark@;
+    border-right: 1px solid @border@;
+    border-bottom: 1px solid @borderStrong@;
+}
+QTextEdit:focus, QPlainTextEdit:focus, QTextBrowser:focus {
+    border-color: @accent2@;
+}
+QTextEdit:disabled, QPlainTextEdit:disabled, QTextBrowser:disabled {
+    background-color: @surface@;
+    border-color: @border@;
+}
+QTextEdit[zeroMono="true"] {
+    background-color: transparent;
+    border: none;
+}
+QComboBox QAbstractItemView {
+    border: 1px solid @borderStrong@;
+    padding: 2px;
+}
+QComboBox QAbstractItemView::item:hover, QComboBox QAbstractItemView::item:selected {
+    background-color: @elevated@;
+    border-left: 2px solid @accent2@;
+}
+
+/* ===== Square check boxes and radio buttons ===== */
+QCheckBox::indicator, QRadioButton::indicator {
+    background-color: @bg@;
+    border: 1px solid @borderStrong@;
+    border-top-color: @bevelDark@;
+    border-left-color: @bevelDark@;
+    border-radius: 0;
+}
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: @accent2@;
+}
+QCheckBox::indicator:checked, QCheckBox::indicator:indeterminate, QRadioButton::indicator:checked {
+    background-color: @accent@;
+    border-color: @bevelDark@;
+}
+QRadioButton::indicator:checked {
+    image: @img:square-dot:onAccent@;
+}
+QCheckBox::indicator:checked:hover, QCheckBox::indicator:indeterminate:hover, QRadioButton::indicator:checked:hover {
+    background-color: @accentHover@;
+    border-color: @accent2@;
+}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    background-color: @surface@;
+    border-color: @border@;
+}
+QRadioButton::indicator:checked:disabled {
+    background-color: @elevated@;
+    border-color: @border@;
+    image: @img:square-dot:textTertiary@;
+}
+
+/* ===== Tabs: the selected underline is the diamond accent ===== */
+QTabBar::tab:selected {
+    border-bottom-color: @accent2@;
+}
+QTabBar::tab:left:selected {
+    border-left-color: @accent2@;
+}
+QTabBar::tab:right:selected {
+    border-right-color: @accent2@;
+}
+
+/* ===== Scrollbars, sliders, progress ===== */
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background-color: @borderStrong@;
+    border-radius: 0;
+}
+QScrollBar::handle:hover, QScrollBar::handle:pressed {
+    background-color: @textTertiary@;
+}
+QSlider::groove:horizontal, QSlider::sub-page:horizontal, QSlider::groove:vertical, QSlider::add-page:vertical {
+    border-radius: 0;
+}
+QSlider::handle:horizontal, QSlider::handle:vertical {
+    border-radius: 0;
+    border: 1px solid @bevelDark@;
+}
+QProgressBar {
+    background-color: @bg@;
+    border: 1px solid @bevelDark@;
+    border-radius: 0;
+    min-height: 8px;
+    max-height: 8px;
+}
+QProgressBar::chunk {
+    background-color: @accent@;
+    border-radius: 0;
+    width: 7px;
+    margin: 0px 1px 0px 0px;
+}
+
+/* ===== Menus and tooltips: restrained, flat ===== */
+QMenu {
+    border: 1px solid @borderStrong@;
+    padding: 2px;
+}
+QMenu::item {
+    padding: 6px 28px 6px 10px;
+    border-left: 2px solid transparent;
+    border-radius: 0;
+}
+QMenu::item:selected {
+    border-left-color: @accent2@;
+}
+QToolTip {
+    border: 1px solid @borderStrong@;
+    border-radius: 0;
+}

@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 #include "ZeroIcons.h"
 #include "ZeroMotion.h"
+#include "ZeroPaint.h"
 #include "ZeroStyle.h"
 #include "ZeroThemeState.h"
 
@@ -96,19 +97,21 @@ class NavItem : public QAbstractButton {
             fg = t.text;
             p.setPen(Qt::NoPen);
             p.setBrush(t.elevated);
-            p.drawRoundedRect(pill, Tokens::radiusMd, Tokens::radiusMd);
-            // 2 px accent indicator at the rail's left edge.
-            p.setBrush(t.accent);
+            p.drawPath(Paint::panelPath(pill, t.radiusMd));
+            Paint::paintBevel(p, pill.adjusted(-1, -1, 1, 1));
+            // 2 px selection indicator at the rail's left edge.
+            p.setPen(Qt::NoPen);
+            p.setBrush(t.accent2);
             p.drawRoundedRect(QRectF(0, 8, 2, height() - 16), 1, 1);
         } else if (h > 0.0) {
             p.setPen(Qt::NoPen);
             p.setBrush(withAlpha(t.surfaceHover, h));
-            p.drawRoundedRect(pill, Tokens::radiusMd, Tokens::radiusMd);
+            p.drawPath(Paint::panelPath(pill, t.radiusMd));
         }
         if (m_keyboardFocus && hasFocus()) {
             p.setBrush(Qt::NoBrush);
             p.setPen(QPen(t.textTertiary, 1));
-            p.drawRoundedRect(pill.adjusted(0.5, 0.5, -0.5, -0.5), Tokens::radiusMd, Tokens::radiusMd);
+            p.drawPath(Paint::panelPath(pill.adjusted(0.5, 0.5, -0.5, -0.5), t.radiusMd));
         }
 
         const bool label = showsLabel();
@@ -274,7 +277,7 @@ void ZeroNavRail::paintEvent(QPaintEvent*)
 {
     const auto& t = Theme::current();
     QPainter p(this);
-    p.fillRect(rect(), t.surface);
+    Paint::paintBackground(p, rect(), t.surface);
     p.fillRect(QRect(width() - 1, 0, 1, height()), t.border);
 }
 

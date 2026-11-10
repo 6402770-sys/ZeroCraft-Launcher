@@ -79,7 +79,8 @@ Content max width 1280, page padding xl, vertical gap xxl between sections.
 - `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|tools>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
 - Screenshot-mode environment variables (dev only, read by `MainWindow::zeroScreenshot`): `ZERO_SCREENSHOT_SIZE=<w>x<h>`
-  (default 1280x800), `ZERO_SCREENSHOT_RUNNING=<instance id>` (flips that instance to running through the normal signal
+  (default 1280x800), `ZERO_SCREENSHOT_THEME=<theme id>` (`zero-obsidian` | `zero-minecraft`: applies that theme through
+  `ThemeManager::setApplicationTheme` before grabbing), `ZERO_SCREENSHOT_RUNNING=<instance id>` (flips that instance to running through the normal signal
   path), `ZERO_SCREENSHOT_SEARCH=<text>` (types into the Library search). List mode is the `ZeroLibraryView=list` setting.
   `ZERO_SCREENSHOT_DIAGNOSE=<instance id>` opens Tools > Crash Detective for that instance and analyzes it
   (`ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code>` passes an exit code, `ZERO_SCREENSHOT_EVIDENCE=1` expands every evidence block).

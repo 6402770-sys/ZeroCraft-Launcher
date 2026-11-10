@@ -144,6 +144,7 @@ void ThemeManager::initializeWidgets()
 {
     themeDebugLog() << "<> Initializing Widget Themes";
     themeDebugLog() << "Loading Built-in Theme:" << addTheme(std::make_unique<Zero::ZeroTheme>());
+    themeDebugLog() << "Loading Built-in Theme:" << addTheme(std::make_unique<Zero::ZeroMinecraftTheme>());
     themeDebugLog() << "Loading Built-in Theme:" << addTheme(std::make_unique<SystemTheme>(m_defaultStyle, m_defaultPalette, true));
     auto darkThemeId = addTheme(std::make_unique<DarkTheme>());
     themeDebugLog() << "Loading Built-in Theme:" << darkThemeId;
@@ -215,11 +216,14 @@ QList<ITheme*> ThemeManager::getValidApplicationThemes()
     for (auto&& [id, theme] : m_themes) {
         ret.append(theme.get());
     }
-    // ZERO: the default theme is listed first
-    for (qsizetype i = 0; i < ret.size(); ++i) {
-        if (ret[i]->id() == Zero::ZeroTheme::kId) {
-            ret.move(i, 0);
-            break;
+    // ZERO: the ZERO themes are listed first, the default one at the very top
+    qsizetype front = 0;
+    for (const QString id : { QString::fromLatin1(Zero::ZeroTheme::kId), QString::fromLatin1(Zero::ZeroMinecraftTheme::kId) }) {
+        for (qsizetype i = front; i < ret.size(); ++i) {
+            if (ret[i]->id() == id) {
+                ret.move(i, front++);
+                break;
+            }
         }
     }
     return ret;
@@ -278,7 +282,7 @@ void ThemeManager::setApplicationTheme(const QString& name, bool initial)
         auto& theme = themeIter->second;
         themeDebugLog() << "applying theme" << theme->name();
         theme->apply(initial);
-        Zero::setThemeActive(theme->id() == Zero::ZeroTheme::kId);
+        Zero::setThemeActive(Zero::isZeroThemeId(theme->id()));
         setTitlebarColorOfAllWindowsOnMac(qApp->palette().window().color());
 
         m_logColors = theme->logColorScheme();

@@ -7,6 +7,7 @@
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroMotion.h"
 #include "ui/zero/ZeroStyle.h"
+#include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroThemeState.h"
 
 namespace Zero {
@@ -64,12 +65,12 @@ void AccountChip::paintEvent(QPaintEvent*)
     if (h > 0.0) {
         p.setPen(Qt::NoPen);
         p.setBrush(withAlpha(t.surfaceHover, h));
-        p.drawRoundedRect(QRectF(rect()), Tokens::radiusMd, Tokens::radiusMd);
+        p.drawPath(Paint::panelPath(QRectF(rect()), t.radiusMd));
     }
     if (hasFocus() && !isDown()) {
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(t.textTertiary, 1));
-        p.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), Tokens::radiusMd, Tokens::radiusMd);
+        p.drawPath(Paint::panelPath(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), t.radiusMd));
     }
 
     const bool wide = width() >= kWideThreshold;

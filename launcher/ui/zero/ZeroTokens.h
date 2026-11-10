@@ -18,6 +18,7 @@
 #pragma once
 
 #include <QColor>
+#include <QString>
 #include <QtGlobal>
 
 namespace Zero {
@@ -112,15 +113,77 @@ constexpr int shadowAlpha = 140; // rgba(0,0,0,0.55)
 } // namespace Tokens
 
 // ---------------------------------------------------------------------------------------------
+// "Minecraft Theme" palette (docs/zero/DESIGN.md, Design v2). Only ZeroTokens.h may hold hex values.
+// ---------------------------------------------------------------------------------------------
+namespace Tokens {
+namespace Minecraft {
+
+constexpr QRgb bg = 0xFF16171A;
+constexpr QRgb surface = 0xFF1F2125;
+constexpr QRgb surfaceHover = 0xFF25282D;
+constexpr QRgb elevated = 0xFF2B2E33;
+constexpr QRgb higher = 0xFF33373D;
+constexpr QRgb pressed = 0xFF3A3F46;
+constexpr QRgb border = 0xFF393D44;
+constexpr QRgb borderStrong = 0xFF4A4F57;
+constexpr QRgb bevelDark = 0xFF0D0E10;
+constexpr QRgb accent = 0xFF67B84A;
+constexpr QRgb accentHover = 0xFF78C95A;
+constexpr QRgb accentPressed = 0xFF4F9A35;
+constexpr QRgb onAccent = 0xFF0E1A09;
+constexpr QRgb accent2 = 0xFF4FD0D6;
+constexpr QRgb highlight = 0xFFE6B83E;
+constexpr QRgb text = 0xFFEFEBE0;
+constexpr QRgb textSecondary = 0xFFA8A397;
+constexpr QRgb textTertiary = 0xFF757067;
+constexpr QRgb success = 0xFF3CC77A;
+constexpr QRgb warning = 0xFFE6B83E;
+constexpr QRgb danger = 0xFFE25A4F;
+constexpr QRgb info = 0xFF5DB3E8;
+
+constexpr int radiusSm = 2;
+constexpr int radiusMd = 2;
+constexpr int radiusLg = 3;
+constexpr int radiusXl = 4;
+
+} // namespace Minecraft
+
+// Light edge of a bevel: white at 7%.
+constexpr double bevelLightAlpha = 0.07;
+// Size of the square step cut into each corner of a Notched panel (px).
+constexpr int notchStep = 2;
+
+} // namespace Tokens
+
+// ---------------------------------------------------------------------------------------------
 // Runtime theme specification. Everything downstream (stylesheet, palette, components) takes this.
 // ---------------------------------------------------------------------------------------------
 enum class Density { Compact, Comfortable, Spacious };
+
+/// Type roles used by Style::font() and the `zeroRole` property.
+enum class Role { Display, Title, Heading, Body, Label, Caption, Overline };
+
+/// Corner style of painted panels (see Zero::Paint::panelPath).
+enum class Corners { Rounded, Notched };
+
+constexpr quint32 roleBit(Role r)
+{
+    return quint32(1) << static_cast<int>(r);
+}
 
 struct ThemeSpec {
     QColor bg, surface, surfaceHover, elevated, higher, pressed, border, borderStrong;
     QColor accent, accentHover, accentPressed, onAccent;
     QColor text, textSecondary, textTertiary;
     QColor success, warning, danger, info;
+    QString id = QStringLiteral("obsidian");
+    QString name = QStringLiteral("Obsidian");
+    QColor accent2, highlight, bevelDark;
+    int radiusSm = Tokens::radiusSm, radiusMd = Tokens::radiusMd, radiusLg = Tokens::radiusLg, radiusXl = Tokens::radiusXl;
+    Corners corners = Corners::Rounded;
+    bool bevel = false;
+    bool texture = false;
+    quint32 pixelRoles = 0;  // bitmask of roleBit(Role): roles drawn with the "ZERO Pixel" font
     Density density = Density::Comfortable;
     bool reduceMotion = false;
 
@@ -146,8 +209,52 @@ struct ThemeSpec {
         s.warning = QColor::fromRgba(Tokens::warning);
         s.danger = QColor::fromRgba(Tokens::danger);
         s.info = QColor::fromRgba(Tokens::info);
+        s.accent2 = s.accent;
+        s.highlight = s.warning;
+        s.bevelDark = s.bg;
         return s;
     }
+
+    static ThemeSpec minecraft()
+    {
+        namespace M = Tokens::Minecraft;
+        ThemeSpec s;
+        s.id = QStringLiteral("minecraft");
+        s.name = QStringLiteral("Minecraft");
+        s.bg = QColor::fromRgba(M::bg);
+        s.surface = QColor::fromRgba(M::surface);
+        s.surfaceHover = QColor::fromRgba(M::surfaceHover);
+        s.elevated = QColor::fromRgba(M::elevated);
+        s.higher = QColor::fromRgba(M::higher);
+        s.pressed = QColor::fromRgba(M::pressed);
+        s.border = QColor::fromRgba(M::border);
+        s.borderStrong = QColor::fromRgba(M::borderStrong);
+        s.accent = QColor::fromRgba(M::accent);
+        s.accentHover = QColor::fromRgba(M::accentHover);
+        s.accentPressed = QColor::fromRgba(M::accentPressed);
+        s.onAccent = QColor::fromRgba(M::onAccent);
+        s.text = QColor::fromRgba(M::text);
+        s.textSecondary = QColor::fromRgba(M::textSecondary);
+        s.textTertiary = QColor::fromRgba(M::textTertiary);
+        s.success = QColor::fromRgba(M::success);
+        s.warning = QColor::fromRgba(M::warning);
+        s.danger = QColor::fromRgba(M::danger);
+        s.info = QColor::fromRgba(M::info);
+        s.accent2 = QColor::fromRgba(M::accent2);
+        s.highlight = QColor::fromRgba(M::highlight);
+        s.bevelDark = QColor::fromRgba(M::bevelDark);
+        s.radiusSm = M::radiusSm;
+        s.radiusMd = M::radiusMd;
+        s.radiusLg = M::radiusLg;
+        s.radiusXl = M::radiusXl;
+        s.corners = Corners::Notched;
+        s.bevel = true;
+        s.texture = true;
+        s.pixelRoles = roleBit(Role::Title) | roleBit(Role::Overline);
+        return s;
+    }
+
+    bool usesPixelFont(Role r) const { return (pixelRoles & roleBit(r)) != 0; }
 
     int itemPaddingV() const
     {
@@ -161,9 +268,6 @@ struct ThemeSpec {
         }
     }
 };
-
-/// Type roles used by Style::font() and the `zeroRole` property.
-enum class Role { Display, Title, Heading, Body, Label, Caption, Overline };
 
 /// Mixes two colors (t = 0 -> a, t = 1 -> b). Used for animated hover transitions and 12% status tints.
 inline QColor mix(const QColor& a, const QColor& b, qreal t)

@@ -5,6 +5,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include "ZeroPaint.h"
 #include "ZeroThemeState.h"
 
 namespace Zero {
@@ -50,7 +51,8 @@ void ZeroCard::paintEvent(QPaintEvent*)
     const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
     painter.setBrush(bg);
     painter.setPen(QPen(border, 1));
-    painter.drawRoundedRect(r, Tokens::radiusLg, Tokens::radiusLg);
+    painter.drawPath(Paint::panelPath(r, t.radiusLg));
+    Paint::paintBevel(painter, QRectF(rect()), m_pressed);
 }
 
 void ZeroCard::enterEvent(QEnterEvent* event)

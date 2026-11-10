@@ -13,6 +13,7 @@
 #include "ZeroIcons.h"
 #include "ZeroMotion.h"
 #include "ZeroStyle.h"
+#include "ZeroPaint.h"
 #include "ZeroThemeState.h"
 
 namespace Zero {
@@ -59,7 +60,7 @@ class ToastShadow : public QWidget {
             p.setRenderHint(QPainter::Antialiasing, true);
             p.setPen(Qt::NoPen);
             p.setBrush(Theme::current().elevated);
-            p.drawRoundedRect(rect(), Tokens::radiusLg, Tokens::radiusLg);
+            p.drawPath(Paint::panelPath(QRectF(rect()), Theme::current().radiusLg));
         }
     };
     Source* m_source;
@@ -261,7 +262,7 @@ void ZeroToast::paintEvent(QPaintEvent*)
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setBrush(t.elevated);
     p.setPen(QPen(t.border, 1));
-    p.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), Tokens::radiusLg, Tokens::radiusLg);
+    p.drawPath(Paint::panelPath(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), t.radiusLg));
 }
 
 void ZeroToast::enterEvent(QEnterEvent* event)

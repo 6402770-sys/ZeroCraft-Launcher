@@ -101,6 +101,9 @@ void installHooks()
     installed = true;
     qApp->installEventFilter(new PopupFilter(qApp));
 
+    // Pixel/UI fonts follow the active spec for every widget that carries a zeroRole.
+    QObject::connect(&Theme::instance(), &Theme::changed, qApp, []() { Style::refreshRoleFonts(); });
+
     if (auto* app = qobject_cast<Application*>(qApp)) {
         if (auto setting = app->settings()->getSetting("ZeroReduceMotion")) {
             QObject::connect(setting.get(), &Setting::SettingChanged, qApp,
@@ -128,9 +131,19 @@ bool isThemeActive()
     return g_themeActive.load();
 }
 
+bool isZeroThemeId(const QString& id)
+{
+    return id.startsWith(QLatin1String("zero-"));
+}
+
+ThemeSpec ZeroTheme::baseSpec()
+{
+    return ThemeSpec::obsidian();
+}
+
 void ZeroTheme::apply(bool initial)
 {
-    ThemeSpec spec = ThemeSpec::obsidian();
+    ThemeSpec spec = baseSpec();
     if (auto* app = qobject_cast<Application*>(qApp))
         spec.reduceMotion = app->settings()->get("ZeroReduceMotion").toBool();
     Theme::setCurrent(spec);
@@ -138,6 +151,9 @@ void ZeroTheme::apply(bool initial)
     ITheme::apply(initial);  // Fusion base + palette + stylesheet
     QApplication::setFont(Style::font(Role::Body));
     installHooks();
+    // Replacing the style sheet makes Qt restore the fonts widgets had before it was applied, which undoes the
+    // refresh done on Theme::changed. Re-apply the pixel/UI role fonts now that the new sheet is in place.
+    Style::refreshRoleFonts();
 }
 
 QString ZeroTheme::id()
@@ -168,6 +184,26 @@ QString ZeroTheme::appStyleSheet()
 QPalette ZeroTheme::colorScheme()
 {
     return Style::palette(Theme::current());
+}
+
+ThemeSpec ZeroMinecraftTheme::baseSpec()
+{
+    return ThemeSpec::minecraft();
+}
+
+QString ZeroMinecraftTheme::id()
+{
+    return QString::fromLatin1(kId);
+}
+
+QString ZeroMinecraftTheme::name()
+{
+    return QObject::tr("Minecraft");
+}
+
+QString ZeroMinecraftTheme::tooltip()
+{
+    return QObject::tr("Overworld stone, grass and diamond. Pixel details, readable text.");
 }
 
 double ZeroTheme::fadeAmount()

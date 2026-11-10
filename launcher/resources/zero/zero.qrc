@@ -3,6 +3,7 @@
     <qresource prefix="/zero">
         <file>obsidian.qss</file>
         <file>icons/archive.svg</file>
+        <file>icons/arrow-left.svg</file>
         <file>icons/box.svg</file>
         <file>icons/check.svg</file>
         <file>icons/chevron-down.svg</file>
@@ -19,6 +20,7 @@
         <file>icons/download.svg</file>
         <file>icons/earth.svg</file>
         <file>icons/ellipsis.svg</file>
+        <file>icons/file-text.svg</file>
         <file>icons/folder-open.svg</file>
         <file>icons/hard-drive.svg</file>
         <file>icons/house.svg</file>

@@ -1,0 +1,22 @@
+---- Minecraft Crash Report ----
+// Why did you do that?
+
+Time: 2024-03-02 18:12:44
+Description: Rendering screen
+
+java.lang.NullPointerException: Rendering screen
+	at TRANSFORMER/create@0.5.1.f/com.simibubi.create.content.Foo.render(Foo.java:55)
+
+-- Screen render details --
+Details:
+	Screen name: com.simibubi.create.content.FooScreen
+
+-- System Details --
+Details:
+	Minecraft Version: 1.20.1
+	Operating System: Windows 11 (amd64) version 10.0
+	Java Version: 17.0.8, Eclipse Adoptium
+	Suspected Mods:
+		Create (create), Version: 0.5.1.f
+			Issue tracker URL: https://github.com/Creators-of-Create/Create/issues
+			at TRANSFORMER/create@0.5.1.f/com.simibubi.create.content.Foo.render(Foo.java:55)

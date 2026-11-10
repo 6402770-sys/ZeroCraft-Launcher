@@ -1,0 +1,6 @@
+[21:15:44] [Render thread/INFO]: Reloading ResourceManager: vanilla, mod_resources
+[21:16:02] [Render thread/WARN]: Texture atlas minecraft:textures/atlas/blocks.png is large
+[21:16:09] [Server thread/ERROR]: Exception in server tick loop
+java.lang.OutOfMemoryError: Java heap space
+	at java.base/java.util.Arrays.copyOf(Arrays.java:3512)
+	at net.minecraft.world.level.chunk.PalettedContainer.<init>(PalettedContainer.java:41)

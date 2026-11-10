@@ -18,7 +18,7 @@ Default 1280×800, minimum 1100×700. Rail 220 px (collapses to 64 px below 1200
 
 ## Nav rail (top → bottom)
 1. Wordmark "ZERO" (display weight 600, letter-spacing 3px) + caption "Launcher", padding xl.
-2. Items: **Home** (`house`), **Library** (`library-big`). Later tasks add Discover, Worlds, Tools, Downloads, Theme Studio.
+2. Items: **Home** (`house`), **Library** (`library-big`), **Tools** (`wrench`). Later tasks add Discover, Worlds, Downloads, Theme Studio.
 3. Stretch.
 4. **Account chip**: 28 px avatar (account skin face if available, else `user` icon on elevated circle) + profile name
    (label) + caption "Microsoft account"/"Offline"/"No account". Click → Prism's existing accounts menu (switch / manage).
@@ -61,9 +61,25 @@ Content max width 1280, page padding xl, vertical gap xxl between sections.
   Change group (`list-filter`), Copy (`copy`), Export ▸ (Zip / Modrinth / CurseForge), Create shortcut (`terminal`),
   Delete (danger, `trash-2`). All mapped to the existing MainWindow actions; disabled states mirror them.
 
+## Tools page and Crash Detective
+- `ToolsPage` (`pages/ToolsPage`): header "Tools" + grid of tool cards (only Crash Detective for now). A card opens the tool inside the
+  page; the tool has a back button ("Tools").
+- `CrashDetectiveView`: instance combo (defaults to the Library selection), **Analyze**, spinner while the work runs on a
+  `QtConcurrent` thread, then one `FindingCard` per finding (severity icon, title, confidence badge, explanation, "What to try",
+  action buttons, collapsible monospace evidence with source + line). Caption lists the analyzed files and their timestamps.
+  No findings -> "No known cause recognised" (Open log / Open logs folder); no log files -> "No logs found".
+- Badge policy: only a *Confirmed* cause is tinted (danger for Critical, warning for Warning); Likely/Possible are neutral. Never green.
+- Engine: `launcher/zero/diagnostics/` (`CrashDetective`, `CrashReportCollector`); tests `tests/CrashDetective_test.cpp`.
+- Crash hook: `LauncherPartLaunch::on_state` emits `Application::gameStoppedUnexpectedly(instanceId, exitCode)` when the game process
+  crashes or exits non-zero (a user kill is `Aborted` and does not fire). `MainWindow` shows `ZeroToast` "<name> stopped
+  unexpectedly" with action **Diagnose** -> Tools > Crash Detective for that instance, analysis started with the exit code.
+- Instance settings action: `APPLICATION->showInstanceWindow(inst, "settings")` (the Edit window, Settings page).
+
 ## Dev aids
-- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library>`): show main window, wait for layout, `grab()` to PNG,
+- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|tools>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
 - Screenshot-mode environment variables (dev only, read by `MainWindow::zeroScreenshot`): `ZERO_SCREENSHOT_SIZE=<w>x<h>`
   (default 1280x800), `ZERO_SCREENSHOT_RUNNING=<instance id>` (flips that instance to running through the normal signal
   path), `ZERO_SCREENSHOT_SEARCH=<text>` (types into the Library search). List mode is the `ZeroLibraryView=list` setting.
+  `ZERO_SCREENSHOT_DIAGNOSE=<instance id>` opens Tools > Crash Detective for that instance and analyzes it
+  (`ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code>` passes an exit code, `ZERO_SCREENSHOT_EVIDENCE=1` expands every evidence block).

@@ -1,0 +1,2 @@
+[15:10:01] [main/ERROR] [net.neoforged.fml.loading.ModSorter/LOADING]: Missing or unsupported mandatory dependencies:
+	Mod ID: 'neoforge', Requested by: 'someneomod', Expected range: '[21.0,)', Actual version: '[MISSING]'

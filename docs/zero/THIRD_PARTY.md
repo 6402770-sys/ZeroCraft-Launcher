@@ -10,7 +10,7 @@
   (`:/zero/icons/<name>.svg`). The files are unmodified; `currentColor` is replaced at runtime by `Zero::Icons`
   and by the generated stylesheet to tint them with design tokens.
 
-Icons shipped: house, library-big, compass, earth, wrench, download, palette, settings, search, play, square, plus,
+Icons shipped: arrow-left, file-text, stethoscope, house, library-big, compass, earth, wrench, download, palette, settings, search, play, square, plus,
 star, folder-open, ellipsis, pencil, trash-2, copy, x, check, triangle-alert, info, circle-check, circle-x,
 layout-grid, list, list-filter, clock, user, chevron-down, chevron-right, chevron-up, chevron-left, minus,
 refresh-cw, archive, hard-drive, cpu, stethoscope, terminal, command, package, box.

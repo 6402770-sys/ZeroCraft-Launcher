@@ -1,0 +1,9 @@
+[19:40:02] [main/INFO] (FabricLoader) Loading 41 mods: fabric-api 0.97.8, sodium 0.5.8
+[19:40:03] [main/ERROR] (FabricLoader) Incompatible mods found!
+net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!
+A potential solution has been determined, this may resolve your problem:
+	 - Replace mod 'Sodium' (sodium) 0.6.0 with any version that is compatible with:
+		 - java, version 17 or later.
+More details:
+	 - Mod 'Sodium' (sodium) 0.6.0+mc1.21 requires version 21 or later of Java Runtime Environment (java), but only the wrong version is present: 17.0.9!
+	at net.fabricmc.loader.impl.FabricLoaderImpl.load(FabricLoaderImpl.java:190)

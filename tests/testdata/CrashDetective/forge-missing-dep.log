@@ -1,0 +1,5 @@
+[16:05:21] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeclient]
+[16:05:26] [main/ERROR] [net.minecraftforge.fml.loading.ModSorter/LOADING]: Missing or unsupported mandatory dependencies:
+	Mod ID: 'geckolib', Requested by: 'alexsmobs', Expected range: '[4.2.1,)', Actual version: '[MISSING]'
+	Mod ID: 'curios', Requested by: 'create_things', Expected range: '[5.1.0,)', Actual version: '[MISSING]'
+[16:05:26] [main/ERROR] [net.minecraftforge.fml.loading.ModSorter/LOADING]: Failed to load mods

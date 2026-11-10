@@ -1,0 +1,17 @@
+[11:00:01] [main/INFO]: Loading Minecraft 1.20.1 with Fabric Loader 0.15.7
+[11:00:01] [main/INFO] (FabricLoader) Loading 38 mods:
+	- fabric-api 0.92.0+1.20.1
+	- sodium 0.5.3+mc1.20.1
+	- lithium 0.11.2+mc1.20.1
+[11:00:03] [main/INFO]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', name='PROD'
+[11:00:04] [Render thread/INFO]: Setting user: Player
+[11:00:05] [Render thread/INFO]: Backend library: LWJGL version 3.3.1 build 7
+[11:00:07] [Render thread/INFO]: OpenAL initialized on device OpenAL Soft on Speakers
+[11:00:08] [Render thread/INFO]: Reloading ResourceManager: vanilla, fabric-api
+[11:00:11] [Render thread/INFO]: Created: 1024x512x4 minecraft:textures/atlas/blocks.png-atlas
+[11:00:12] [Server thread/INFO]: Starting integrated minecraft server version 1.20.1
+[11:00:14] [Server thread/INFO]: Preparing spawn area: 100%
+[11:00:14] [Server thread/INFO]: Player joined the game
+[11:15:40] [Server thread/INFO]: Saving the game (this may take a moment!)
+[11:15:41] [Render thread/INFO]: Stopping!
+[11:15:41] [Server thread/INFO]: Stopping server

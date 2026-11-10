@@ -64,6 +64,7 @@ class QMenu;
 namespace Zero {
 class HomePage;
 class LibraryPage;
+class ToolsPage;
 class ZeroShell;
 }  // namespace Zero
 
@@ -87,7 +88,7 @@ class MainWindow : public QMainWindow {
 
     void processURLs(QList<QUrl> urls);
 
-    /// Dev aid (`--zero-screenshot`): shows `page` ("home" or "library"), grabs the window to `path` and quits.
+    /// Dev aid (`--zero-screenshot`): shows `page` ("home", "library" or "tools"), grabs the window to `path` and quits.
     void zeroScreenshot(const QString& path, const QString& page);
    signals:
     void isClosing();
@@ -279,6 +280,7 @@ class MainWindow : public QMainWindow {
     Zero::ZeroShell* m_shell = nullptr;
     Zero::HomePage* m_home = nullptr;
     Zero::LibraryPage* m_library = nullptr;
+    Zero::ToolsPage* m_tools = nullptr;
     QList<QAction*> m_accountActions;  // per-account actions (they carry the Ctrl+N shortcuts), recreated on repopulate
 
     unique_qobject_ptr<NewsChecker> m_newsChecker;

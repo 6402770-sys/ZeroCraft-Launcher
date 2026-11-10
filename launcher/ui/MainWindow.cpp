@@ -112,6 +112,8 @@
 #include "ui/zero/ZeroToast.h"
 #include "ui/zero/pages/HomePage.h"
 #include "ui/zero/pages/LibraryPage.h"
+#include "ui/zero/pages/CrashDetectiveView.h"
+#include "ui/zero/pages/ToolsPage.h"
 #include "ui/zero/pages/ZeroInstanceDelegate.h"
 #include "ui/zero/shell/ZeroShell.h"
 #include "ui/instanceview/InstanceProxyModel.h"
@@ -1908,6 +1910,8 @@ void MainWindow::setupZeroShell()
     m_library = new Zero::LibraryPage(view, proxymodel, m_shell);
     m_shell->addPage(QStringLiteral("home"), QStringLiteral("house"), tr("Home"), m_home);
     m_shell->addPage(QStringLiteral("library"), QStringLiteral("library-big"), tr("Library"), m_library);
+    m_tools = new Zero::ToolsPage(m_shell);
+    m_shell->addPage(QStringLiteral("tools"), QStringLiteral("wrench"), tr("Tools"), m_tools);
     m_shell->finishRail();
 
     // The toolbars and menu bar are hidden, so their shortcuts would be dead: register every action on the window.
@@ -1981,6 +1985,31 @@ void MainWindow::setupZeroShell()
     connect(m_shell, &Zero::ZeroShell::pageChanged, this, [this](const QString& id) {
         if (id == QLatin1String("library"))
             m_library->activeView()->setFocus();
+        if (id == QLatin1String("tools") && m_selectedInstance)
+            m_tools->setPreferredInstance(m_selectedInstance->id());  // Crash Detective defaults to the Library selection
+    });
+
+    // Tools: Crash Detective opens an instance's settings through the same window the Edit button uses.
+    connect(m_tools, &Zero::ToolsPage::instanceSettingsRequested, this, [withInstance](const QString& id) {
+        withInstance(id, [](MinecraftInstance* inst) {
+            if (inst->canEdit())
+                APPLICATION->showInstanceWindow(inst, QStringLiteral("settings"));
+            else
+                APPLICATION->showInstanceWindow(inst);
+        });
+    });
+    // Crash hook: the game ended abnormally (crash / non-zero exit, not a user kill) -> offer a diagnosis.
+    connect(APPLICATION, &Application::gameStoppedUnexpectedly, this, [this](const QString& id, int exitCode) {
+        auto* inst = APPLICATION->instances()->getInstanceById(id);
+        if (!inst)
+            return;
+        Zero::ZeroToast::show(this, tr("%1 stopped unexpectedly").arg(inst->name()), Zero::ZeroToast::Kind::Warning, tr("Diagnose"),
+                              [this, id, exitCode]() {
+                                  m_tools->openCrashDetective(id, true, exitCode);
+                                  m_shell->setCurrentPage(QStringLiteral("tools"));
+                                  raise();
+                                  activateWindow();
+                              });
     });
 
     hideLegacyChrome();
@@ -2100,7 +2129,7 @@ void MainWindow::renameSelectedInstance(const QString& newName)
 void MainWindow::zeroScreenshot(const QString& path, const QString& page)
 {
     const bool library = page == QLatin1String("library");
-    m_shell->setCurrentPage(library ? QStringLiteral("library") : QStringLiteral("home"));
+    m_shell->setCurrentPage(library ? QStringLiteral("library") : page == QLatin1String("tools") ? QStringLiteral("tools") : QStringLiteral("home"));
     QSize size(1280, 800);
     // Dev aid: ZERO_SCREENSHOT_SIZE=<w>x<h> (e.g. 1100x700 to review the collapsed rail).
     const QStringList dims = qEnvironmentVariable("ZERO_SCREENSHOT_SIZE").split(QLatin1Char('x'));
@@ -2119,6 +2148,20 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     if (!runningId.isEmpty()) {
         if (auto* inst = APPLICATION->instances()->getInstanceById(runningId))
             inst->setRunning(true);
+    }
+
+    // Dev aid: ZERO_SCREENSHOT_DIAGNOSE=<instance id> opens Tools > Crash Detective for that instance and analyzes it
+    // (ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code> passes an exit code, ZERO_SCREENSHOT_EVIDENCE=1 expands the evidence).
+    if (const QString diagnoseId = qEnvironmentVariable("ZERO_SCREENSHOT_DIAGNOSE"); !diagnoseId.isEmpty()) {
+        std::optional<int> exitCode;
+        if (const QString code = qEnvironmentVariable("ZERO_SCREENSHOT_DIAGNOSE_EXIT"); !code.isEmpty())
+            exitCode = code.toInt(nullptr, 0);
+        m_shell->setCurrentPage(QStringLiteral("tools"));
+        m_tools->openCrashDetective(diagnoseId, true, exitCode);
+        if (qEnvironmentVariableIntValue("ZERO_SCREENSHOT_EVIDENCE") == 1) {
+            connect(m_tools->crashDetective(), &Zero::CrashDetectiveView::analysisFinished, this,
+                    [this]() { m_tools->crashDetective()->expandAllEvidence(); });
+        }
     }
 
     // Let the layout, icon loading and the page fade settle before grabbing.

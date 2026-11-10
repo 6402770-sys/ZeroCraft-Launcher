@@ -172,6 +172,9 @@ void LauncherPartLaunch::on_state(LoggedProcess::State state)
         case LoggedProcess::Crashed: {
             m_parent->setPid(-1);
             m_parent->instance()->setMinecraftRunning(false);
+            // ZERO: a user-requested kill is Aborted, anything else that ends the process badly is worth a diagnosis.
+            if (state == LoggedProcess::Crashed)
+                emit APPLICATION->gameStoppedUnexpectedly(m_parent->instance()->id(), m_process.exitCode());
             emitFailed(tr("Game crashed."));
             return;
         }
@@ -186,6 +189,7 @@ void LauncherPartLaunch::on_state(LoggedProcess::State state)
             // if the exit code wasn't 0, report this as a crash
             auto exitCode = m_process.exitCode();
             if (exitCode != 0) {
+                emit APPLICATION->gameStoppedUnexpectedly(m_parent->instance()->id(), exitCode);
                 emitFailed(tr("Game crashed."));
                 return;
             }

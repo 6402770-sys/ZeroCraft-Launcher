@@ -1,0 +1,21 @@
+---- Minecraft Crash Report ----
+// Don't do that.
+
+Time: 2024-05-11 21:03:09
+Description: Ticking entity
+
+java.lang.NullPointerException: Ticking entity
+	at net.minecraft.world.entity.Mob.m_8107_(Mob.java:411)
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Server thread
+
+-- Entity being ticked --
+Details:
+	Entity Type: alexsmobs:crocodile (com.github.alexthe666.alexsmobs.entity.EntityCrocodile)
+	Entity ID: 4812
+	Entity Name: Crocodile
+	Entity's Exact location: 120.50, 64.00, -233.12

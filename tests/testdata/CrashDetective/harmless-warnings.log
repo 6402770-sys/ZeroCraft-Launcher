@@ -1,0 +1,15 @@
+[18:00:01] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeclient]
+[18:00:03] [main/WARN] [mixin/]: Reference map 'create.refmap.json' for create.mixins.json could not be read. If this is a development environment you can ignore this message
+[18:00:04] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file jei.jar is using a deprecated feature
+[18:00:05] [main/INFO] [net.minecraftforge.fml.loading.moddiscovery.ModDiscoverer/SCAN]: Found mod file create-1.20.1.jar of type MOD with provider
+[18:00:08] [modloading-worker-0/WARN] [mixin/]: @Mixin target net.minecraft.client.Foo was not found modernfix.mixins.json:perf.FooMixin
+[18:00:09] [main/WARN] [ne.mi.fm.co.ConfigFileTypeHandler/CONFIG]: Configuration file C:\Games\inst\.minecraft\config\jei-client.toml is not correct. Correcting
+[18:00:09] [main/INFO] [ne.mi.fm.co.ConfigFileTypeHandler/CONFIG]: Config file jei-client.toml loaded, nothing to correct
+[18:00:12] [Render thread/WARN] [com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService/]: Couldn't connect to the telemetry service: timed out
+[18:00:14] [Render thread/WARN] [minecraft/VanillaPackResources]: Ambiguity between arguments [teleport, targets] and [teleport, destination] with inputs: [Player, 0123]
+[18:00:15] [Render thread/WARN] [minecraft/ClientPacketListener]: Unknown custom packet identifier: jei:network
+[18:00:17] [Render thread/INFO] [minecraft/Minecraft]: Java 17 detected, requires Java 17 or newer for this build: ok
+[18:00:18] [Render thread/WARN] [ModernFix]: Skipping optimization; out of memory handling is disabled (not an error)
+[18:00:19] [Render thread/INFO] [mixin/]: Mod Menu requires version 1.0 of Fabric API; found 0.92.0
+[18:00:20] [Server thread/WARN] [minecraft/MinecraftServer]: Can't keep up! Is the server overloaded? Running 2312ms or 46 ticks behind
+[18:05:41] [Render thread/INFO] [minecraft/Minecraft]: Stopping!

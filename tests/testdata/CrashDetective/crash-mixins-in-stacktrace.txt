@@ -1,0 +1,15 @@
+---- Minecraft Crash Report ----
+
+Time: 2024-03-02 18:12:44
+Description: Rendering entity in world
+
+java.lang.NullPointerException: Cannot invoke "Object.toString()"
+	at net.minecraft.client.renderer.entity.EntityRenderDispatcher.m_114384_(EntityRenderDispatcher.java:100)
+
+-- System Details --
+Details:
+	Minecraft Version: 1.20.1
+	Suspected Mods: NONE
+	Mixins in Stacktrace:
+		net.minecraft.client.renderer.entity.EntityRenderDispatcher:
+			entityculling.mixins.json:EntityRenderDispatcherMixin (priority=1000)

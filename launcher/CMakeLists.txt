@@ -867,6 +867,13 @@ SET(LAUNCHER_SOURCES
     ui/themes/CatPainter.cpp
     ui/themes/CatPainter.h
 
+    # ZERO services (non-UI)
+    zero/diagnostics/CrashDetective.cpp
+    zero/diagnostics/CrashDetective.h
+    zero/diagnostics/CrashReportCollector.cpp
+    zero/diagnostics/CrashReportCollector.h
+    zero/diagnostics/DiagnosticsTypes.h
+
     # ZERO design system
     ui/zero/ZeroCard.cpp
     ui/zero/ZeroCard.h
@@ -895,6 +902,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroToast.cpp
     ui/zero/ZeroToast.h
     ui/zero/ZeroTokens.h
+    ui/zero/pages/CrashDetectiveView.cpp
+    ui/zero/pages/CrashDetectiveView.h
     ui/zero/pages/ElidedLabel.h
     ui/zero/pages/HomePage.cpp
     ui/zero/pages/HomePage.h
@@ -908,6 +917,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/InstanceTableModel.h
     ui/zero/pages/LibraryPage.cpp
     ui/zero/pages/LibraryPage.h
+    ui/zero/pages/ToolsPage.cpp
+    ui/zero/pages/ToolsPage.h
     ui/zero/pages/ZeroInstanceDelegate.cpp
     ui/zero/pages/ZeroInstanceDelegate.h
     ui/zero/shell/AccountChip.cpp

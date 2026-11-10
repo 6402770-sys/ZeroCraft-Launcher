@@ -1,0 +1,23 @@
+# File map (ZERO-specific + key upstream entry points)
+
+- `CLAUDE.md` — agent rules and commands (keep short)
+- `HANDOFF.md` — current status, verified state, next tasks
+- `docs/zero/DESIGN.md` — Obsidian design system spec (tokens, components)
+- `docs/zero/SHELL.md` — main window / Home / Library spec, dev screenshot flags
+- `docs/zero/ARCHITECTURE.md` — layering and key decisions
+- `docs/zero/CREDENTIALS.md` — external services/keys and release requirements
+- `docs/zero/THIRD_PARTY.md` — Lucide icons attribution
+- `scripts/zero/build.sh` — configure/build/test/run (MSYS2 UCRT64)
+- `scripts/zero/run-dev.cmd` — double-click launcher for the dev build (adds MSYS2 DLLs to PATH)
+- `CMakeLists.txt` — version, service URLs/keys, `ZERO_RELEASE_BUILD` guard
+- `program_info/` — branding: names/AppID (`CMakeLists.txt`), icons (`zero-logo.svg` master, `zerolauncher.ico`), `.rc`, NSIS installer
+- `launcher/Application.cpp` — startup, data dir, CLI flags (`--zero-screenshot`), settings registration, Prism import (`handleDataMigration`)
+- `launcher/ui/MainWindow.*` — controller: actions, selection, launch/kill; builds `ZeroShell`
+- `launcher/ui/zero/` — design system: `ZeroTokens.h`, `ZeroThemeState` (runtime ThemeSpec), `ZeroStyle` (QSS/palette/fonts), `ZeroTheme` (ITheme, popup filter, dark title bar), `ZeroIcons`, `ZeroMotion`, `ZeroFormat` (relative time/playtime), components (`ZeroCard`, `ZeroNavRail`, `ZeroPageHeader`, `ZeroEmptyState`, `ZeroToast`, `ZeroSpinner`), `ZeroGallery` (dev gallery)
+- `launcher/ui/zero/shell/` — `ZeroShell` (rail + page stack), `AccountChip`
+- `launcher/ui/zero/pages/` — `HomePage`, `LibraryPage`, `InstanceDetailsPanel`, `ZeroInstanceDelegate` (grid cards), `InstanceTableModel` (list view), `InstanceInfo` (version/loader read-only), `IconTile`, `ElidedLabel`
+- `launcher/zero/` — non-UI ZERO services (diagnostics/Crash Detective, …)
+- `launcher/resources/zero/` — `obsidian.qss` (token placeholders), `zero.qrc`, `icons/` (Lucide SVGs + LICENSE)
+- `launcher/ui/themes/ThemeManager.cpp` — registers ZERO theme first, defaults
+- `launcher/ui/instanceview/` — upstream grid view (ZERO metrics, group headers, text filter in `InstanceProxyModel`)
+- `tests/Zero*_test.cpp`, `tests/CrashDetective_test.cpp` — ZERO unit tests (in `LauncherTests`, listed in `tests/CMakeLists.txt`)

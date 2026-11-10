@@ -205,6 +205,10 @@ class Application : public QApplication {
 
     void oauthReplyRecieved(QVariantMap);
 
+    /// The game process of `instanceId` ended abnormally (crashed, or exited with a non-zero code) without the user
+    /// stopping it. Used by ZERO's Crash Detective hook.
+    void gameStoppedUnexpectedly(const QString& instanceId, int exitCode);
+
 #ifdef Q_OS_MACOS
     void clickedOnDock();
 #endif

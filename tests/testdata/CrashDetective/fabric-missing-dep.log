@@ -1,0 +1,11 @@
+[10:21:33] [main/INFO] (FabricLoader) Loading Minecraft 1.20.1 with Fabric Loader 0.15.7
+[10:21:34] [main/ERROR] (FabricLoader) Incompatible mod set found! Some of your mods are incompatible with the game or each other!
+net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!
+A potential solution has been determined, this may resolve your problem:
+	 - Install fabric-api, version 0.92.0 or later.
+	 - Install sodium, any version.
+More details:
+	 - Mod 'Sodium Extra' (sodium-extra) 0.5.4 requires version 0.5.0 or later of mod 'Sodium' (sodium), which is missing!
+	 - Mod 'Iris Shaders' (iris) 1.6.11 requires any version of mod 'Sodium' (sodium), which is missing!
+	 - Mod 'Mod Menu' (modmenu) 7.2.2 requires version 0.92.0 or later of Fabric API (fabric-api), which is missing!
+	at net.fabricmc.loader.impl.FabricLoaderImpl.load(FabricLoaderImpl.java:190)

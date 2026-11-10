@@ -1,0 +1,4 @@
+[09:55:31] [main/ERROR] [co.el.ni.co.io.ParsingException/]: Not enough data available
+[09:55:31] [main/ERROR] [ne.mi.fm.co.ConfigTracker/CONFIG]: Failed loading config file alexsmobs.toml of type COMMON for mod alexsmobs
+com.electronwill.nightconfig.core.io.ParsingException: Not enough data available
+	at com.electronwill.nightconfig.toml.TomlParser.parse(TomlParser.java:46)

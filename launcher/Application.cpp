@@ -331,7 +331,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" },
           { "zero-screenshot", "Dev aid: show the main window, save a screenshot to the given PNG file and quit (use with -d)", "file" },
-          { "zero-page", "Page for --zero-screenshot: home or library (default: home)", "page" } });
+          { "zero-page", "Page for --zero-screenshot: home, library or tools (default: home)", "page" } });
     // Has to be positional for some OS to handle that properly
     parser.addPositionalArgument("URL", "Import the resource(s) at the given URL(s) (same as -I / --import)", "[URL...]");
 

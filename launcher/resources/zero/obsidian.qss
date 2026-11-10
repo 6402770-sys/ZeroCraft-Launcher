@@ -52,6 +52,22 @@ QLabel[zeroTone="danger"]    { color: @danger@; }
 QLabel[zeroTone="info"]      { color: @info@; }
 QLabel:disabled { color: @textTertiary@; }
 
+/* Inset panel for log excerpts (Crash Detective evidence) */
+QFrame[zeroInset="true"] {
+    background-color: @bg@;
+    border: 1px solid @border@;
+    border-radius: @radiusMd@;
+}
+
+QTextEdit[zeroMono="true"] {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    font-family: "Cascadia Mono", Consolas, "Courier New";
+    font-size: @fsCaption@;
+    selection-background-color: @higher@;
+}
+
 /* Icon tile behind a small icon (Home shortcut cards) */
 QLabel[zeroTile="true"] {
     background-color: @elevated@;

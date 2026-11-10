@@ -34,6 +34,8 @@ set(TEST_SOURCES
     ZeroPlayButton_test.cpp
     ZeroShell_test.cpp
     CrashDetective_test.cpp
+    CommandMatcher_test.cpp
+    ZeroCommandPalette_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

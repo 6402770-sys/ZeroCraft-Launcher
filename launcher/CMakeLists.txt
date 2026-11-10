@@ -873,6 +873,8 @@ SET(LAUNCHER_SOURCES
     zero/diagnostics/CrashReportCollector.cpp
     zero/diagnostics/CrashReportCollector.h
     zero/diagnostics/DiagnosticsTypes.h
+    zero/palette/CommandMatcher.cpp
+    zero/palette/CommandMatcher.h
 
     # ZERO design system
     ui/zero/ZeroCard.cpp
@@ -933,10 +935,21 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/ToolsPage.h
     ui/zero/pages/ZeroInstanceDelegate.cpp
     ui/zero/pages/ZeroInstanceDelegate.h
+    ui/zero/palette/PaletteDraw.cpp
+    ui/zero/palette/PaletteDraw.h
+    ui/zero/palette/PaletteOverlay.cpp
+    ui/zero/palette/PaletteOverlay.h
+    ui/zero/palette/PaletteTypes.h
+    ui/zero/palette/ZeroCommandPalette.cpp
+    ui/zero/palette/ZeroCommandPalette.h
+    ui/zero/palette/ZeroShortcutSheet.cpp
+    ui/zero/palette/ZeroShortcutSheet.h
     ui/zero/shell/AccountChip.cpp
     ui/zero/shell/AccountChip.h
     ui/zero/shell/ShellPage.cpp
     ui/zero/shell/ShellPage.h
+    ui/zero/shell/ZeroSearchPill.cpp
+    ui/zero/shell/ZeroSearchPill.h
     ui/zero/shell/ZeroShell.cpp
     ui/zero/shell/ZeroShell.h
     ui/zero/shell/ZeroTopBar.cpp

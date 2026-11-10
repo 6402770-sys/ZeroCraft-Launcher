@@ -69,6 +69,10 @@ class LibraryPage;
 class ToolsPage;
 class AppearancePage;
 class ZeroShell;
+class ZeroCommandPalette;
+class ZeroShortcutSheet;
+struct PaletteCommand;
+struct ShortcutGroup;
 }  // namespace Zero
 
 namespace Ui {
@@ -262,6 +266,12 @@ class MainWindow : public QMainWindow {
     void updateAccountChip();
     void showAccountMenu(const QPoint& anchor);
     void showMoreMenu(const QPoint& anchor);
+    void setupCommandPalette();
+    QList<Zero::PaletteCommand> buildPaletteCommands();
+    QList<Zero::ShortcutGroup> buildShortcutGroups();
+    void showInLibrary(const QString& instanceId);
+    void togglePalette();
+    void toggleShortcutSheet();
     void showInstanceContextMenuAt(const QPoint& globalPos, bool onInstance, const QString& group);
     void renameSelectedInstance(const QString& newName);
     void editInstance(MinecraftInstance* instance);
@@ -286,6 +296,8 @@ class MainWindow : public QMainWindow {
     Zero::LibraryPage* m_library = nullptr;
     Zero::ToolsPage* m_tools = nullptr;
     Zero::AppearancePage* m_appearance = nullptr;
+    Zero::ZeroCommandPalette* m_palette = nullptr;
+    Zero::ZeroShortcutSheet* m_shortcutSheet = nullptr;
     QList<QAction*> m_accountActions;  // per-account actions (they carry the Ctrl+N shortcuts), recreated on repopulate
 
     unique_qobject_ptr<NewsChecker> m_newsChecker;

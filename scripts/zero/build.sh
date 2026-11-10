@@ -29,6 +29,13 @@ case "${1:-}" in
     # FileSystem is excluded: its symlink test spawns the *_filelink.exe helper elevated (UAC),
     # which hangs without Developer Mode and shows missing-DLL dialogs (elevated env lacks MSYS2 PATH).
     ctest --test-dir "$BUILD_DIR" -E "^FileSystem$" --timeout 120 -j4 --output-on-failure 2>&1 | tail -n 40
+    # FileSystem minus its 7 symlink cases (test_link*): those need symlink privileges and launch the elevated helper.
+    fs_out="$BUILD_DIR/filesystem-partial.txt"
+    timeout 120 "$BUILD_DIR/LauncherTests.exe" FileSystem_test -o "$fs_out,txt" \
+      test_pathCombine test_PathCombine1 test_PathCombine2 test_copy test_copy_with_blacklist test_copy_with_whitelist \
+      test_copy_with_dot_hidden test_copy_single_file test_getDesktop test_hard_link test_path_depth test_path_trunc \
+      > /dev/null 2>&1 || true
+    echo "FileSystem (without symlink cases): $(grep -E '^Totals' "$fs_out" 2>/dev/null || echo 'no result')"
     ;;
   run)
     exe=$(ls "$BUILD_DIR"/*.exe | grep -v -i -E "test|updater|filelink" | head -n 1)

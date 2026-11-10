@@ -48,7 +48,7 @@ continuous horizontal rule** across the window (never change one height without 
   hover, pointing-hand cursor, keyboard focusable, then a `chevron-right` 12 px in `textTertiary`), the page **title** (Title
   role: pixel font in Minecraft, `text`), then the **subtitle** 10 px after it (caption, `textSecondary`). When space is short
   the subtitle is elided first (full text in a tooltip), then the title.
-- **Centre**: `setCenterWidget(QWidget*)`, an empty invisible slot reserved for the universal search (next milestone). Nothing is shown while it is empty.
+- **Centre**: `setCenterWidget(QWidget*)`: the universal search pill (`shell/ZeroSearchPill`, see "Command palette"). The slot stays invisible while it is empty.
 - **Right**: the current page's action widget, a 1 x 24 px vertical divider (`border`; only while there is an action widget),
   then the **AccountChip** (compact: 28 px avatar + profile name + `chevron-down` 12 px; `surfaceHover` pill on hover; focus
   ring only for keyboard focus; tooltip "<name> - <Microsoft account | Offline | No account>"). Click -> Prism's accounts
@@ -138,6 +138,45 @@ Rail item "Appearance" (`palette`, bottom group, Alt+4); top bar title "Appearan
   unexpectedly" with action **Diagnose** -> Tools > Crash Detective for that instance, analysis started with the exit code.
 - Instance settings action: `APPLICATION->showInstanceWindow(inst, "settings")` (the Edit window, Settings page).
 
+## Command palette (Ctrl+K), search pill and shortcut sheet
+- **Pill** (`shell/ZeroSearchPill`, top bar centre): 360 px (shrinks to 240), 34 px, `surface` + 1 px `border` (`panelPath` radius md), `search` 16 in
+  `textTertiary`, "Search or jump to…" in `textTertiary`, a single "Ctrl K" key cap at the right. Hover: `borderStrong` + `surfaceHover` (StateAnimator).
+  Click or Ctrl+K (window-wide `QShortcut`, toggles) opens the palette.
+- **Overlay** (`palette/PaletteOverlay`, shared with the sheet): a child of the main window covering it. Backdrop `bg` at 55 %; panel 640 px (max 90 %),
+  top edge at 14 % of the window height, `surface`, 1 px `border`, radius xl, popover shadow. Open: backdrop 160 ms, panel fade + 8 px rise + scale 0.98 -> 1
+  in 180 ms OutQuint (the panel is snapshotted and painted by the overlay while it moves; the real widget waits off-screen so focus and typing work from frame 0);
+  close 120 ms fade; motion off = instant. Esc or a backdrop click closes; focus returns to the widget that had it (restored when the close starts, so a
+  command that opens a dialog or moves focus is not overridden).
+- **Palette** (`palette/ZeroCommandPalette`): input row 52 px (`search` 18, frameless line edit in heading size, "Esc" key cap), results (max 8 rows visible,
+  own scrolling, slim indicator), footer 28 px with the hints of the selected item ("↑↓ Navigate · ↵ Play · Ctrl+↵ Show in Library · Esc Close").
+  Rows are 40 px: icon (instance icon 20 px / Lucide 16 px), title (matched characters weight 600 + `text`, rest `textSecondary`; no match info = all `text`), caption
+  subtitle, then key caps (the real shortcut), a "Current" badge or, on the selected row, a hint ("Play ↵"). Selected row: `higher` + 2 px `accent2` bar; the highlight
+  glides between rows in 140 ms. Hover selects, click runs, Up/Down/Tab/PageUp/PageDown move (wrapping), Enter runs, Ctrl+Enter runs the secondary action.
+  Empty query: **Continue** (3 most recently played instances), **Navigation**, **Suggested**. With a query: sections Instances / Navigation / Actions / Settings /
+  Appearance, the section holding the best match first; no match -> "No results for ...".
+- **Descriptors** (`palette/PaletteTypes.h`): MainWindow is the controller. `MainWindow::buildPaletteCommands()` runs **every time the palette opens** and returns
+  `PaletteCommand`s (id, kind, title, subtitle, keywords, icon, shortcut, hint/badge, `run`, optional `runSecondary`). Callbacks call existing QActions/APIs
+  (`APPLICATION->launch`, `QAction::trigger`, `ShowGlobalSettings`, `setApplicationTheme` ...); a command that is not possible right now is simply not listed:
+  - Instances: Enter = Play (the launch call Home uses), Ctrl+Enter = show in Library. A running instance shows "Running" and Enter shows it in the Library (Prism
+    ignores a second launch).
+  - Navigation: Go to Home / Library / Tools / Appearance (Alt+N keycaps from `ZeroShell::pageShortcut`), Open Crash Detective (for the Library selection).
+  - Actions: New instance, Import instance, Manage accounts, every enabled Folders-menu entry, Undo last instance deletion (only when enabled), Settings, About,
+    Check for updates (only when the updater is enabled), Keyboard shortcuts, and for the selected instance Edit / Open folder / Rename (switches to the Library first) / Delete
+    (the normal confirmation).
+  - Settings: "Settings: <page>" for each global settings page (ids `launcher-settings`, `language-settings`, `appearance-settings`, `minecraft-settings`, `java-settings`,
+    `accounts`, `apis`, `external-tools`, `proxy-settings`, as registered in `Application.cpp`), with keywords (java -> memory, ram, jvm ...).
+  - Appearance: "Theme: <ZERO theme>" (Current badge; the normal apply + persist, the transition plays), "Animations: Follow Windows / On / Off" (`ZeroMotion`).
+- **Ranking** (`launcher/zero/palette/CommandMatcher`, no widgets): case-insensitive subsequence match, whitespace in the query ignored. Per matched character +16, +24 at a word
+  start (+8 at index 0), +18 when it directly follows the previous match; -(4 + gap) per gap (gap capped at 10), -0.5 per skipped leading character (cap 15), -0.2 per unmatched
+  character (cap 10); exact match +300, prefix match +150. Keyword matches use the same score x 0.8 and carry no highlight. Instances get a recency boost (20, halved after 3 days),
+  every kind a small weight (instance 4, navigation 3, action 2, setting/appearance 1). Order: score, kind, title (case-insensitive), input index: deterministic.
+  Returns the matched title positions for highlighting.
+- **Shortcut sheet** (`palette/ZeroShortcutSheet`, Ctrl+/, the "Keyboard shortcuts" command, More menu entry "Keyboard shortcuts  Ctrl+/"): same overlay style, 720 px, groups
+  Navigation / Instances / App in two columns, each row a label and key caps. `MainWindow::buildShortcutGroups()` reads the real QActions' shortcuts (an action
+  without a shortcut, e.g. Settings on Windows, is not listed). Key caps use English key names (`QKeySequence::PortableText`).
+- **Kill instance moved to Ctrl+Shift+K** (`MainWindow.ui`): Ctrl+K belongs to the palette (two actions on one shortcut would both stop working).
+- Opening a page (Alt+N, rail) closes any open overlay.
+
 ## Dev aids
 - `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|tools|appearance>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
@@ -149,6 +188,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+4); top bar title "Appearan
   (`ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code>` passes an exit code, `ZERO_SCREENSHOT_EVIDENCE=1` expands every evidence block).
 - `ZERO_SCREENSHOT_LAUNCH_PHASE=<instance id>:<preparing|running>` emits `Application::launchPhaseChanged` for that instance 300 ms after start (the signal the Play
   buttons listen to), `ZERO_SCREENSHOT_SELECT_THEME=<theme id>` selects a card on the Appearance page (nothing applied), `ZERO_SCREENSHOT_TOAST=1` shows one toast of each kind.
+- Palette: `ZERO_SCREENSHOT_PALETTE=<query>` opens the command palette with that query (`empty` = no query), `ZERO_SCREENSHOT_SHORTCUTS=1` opens the shortcut sheet.
 - Motion evidence frames (after the normal grab): `ZERO_SCREENSHOT_TRANSITION=<page id>` (`home` | `library` | `tools`)
   switches to that page and `ZERO_SCREENSHOT_THEME_TO=<theme id>` switches theme, each saving the window grab every 40 ms
   for 320 ms as `<file>-t0.png` .. `<file>-t8.png`, plus `<file>-tfinal.png` once everything settled (the last frame must
@@ -157,4 +197,5 @@ Rail item "Appearance" (`palette`, bottom group, Alt+4); top bar title "Appearan
 - The grab includes the top bar and the rail header (the continuous 60 px rule); `ZERO_SCREENSHOT_DIAGNOSE` shows the breadcrumb state of the top bar.
   An absolute output path works; a relative one is resolved against the data dir given with `-d`. Fake instances for screenshots need a valid
   `instance.cfg` (with a `[General]` header) and a well-formed `mmc-pack.json`, otherwise a debug ASSERT in `Task.cpp:108` stops the app.
+- Tests: `tests/CommandMatcher_test.cpp` (prefix beats subsequence, word starts, gaps, aliases, recency tie-breaks, highlight positions, empty query, no match), `tests/ZeroCommandPalette_test.cpp` (open/close, sections, query, wrapping navigation, Enter / Ctrl+Enter callbacks, absent commands, Esc and backdrop restore focus, scrolling, sheet).
 - Tests: `tests/ZeroShell_test.cpp` (top bar chrome per page, swap on page change, `chromeChanged`, breadcrumb click, Alt+N, chip anchor).

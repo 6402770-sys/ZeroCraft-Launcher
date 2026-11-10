@@ -358,7 +358,7 @@
     <string>Kill the running instance.</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+K</string>
+    <string>Ctrl+Shift+K</string>
    </property>
   </action>
   <action name="actionRenameInstance">

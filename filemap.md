@@ -20,8 +20,10 @@
 - `launcher/ui/zero/ZeroPlayButton.*` — the signature Play button: custom-painted, driven by `Application::launchPhaseChanged/launchEnded` (Idle / Preparing / Running / Failed)
 - `launcher/ui/zero/pages/AppearancePage.*` — Appearance page: theme cards + live `ThemePreview` (painted from a ThemeSpec), Apply theme, motion setting
 - `launcher/ui/zero/shell/` — `ZeroShell` (rail + top bar + page stack, Alt+N page shortcuts), `ShellPage` (page chrome API: title/subtitle/breadcrumb/top bar actions), `ZeroTopBar` (+ `ChromeTitle`), `AccountChip` (compact chip in the top bar)
+- `launcher/ui/zero/palette/` — command palette (Ctrl+K) and shortcut sheet (Ctrl+/): `PaletteOverlay` (shared overlay: backdrop, panel, open/close animation, focus restore), `ZeroCommandPalette` (+ `PaletteResults`), `ZeroShortcutSheet`, `PaletteTypes.h` (`PaletteCommand`, `ShortcutGroup` descriptors MainWindow fills), `PaletteDraw` (key caps)
 - `launcher/ui/zero/pages/` — `HomePage`, `LibraryPage`, `InstanceDetailsPanel`, `ZeroInstanceDelegate` (grid cards), `InstanceTableModel` (list view), `InstanceInfo` (version/loader read-only), `IconTile`, `ElidedLabel`
 - `launcher/zero/` — non-UI ZERO services (diagnostics/Crash Detective, …)
+- `launcher/zero/palette/CommandMatcher.*` — pure ranking logic of the palette (fuzzy score, aliases, recency, tie-breaks, highlight positions)
 - `launcher/resources/zero/` — `obsidian.qss` (base, token placeholders), `minecraft.qss` (per-theme overlay appended to the base), `zero.qrc`, `icons/` (Lucide SVGs + LICENSE)
 - `launcher/ui/themes/ThemeManager.cpp` — registers the ZERO themes (`zero-obsidian`, `zero-minecraft`) first, defaults
 - `launcher/ui/instanceview/` — upstream grid view (ZERO metrics, group headers, text filter in `InstanceProxyModel`)
@@ -29,4 +31,5 @@
 - `tests/ZeroPlayButton_test.cpp` — Play button state machine (cycle, failure, abort, crash, ignored clicks, stop request)
 - `tests/ZeroMotion_test.cpp` — motion system: setting resolution + legacy migration, overlays (self-deleting, replaceable, nothing with motion off), ripple, toasts
 - `tests/ZeroShell_test.cpp` — shell/top bar chrome swap, breadcrumb, Alt+N shortcuts
+- `tests/CommandMatcher_test.cpp`, `tests/ZeroCommandPalette_test.cpp` — palette ranking; palette/sheet open, close, navigation, callbacks, focus
 - `tests/Zero*_test.cpp`, `tests/CrashDetective_test.cpp` — ZERO unit tests (in `LauncherTests`, listed in `tests/CMakeLists.txt`)

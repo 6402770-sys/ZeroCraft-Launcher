@@ -110,6 +110,13 @@
 #include "ui/dialogs/skins/SkinManageDialog.h"
 #include "ui/instanceview/InstanceDelegate.h"
 #include "ui/zero/ZeroToast.h"
+#include "ui/zero/ZeroTheme.h"
+#include "ui/zero/ZeroFormat.h"
+#include "ui/zero/palette/ZeroCommandPalette.h"
+#include "ui/zero/palette/ZeroShortcutSheet.h"
+#include "ui/zero/pages/InstanceInfo.h"
+#include "ui/zero/shell/ZeroSearchPill.h"
+#include "ui/zero/shell/ZeroTopBar.h"
 #include "ui/zero/pages/HomePage.h"
 #include "ui/zero/pages/LibraryPage.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
@@ -275,6 +282,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         // you can't set QKeySequence::StandardKey shortcuts in qt designer >:(
         ui->actionAddInstance->setShortcut(QKeySequence::New);
         ui->actionSettings->setShortcut(QKeySequence::Preferences);
+        if (ui->actionSettings->shortcut().isEmpty())  // ZERO: Windows has no standard Preferences key
+            ui->actionSettings->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
         ui->actionUndoTrashInstance->setShortcut(QKeySequence::Undo);
         ui->actionDeleteInstance->setShortcuts({ QKeySequence(tr("Backspace")), QKeySequence::Delete });
         ui->actionCloseWindow->setShortcut(QKeySequence::Close);
@@ -2027,6 +2036,7 @@ void MainWindow::setupZeroShell()
                               });
     });
 
+    setupCommandPalette();
     hideLegacyChrome();
 }
 
@@ -2119,11 +2129,413 @@ void MainWindow::showMoreMenu(const QPoint& anchor)
         menu->addAction(ui->actionUndoTrashInstance);
     }
     menu->addSeparator();
+    // The shortcut itself is a window-wide QShortcut; the tab-separated text only shows it in the menu.
+    menu->addAction(tr("Keyboard shortcuts") + QStringLiteral("\tCtrl+/"), this, &MainWindow::toggleShortcutSheet);
     menu->addAction(ui->actionAbout);
     if (APPLICATION->updaterEnabled())
         menu->addAction(ui->actionCheckUpdate);
 
     popupAbove(menu, anchor);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Command palette (Ctrl+K) and shortcut reference (Ctrl+/). MainWindow only describes the commands: every callback calls an
+// existing QAction or API. The list is rebuilt each time the palette opens, so it follows the actions' enabled state.
+// ---------------------------------------------------------------------------------------------------------------------
+
+namespace {
+QString cleanActionText(QString text)
+{
+    text.replace(QStringLiteral("&&"), QStringLiteral("\x01"));
+    text.remove(QLatin1Char('&'));
+    text.replace(QLatin1Char('\x01'), QLatin1Char('&'));
+    text = text.trimmed();
+    if (text.endsWith(QStringLiteral("...")))
+        text.chop(3);
+    else if (text.endsWith(QChar(0x2026)))
+        text.chop(1);
+    return text.trimmed();
+}
+
+QString currentMotionValue()
+{
+    auto* settings = APPLICATION->settings();
+    const QString value = settings->get("ZeroMotion").toString();
+    if (value == QLatin1String("on") || value == QLatin1String("off"))
+        return value;
+    return (value.isEmpty() && settings->get("ZeroReduceMotion").toBool()) ? QStringLiteral("off") : QStringLiteral("system");
+}
+}  // namespace
+
+void MainWindow::setupCommandPalette()
+{
+    // Ctrl+K opens the palette window-wide: the Kill action's shortcut moved to Ctrl+Shift+K in MainWindow.ui (a shortcut set
+    // here would be reset by retranslateUi()).
+    m_palette = new Zero::ZeroCommandPalette(this);
+    m_palette->setCommandProvider([this]() { return buildPaletteCommands(); });
+    m_shortcutSheet = new Zero::ZeroShortcutSheet(this);
+    m_shortcutSheet->setGroupsProvider([this]() { return buildShortcutGroups(); });
+
+    auto* pill = new Zero::ZeroSearchPill;
+    m_shell->topBar()->setCenterWidget(pill);
+    connect(pill, &QAbstractButton::clicked, this, &MainWindow::togglePalette);
+
+    auto* paletteKey = new QShortcut(QKeySequence(QStringLiteral("Ctrl+K")), this);
+    connect(paletteKey, &QShortcut::activated, this, &MainWindow::togglePalette);
+    auto* sheetKey = new QShortcut(QKeySequence(QStringLiteral("Ctrl+/")), this);
+    connect(sheetKey, &QShortcut::activated, this, &MainWindow::toggleShortcutSheet);
+    // A page change (Alt+N, rail) must not leave an overlay on top of the new page.
+    connect(m_shell, &Zero::ZeroShell::pageChanged, this, [this]() {
+        m_palette->closeOverlay();
+        m_shortcutSheet->closeOverlay();
+    });
+}
+
+void MainWindow::togglePalette()
+{
+    m_shortcutSheet->closeOverlay();
+    if (m_palette->isOpen())
+        m_palette->closeOverlay();
+    else
+        m_palette->open();
+}
+
+void MainWindow::toggleShortcutSheet()
+{
+    m_palette->closeOverlay();
+    if (m_shortcutSheet->isOpen())
+        m_shortcutSheet->closeOverlay();
+    else
+        m_shortcutSheet->open();
+}
+
+void MainWindow::showInLibrary(const QString& instanceId)
+{
+    setSelectedInstanceById(instanceId);
+    m_shell->setCurrentPage(QStringLiteral("library"));
+    if (view->currentIndex().isValid())
+        view->scrollTo(view->currentIndex());
+}
+
+QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
+{
+    using Zero::PaletteCommand;
+    using Kind = Zero::Palette::Kind;
+    QList<PaletteCommand> out;
+
+    // Instances: Enter = Play (the same launch call Home uses), Ctrl+Enter = show in Library. A running instance cannot be
+    // launched again (Prism ignores it), so Enter shows it in the Library instead.
+    auto* list = APPLICATION->instances();
+    for (int i = 0; i < list->count(); ++i) {
+        MinecraftInstance* inst = list->at(i);
+        const QString id = inst->id();
+        const Zero::InstanceInfo info = Zero::InstanceInfo::of(inst);
+        PaletteCommand c;
+        c.id = QStringLiteral("instance:") + id;
+        c.kind = Kind::Instance;
+        c.title = inst->name();
+        if (inst->isRunning()) {
+            c.subtitle = tr("Running");
+        } else {
+            QStringList parts;
+            if (!info.summary().isEmpty())
+                parts << info.summary();
+            parts << (inst->lastLaunch() > 0 ? tr("Played %1").arg(Zero::Format::relativeTime(inst->lastLaunch())) : tr("Never played"));
+            c.subtitle = parts.join(QStringLiteral(" · "));
+        }
+        c.keywords = { info.minecraftVersion, info.loader, QStringLiteral("instance") };
+        c.icon = APPLICATION->icons()->getIcon(inst->iconKey());
+        c.lastUsedMs = inst->lastLaunch();
+        if (inst->isRunning()) {
+            c.hint = tr("Show ↵");
+            c.primaryLabel = tr("Show in Library");
+            c.run = [this, id]() { showInLibrary(id); };
+        } else {
+            c.hint = tr("Play ↵");
+            c.primaryLabel = tr("Play");
+            c.run = [id]() {
+                if (auto* instance = APPLICATION->instances()->getInstanceById(id); instance && !instance->isRunning())
+                    APPLICATION->launch(instance);
+            };
+            c.secondaryLabel = tr("Show in Library");
+            c.runSecondary = [this, id]() { showInLibrary(id); };
+        }
+        out.append(c);
+    }
+
+    // Navigation.
+    struct Nav {
+        const char* page;
+        QString title;
+        const char* icon;
+        QStringList keywords;
+    };
+    const QList<Nav> pages = {
+        { "home", tr("Go to Home"), "house", { tr("start"), tr("continue") } },
+        { "library", tr("Go to Library"), "library-big", { tr("instances"), tr("games"), tr("packs") } },
+        { "tools", tr("Go to Tools"), "wrench", { tr("utilities") } },
+        { "appearance", tr("Go to Appearance"), "palette", { tr("themes"), tr("look") } },
+    };
+    for (const Nav& n : pages) {
+        const QString page = QString::fromLatin1(n.page);
+        if (!m_shell->page(page))
+            continue;
+        PaletteCommand c;
+        c.id = QStringLiteral("nav:") + page;
+        c.kind = Kind::Navigation;
+        c.title = n.title;
+        c.keywords = n.keywords;
+        c.iconName = QString::fromLatin1(n.icon);
+        c.shortcut = m_shell->pageShortcut(page);
+        c.primaryLabel = tr("Go");
+        c.run = [this, page]() { m_shell->setCurrentPage(page); };
+        out.append(c);
+    }
+    {
+        PaletteCommand c;
+        c.id = QStringLiteral("nav:crash-detective");
+        c.kind = Kind::Navigation;
+        c.title = tr("Open Crash Detective");
+        c.keywords = { tr("crash"), tr("diagnose"), tr("log"), tr("error"), tr("fix") };
+        c.iconName = QStringLiteral("stethoscope");
+        c.primaryLabel = tr("Open");
+        c.run = [this]() {
+            m_tools->openCrashDetective(m_selectedInstance ? m_selectedInstance->id() : QString(), false);
+            m_shell->setCurrentPage(QStringLiteral("tools"));
+        };
+        out.append(c);
+    }
+
+    // Actions: pulled from the real QActions (shortcut, enabled state) at open time.
+    auto addAction = [&out](const QString& id, const QString& title, const QString& icon, QAction* action, const QStringList& keywords,
+                            bool suggested = false, const QString& subtitle = QString()) {
+        if (!action || !action->isEnabled() || !action->isVisible())
+            return;
+        PaletteCommand c;
+        c.id = id;
+        c.kind = Kind::Action;
+        c.title = title;
+        c.subtitle = subtitle;
+        c.keywords = keywords;
+        c.iconName = icon;
+        c.shortcut = action->shortcut();
+        c.suggested = suggested;
+        c.primaryLabel = QObject::tr("Run");
+        c.run = [action]() { action->trigger(); };
+        out.append(c);
+    };
+    addAction(QStringLiteral("action:new-instance"), tr("New instance"), QStringLiteral("plus"), ui->actionAddInstance,
+              { tr("create"), tr("add"), tr("install"), tr("modpack") }, true);
+    {
+        PaletteCommand c;
+        c.id = QStringLiteral("action:import-instance");
+        c.kind = Kind::Action;
+        c.title = tr("Import instance");
+        c.keywords = { tr("modpack"), tr("zip"), tr("mrpack"), tr("curseforge"), tr("file") };
+        c.iconName = QStringLiteral("package");
+        c.suggested = true;
+        c.primaryLabel = tr("Import");
+        c.run = [this]() { addInstance(QString(), {}, QStringLiteral("import")); };
+        out.append(c);
+    }
+    addAction(QStringLiteral("action:accounts"), tr("Manage accounts"), QStringLiteral("user"), ui->actionManageAccounts,
+              { tr("microsoft"), tr("login"), tr("sign in"), tr("profile"), tr("offline") });
+    for (QAction* folder : ui->foldersMenu->actions()) {
+        if (folder->isSeparator())
+            continue;
+        const QString name = cleanActionText(folder->text());
+        addAction(QStringLiteral("action:folder:") + folder->objectName(), tr("Open folder: %1").arg(name), QStringLiteral("folder-open"), folder,
+                  { tr("directory"), tr("explorer"), tr("open") });
+    }
+    addAction(QStringLiteral("action:undo-delete"), tr("Undo last instance deletion"), QStringLiteral("arrow-left"), ui->actionUndoTrashInstance,
+              { tr("restore"), tr("trash") });
+    addAction(QStringLiteral("action:settings"), tr("Settings"), QStringLiteral("settings"), ui->actionSettings, { tr("preferences"), tr("options") });
+    addAction(QStringLiteral("action:about"), cleanActionText(ui->actionAbout->text()), QStringLiteral("info"), ui->actionAbout,
+              { tr("version"), tr("credits"), tr("license") });
+    if (APPLICATION->updaterEnabled())
+        addAction(QStringLiteral("action:check-update"), tr("Check for updates"), QStringLiteral("download"), ui->actionCheckUpdate,
+                  { tr("update"), tr("upgrade") });
+    {
+        PaletteCommand c;
+        c.id = QStringLiteral("action:keyboard-shortcuts");
+        c.kind = Kind::Action;
+        c.title = tr("Keyboard shortcuts");
+        c.keywords = { tr("keys"), tr("hotkeys"), tr("help"), tr("cheat sheet") };
+        c.iconName = QStringLiteral("command");
+        c.shortcut = QKeySequence(QStringLiteral("Ctrl+/"));
+        c.suggested = true;
+        c.primaryLabel = tr("Show");
+        c.run = [this]() { QTimer::singleShot(0, this, &MainWindow::toggleShortcutSheet); };
+        out.append(c);
+    }
+    // The selected instance.
+    if (m_selectedInstance) {
+        const QString name = m_selectedInstance->name();
+        addAction(QStringLiteral("action:instance-edit"), tr("Edit instance"), QStringLiteral("pencil"), ui->actionEditInstance,
+                  { tr("settings"), tr("mods"), tr("configure") }, false, name);
+        addAction(QStringLiteral("action:instance-folder"), tr("Open instance folder"), QStringLiteral("folder-open"), ui->actionViewSelectedInstFolder,
+                  { tr("directory"), tr("explorer") }, false, name);
+        if (ui->actionRenameInstance->isEnabled()) {
+            PaletteCommand c;
+            c.id = QStringLiteral("action:instance-rename");
+            c.kind = Kind::Action;
+            c.title = tr("Rename instance");
+            c.subtitle = name;
+            c.iconName = QStringLiteral("pencil");
+            c.primaryLabel = tr("Rename");
+            c.run = [this]() {
+                m_shell->setCurrentPage(QStringLiteral("library"));  // the rename editor lives in the Library
+                QTimer::singleShot(0, this, [this]() { ui->actionRenameInstance->trigger(); });
+            };
+            out.append(c);
+        }
+        const qsizetype before = out.size();
+        addAction(QStringLiteral("action:instance-delete"), tr("Delete instance"), QStringLiteral("trash-2"), ui->actionDeleteInstance,
+                  { tr("remove"), tr("trash") }, false, name);
+        if (out.size() > before && !ui->actionDeleteInstance->shortcuts().isEmpty())
+            out.last().shortcut = ui->actionDeleteInstance->shortcuts().last();  // show "Delete" rather than "Backspace"
+    }
+
+    // Settings: one command per global settings page (ids from the page providers in Application.cpp).
+    struct SettingsPage {
+        const char* id;
+        QString title;
+        QStringList keywords;
+    };
+    const QList<SettingsPage> settingsPages = {
+        { "launcher-settings", tr("General"), { tr("launcher"), tr("startup"), tr("updates"), tr("console"), tr("logs"), tr("folders"), tr("paths") } },
+        { "language-settings", tr("Language"), { tr("translation"), tr("locale") } },
+        { "appearance-settings", tr("Appearance"), { tr("theme"), tr("icons"), tr("widgets"), tr("fonts") } },
+        { "minecraft-settings", tr("Minecraft"), { tr("window"), tr("resolution"), tr("fullscreen"), tr("game"), tr("performance") } },
+        { "java-settings", tr("Java"), { tr("memory"), tr("ram"), tr("jvm"), tr("heap"), tr("allocation"), tr("runtime"), tr("jdk") } },
+        { "accounts", tr("Accounts"), { tr("microsoft"), tr("login"), tr("profile"), tr("skin") } },
+        { "apis", tr("Services"), { tr("curseforge"), tr("modrinth"), tr("api"), tr("key"), tr("metadata") } },
+        { "external-tools", tr("Tools"), { tr("editor"), tr("profiler"), tr("jprofiler"), tr("jvisualvm") } },
+        { "proxy-settings", tr("Proxy"), { tr("network"), tr("http"), tr("socks"), tr("connection") } },
+    };
+    for (const SettingsPage& s : settingsPages) {
+        PaletteCommand c;
+        const QString pageId = QString::fromLatin1(s.id);
+        c.id = QStringLiteral("settings:") + pageId;
+        c.kind = Kind::Setting;
+        c.title = tr("Settings: %1").arg(s.title);
+        c.keywords = s.keywords;
+        c.iconName = QStringLiteral("settings");
+        c.primaryLabel = tr("Open");
+        c.run = [this, pageId]() { QTimer::singleShot(0, this, [this, pageId]() { APPLICATION->ShowGlobalSettings(this, pageId); }); };
+        out.append(c);
+    }
+
+    // Appearance: ZERO themes and the motion setting.
+    {
+        QString current = APPLICATION->settings()->get("ApplicationTheme").toString();
+        if (current.isEmpty())
+            current = QString::fromLatin1(Zero::ZeroTheme::kId);
+        bool suggestedGiven = false;
+        for (ITheme* theme : APPLICATION->themeManager()->getValidApplicationThemes()) {
+            if (!Zero::isZeroThemeId(theme->id()))
+                continue;
+            const QString themeId = theme->id();
+            PaletteCommand c;
+            c.id = QStringLiteral("theme:") + themeId;
+            c.kind = Kind::Appearance;
+            c.title = tr("Theme: %1").arg(theme->name());
+            c.keywords = { tr("appearance"), tr("colors"), tr("dark"), tr("skin") };
+            c.iconName = QStringLiteral("palette");
+            c.primaryLabel = tr("Apply");
+            if (themeId == current) {
+                c.badge = tr("Current");
+            } else if (!suggestedGiven) {
+                c.suggested = true;  // "switch theme" in the empty-query suggestions
+                suggestedGiven = true;
+            }
+            c.run = [themeId]() {
+                if (!APPLICATION->themeManager()->isValidApplicationTheme(themeId))
+                    return;
+                APPLICATION->themeManager()->setApplicationTheme(themeId);
+                APPLICATION->settings()->set("ApplicationTheme", themeId);
+            };
+            out.append(c);
+        }
+        const QString motion = currentMotionValue();
+        const QList<QPair<QString, QString>> motions = { { QStringLiteral("system"), tr("Animations: Follow Windows") },
+                                                         { QStringLiteral("on"), tr("Animations: On") },
+                                                         { QStringLiteral("off"), tr("Animations: Off") } };
+        for (const auto& m : motions) {
+            const QString value = m.first;
+            PaletteCommand c;
+            c.id = QStringLiteral("motion:") + value;
+            c.kind = Kind::Appearance;
+            c.title = m.second;
+            c.keywords = { tr("motion"), tr("reduce motion"), tr("transitions"), tr("effects") };
+            c.iconName = QStringLiteral("clock");
+            c.primaryLabel = tr("Apply");
+            if (value == motion)
+                c.badge = tr("Current");
+            c.run = [value]() { APPLICATION->settings()->set("ZeroMotion", value); };
+            out.append(c);
+        }
+    }
+    return out;
+}
+
+QList<Zero::ShortcutGroup> MainWindow::buildShortcutGroups()
+{
+    using Zero::ShortcutEntry;
+    using Zero::ShortcutGroup;
+    auto entry = [](const QString& label, const QKeySequence& keys) { return ShortcutEntry{ label, Zero::keyCaps(keys) }; };
+
+    ShortcutGroup navigation;
+    navigation.title = tr("Navigation");
+    navigation.entries << entry(tr("Command palette"), QKeySequence(QStringLiteral("Ctrl+K")));
+    navigation.entries << entry(tr("Keyboard shortcuts"), QKeySequence(QStringLiteral("Ctrl+/")));
+    const QList<QPair<QString, QString>> pages = { { QStringLiteral("home"), tr("Home") },
+                                                    { QStringLiteral("library"), tr("Library") },
+                                                    { QStringLiteral("tools"), tr("Tools") },
+                                                    { QStringLiteral("appearance"), tr("Appearance") } };
+    for (const auto& p : pages) {
+        const QKeySequence keys = m_shell->pageShortcut(p.first);
+        if (!keys.isEmpty())
+            navigation.entries << entry(tr("Go to %1").arg(p.second), keys);
+    }
+    navigation.entries << entry(tr("Search instances (Library)"), QKeySequence(QStringLiteral("Ctrl+F")));
+    navigation.entries << ShortcutEntry{ tr("Close palette, clear search"), { QStringLiteral("Esc") } };
+
+    ShortcutGroup instances;
+    instances.title = tr("Instances");
+    const QList<QAction*> instanceActions = { ui->actionAddInstance,
+                                              ui->actionLaunchInstance,
+                                              ui->actionKillInstance,
+                                              ui->actionEditInstance,
+                                              ui->actionRenameInstance,
+                                              ui->actionChangeInstGroup,
+                                              ui->actionChangeInstIcon,
+                                              ui->actionViewSelectedInstFolder,
+                                              ui->actionCopyInstance,
+                                              ui->actionCreateInstanceShortcut,
+                                              ui->actionDeleteInstance,
+                                              ui->actionUndoTrashInstance };
+    for (QAction* a : instanceActions) {
+        if (a->shortcuts().isEmpty())
+            continue;
+        const QKeySequence keys = a == ui->actionDeleteInstance ? a->shortcuts().last() : a->shortcut();
+        instances.entries << entry(a == ui->actionAddInstance ? tr("New instance") : cleanActionText(a->text()), keys);
+    }
+    instances.entries << ShortcutEntry{ tr("Rename (Library)"), { QStringLiteral("F2") } };
+    instances.entries << ShortcutEntry{ tr("Refresh instances (Library)"), { QStringLiteral("F5") } };
+
+    ShortcutGroup app;
+    app.title = tr("App");
+    if (!ui->actionSettings->shortcut().isEmpty())
+        app.entries << entry(tr("Settings"), ui->actionSettings->shortcut());
+    if (!m_accountActions.isEmpty())
+        app.entries << ShortcutEntry{ tr("Switch account"), { QStringLiteral("Ctrl"), QStringLiteral("1-9") } };
+    if (!ui->actionNoDefaultAccount->shortcut().isEmpty())
+        app.entries << entry(tr("Clear default account"), ui->actionNoDefaultAccount->shortcut());
+
+    QList<ShortcutGroup> groups = { navigation, instances, app };
+    groups.removeIf([](const ShortcutGroup& g) { return g.entries.isEmpty(); });
+    return groups;
 }
 
 void MainWindow::renameSelectedInstance(const QString& newName)
@@ -2217,6 +2629,18 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
                     [this]() { m_tools->crashDetective()->expandAllEvidence(); });
         }
     }
+
+    // Dev aids: ZERO_SCREENSHOT_PALETTE=<query> opens the command palette with that query ("empty" = no query),
+    // ZERO_SCREENSHOT_SHORTCUTS=1 opens the keyboard shortcut sheet.
+    if (const QString paletteQuery = qEnvironmentVariable("ZERO_SCREENSHOT_PALETTE"); !paletteQuery.isEmpty()) {
+        QTimer::singleShot(200, this, [this, paletteQuery]() {
+            m_palette->open();
+            if (paletteQuery != QLatin1String("empty"))
+                m_palette->setQuery(paletteQuery);
+        });
+    }
+    if (qEnvironmentVariableIntValue("ZERO_SCREENSHOT_SHORTCUTS") == 1)
+        QTimer::singleShot(200, this, [this]() { m_shortcutSheet->open(); });
 
     // Let the layout, icon loading and the page fade settle before grabbing.
     QTimer::singleShot(1500, this, [this, path]() {

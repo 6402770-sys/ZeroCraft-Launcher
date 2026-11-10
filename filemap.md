@@ -1,7 +1,8 @@
 # File map (ZERO-specific + key upstream entry points)
 
 - `CLAUDE.md` — agent rules and commands (keep short)
-- `HANDOFF.md` — current status, verified state, next tasks
+- `HANDOFF.md` — current status, verified state, QA checklist, next tasks
+- `docs/zero/MISSION.md` — owner product brief (binding requirements and priorities)
 - `docs/zero/DESIGN.md` — Obsidian design system spec (tokens, components)
 - `docs/zero/SHELL.md` — main window / Home / Library spec, dev screenshot flags
 - `docs/zero/ARCHITECTURE.md` — layering and key decisions

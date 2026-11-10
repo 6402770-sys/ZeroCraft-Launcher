@@ -3,7 +3,18 @@
 Last updated: 2026-11-10 · Branch `zero-development` (local only, never pushed) · Base: Prism Launcher `develop` @ 00f216ce5
 
 ## Read first
-`CLAUDE.md` (commands, hard rules) → `docs/zero/ARCHITECTURE.md` → `docs/zero/DESIGN.md` → `docs/zero/SHELL.md` → `filemap.md`.
+`docs/zero/MISSION.md` (the owner's product brief: binding) → `CLAUDE.md` (commands, hard rules) →
+`docs/zero/ARCHITECTURE.md` → `docs/zero/DESIGN.md` → `docs/zero/SHELL.md` → `filemap.md`.
+
+## How the owner works
+Speaks Spanish, so reply in Spanish. Runs `/savvy-flow` (Opus orchestrates; `savvy-medium` by default, `savvy-careful`
+for delicate/security/migration work; one worker at a time on a Claude Pro budget). Local commits on
+`zero-development` are authorized as checkpoints; **never push**. Autonomous decisions are expected; ask only
+for machine-level changes (installing software etc.).
+
+## Session log
+- **2026-11-10 (session 1)**: cloned upstream, installed MSYS2 toolchain, baseline build, then P0 + Home/Library +
+  Crash Detective (commits f32ebef91 … 23cd68f89). Owner was about to do the first manual test of the dev build.
 
 ## Environment (this machine)
 - Toolchain: MSYS2 at `C:\msys64`, UCRT64 packages (GCC, CMake, Ninja, ccache, Qt 6.12, cmark, libarchive, qrencode,
@@ -42,8 +53,22 @@ login. First thing to do in a session with a human: run `scripts/zero/run-dev.cm
   against real crash logs (least certain: Fabric duplicate-mod and "conflicts with" phrasing). Only the newest
   latest.log / crash report / hs_err are scanned; Fabric silently ignoring a Forge jar is not detectable.
 
+## Manual QA checklist (first owner test, results pending)
+Start: double-click `scripts/zero/run-dev.cmd`. First run offers to **copy** Prism data (Yes = copy, which can be many GB;
+Prism untouched / No = start empty, never asks again).
+- [ ] App opens with Obsidian theme, dark title bar, rail (Home / Library / Tools / More / Settings)
+- [ ] Prism import: instances, accounts and settings appear; `%APPDATA%\PrismLauncher` unchanged
+- [ ] Microsoft login / account switch from the account chip
+- [ ] Create instance (vanilla + Fabric), launch from Home hero, Library details and card ▶; Stop works; running state updates
+- [ ] Rename (F2 / details), delete + Undo toast, change group, drag between groups, copy, export, shortcut, change icon
+- [ ] Right-click context menu, keyboard shortcuts (Ctrl+N, Ctrl+F, Del, F2, Ctrl+,)
+- [ ] Search filter, grid/list toggle, sort
+- [ ] Settings dialog and instance edit window look right under Obsidian (legacy Prism pages)
+- [ ] Force a crash (e.g. tiny max memory with a modpack): "stopped unexpectedly" toast → Diagnose → sensible findings
+- [ ] Window resize below 1200 px collapses the rail
+
 ## Next tasks (priority order)
-1. **Interactive QA pass** of the shell with the owner (list above), fix regressions.
+1. **Fix whatever the owner's QA pass finds** (checklist above).
 2. **Instance Profiles**: favorites (Home hero prefers favorite), tags, notes, custom artwork; extend instance.cfg
    via `BaseInstance::settings()` rather than a parallel store. Library filter chips for tags/favorites.
 3. **Command Palette** (Ctrl+K): instances, pages, actions, settings; shortcut reference sheet.

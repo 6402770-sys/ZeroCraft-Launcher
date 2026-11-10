@@ -18,4 +18,4 @@ Stack: C++20, Qt 6 (Widgets), CMake + Ninja, MSYS2 UCRT64 GCC toolchain at `C:\m
 - New sources must be added to `launcher/CMakeLists.txt`; new tests to `tests/CMakeLists.txt` (`ecm_add_test`).
 
 ## Docs
-`HANDOFF.md` (status, next steps) · `docs/zero/DESIGN.md` · `docs/zero/ARCHITECTURE.md` · `filemap.md`
+`HANDOFF.md` (status, next steps) · `docs/zero/MISSION.md` (product brief) · `docs/zero/DESIGN.md` · `docs/zero/ARCHITECTURE.md` · `filemap.md`

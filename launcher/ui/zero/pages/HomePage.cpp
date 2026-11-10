@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "HomePage.h"
+#include "ui/zero/ZeroPlayButton.h"
 
 #include <QCollator>
 #include <QGridLayout>
@@ -194,18 +195,10 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent), m_refreshTimer(new QTimer
     auto* buttons = new QHBoxLayout;
     buttons->setContentsMargins(0, 0, 0, 0);
     buttons->setSpacing(Tokens::spaceSm);
-    m_heroPlay = new QPushButton(tr("Play"), m_hero);
-    Style::setProperty(m_heroPlay, "zeroVariant", "primary");
-    Style::setProperty(m_heroPlay, "zeroSize", "lg");
-    m_heroPlay->setIconSize(QSize(16, 16));
-    connect(m_heroPlay, &QPushButton::clicked, this, [this]() {
-        if (m_heroId.isEmpty())
-            return;
-        if (m_heroIsRunning)
-            emit stopRequested(m_heroId);
-        else
-            emit playRequested(m_heroId);
-    });
+    m_heroPlay = new ZeroPlayButton(m_hero);
+    m_heroPlay->setMinimumWidth(148);
+    connect(m_heroPlay, &ZeroPlayButton::playRequested, this, &HomePage::playRequested);
+    connect(m_heroPlay, &ZeroPlayButton::stopRequested, this, &HomePage::stopRequested);
     buttons->addWidget(m_heroPlay);
     m_heroEdit = new QPushButton(tr("Edit"), m_hero);
     Style::setProperty(m_heroEdit, "zeroVariant", "secondary");
@@ -222,11 +215,6 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent), m_refreshTimer(new QTimer
             emit folderRequested(m_heroId);
     });
     buttons->addWidget(m_heroFolder);
-    m_heroRunning = new QLabel(tr("● Running"), m_hero);
-    Style::setProperty(m_heroRunning, "zeroBadge", "success");
-    m_heroRunning->hide();
-    buttons->addSpacing(Tokens::spaceSm);
-    buttons->addWidget(m_heroRunning);
     buttons->addStretch(1);
     heroText->addLayout(buttons);
     heroText->addStretch(1);
@@ -347,8 +335,6 @@ void HomePage::refreshIcons()
 {
     const auto& t = Theme::current();
     m_heroFolder->setIcon(Icons::icon(QStringLiteral("folder-open"), t.textSecondary));
-    m_heroPlay->setIcon(
-        Icons::icon(m_heroIsRunning ? QStringLiteral("square") : QStringLiteral("play"), m_heroIsRunning ? t.danger : t.onAccent));
 }
 
 void HomePage::refresh()
@@ -413,15 +399,8 @@ void HomePage::refreshHero(MinecraftInstance* hero)
         meta << Format::playtime(hero->totalTimePlayed());
     m_heroMeta->setFullText(meta.join(QStringLiteral(" · ")));
 
-    const bool running = hero->isRunning();
-    if (running != m_heroIsRunning || m_heroPlay->text().isEmpty() || (m_heroPlay->text() == tr("Play")) == running) {
-        m_heroIsRunning = running;
-        m_heroPlay->setText(running ? tr("Stop") : tr("Play"));
-        Style::setProperty(m_heroPlay, "zeroVariant", running ? "danger" : "primary");
-        refreshIcons();
-    }
-    m_heroPlay->setEnabled(running || hero->canLaunch());
-    m_heroRunning->setVisible(running);
+    m_heroPlay->setInstanceId(m_heroId);
+    m_heroPlay->setCanLaunch(hero->canLaunch());
     m_heroEdit->setEnabled(hero->canEdit());
 }
 

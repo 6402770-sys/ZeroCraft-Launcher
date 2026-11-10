@@ -895,6 +895,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroPageHeader.h
     ui/zero/ZeroPixelFont.cpp
     ui/zero/ZeroPixelFont.h
+    ui/zero/ZeroPlayButton.cpp
+    ui/zero/ZeroPlayButton.h
     ui/zero/ZeroSpinner.cpp
     ui/zero/ZeroSpinner.h
     ui/zero/ZeroStyle.cpp
@@ -910,6 +912,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroTransition.h
     ui/zero/ZeroRipple.cpp
     ui/zero/ZeroRipple.h
+    ui/zero/pages/AppearancePage.cpp
+    ui/zero/pages/AppearancePage.h
     ui/zero/pages/CrashDetectiveView.cpp
     ui/zero/pages/CrashDetectiveView.h
     ui/zero/pages/ElidedLabel.h

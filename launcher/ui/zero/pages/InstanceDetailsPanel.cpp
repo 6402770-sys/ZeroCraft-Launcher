@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "InstanceDetailsPanel.h"
+#include "ui/zero/ZeroPlayButton.h"
 
 #include <QAction>
 #include <QEvent>
@@ -125,17 +126,14 @@ InstanceDetailsPanel::InstanceDetailsPanel(QWidget* parent) : ZeroCard(parent)
     lay->addSpacing(Tokens::spaceMd);
 
     // Play / Stop
-    m_play = new QPushButton(tr("Play"), content);
-    Style::setProperty(m_play, "zeroVariant", "primary");
-    Style::setProperty(m_play, "zeroSize", "lg");
-    m_play->setIconSize(QSize(16, 16));
-    connect(m_play, &QPushButton::clicked, this, [this]() {
-        if (m_isRunning) {
-            if (m_actions.kill)
-                m_actions.kill->trigger();
-        } else if (m_actions.launch) {
+    m_play = new ZeroPlayButton(content);
+    connect(m_play, &ZeroPlayButton::playRequested, this, [this]() {
+        if (m_actions.launch)
             m_actions.launch->trigger();
-        }
+    });
+    connect(m_play, &ZeroPlayButton::stopRequested, this, [this]() {
+        if (m_actions.kill)
+            m_actions.kill->trigger();
     });
     lay->addWidget(m_play);
     lay->addSpacing(Tokens::spaceSm);
@@ -197,20 +195,13 @@ void InstanceDetailsPanel::refreshIcons()
     const auto& t = Theme::current();
     for (const auto& spec : m_iconSpecs)
         spec.button->setIcon(Icons::icon(spec.icon, spec.danger ? t.danger : t.textSecondary));
-    m_play->setIcon(Icons::icon(m_isRunning ? QStringLiteral("square") : QStringLiteral("play"), m_isRunning ? t.danger : t.onAccent));
 }
 
 void InstanceDetailsPanel::refreshPlayButton(bool running, bool canLaunch)
 {
-    const auto& t = Theme::current();
-    if (running != m_isRunning || m_play->property("zeroVariant").toString().isEmpty() || m_play->text().isEmpty()) {
-        m_isRunning = running;
-        m_play->setText(running ? tr("Stop") : tr("Play"));
-        Style::setProperty(m_play, "zeroVariant", running ? "danger" : "primary");
-        m_play->setIcon(Icons::icon(running ? QStringLiteral("square") : QStringLiteral("play"), running ? t.danger : t.onAccent));
-    }
-    const bool enabled = running ? (m_actions.kill && m_actions.kill->isEnabled()) : (canLaunch && m_actions.launch && m_actions.launch->isEnabled());
-    m_play->setEnabled(enabled);
+    Q_UNUSED(running);
+    m_play->setInstanceId(m_instance ? m_instance->id() : QString());
+    m_play->setCanLaunch(canLaunch && m_actions.launch && m_actions.launch->isEnabled());
 }
 
 void InstanceDetailsPanel::syncButtons()

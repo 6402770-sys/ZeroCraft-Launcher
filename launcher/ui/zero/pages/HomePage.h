@@ -16,6 +16,7 @@ namespace Zero {
 
 class ElidedLabel;
 class IconTile;
+class ZeroPlayButton;
 class ZeroCard;
 
 class HomePage : public QWidget {
@@ -53,12 +54,10 @@ class HomePage : public QWidget {
     IconTile* m_heroIcon;
     ElidedLabel* m_heroName;
     ElidedLabel* m_heroMeta;
-    QPushButton* m_heroPlay;
+    ZeroPlayButton* m_heroPlay;
     QPushButton* m_heroEdit;
     QPushButton* m_heroFolder;
-    QLabel* m_heroRunning;
     QString m_heroId;
-    bool m_heroIsRunning = false;
 
     // recent
     QWidget* m_recentSection;

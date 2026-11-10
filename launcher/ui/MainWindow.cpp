@@ -113,6 +113,7 @@
 #include "ui/zero/pages/HomePage.h"
 #include "ui/zero/pages/LibraryPage.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
+#include "ui/zero/pages/AppearancePage.h"
 #include "ui/zero/pages/ToolsPage.h"
 #include "ui/zero/pages/ZeroInstanceDelegate.h"
 #include "ui/zero/shell/ZeroShell.h"
@@ -1913,6 +1914,8 @@ void MainWindow::setupZeroShell()
     m_shell->addPage(QStringLiteral("library"), QStringLiteral("library-big"), tr("Library"), m_library);
     m_tools = new Zero::ToolsPage(m_shell);
     m_shell->addPage(QStringLiteral("tools"), QStringLiteral("wrench"), tr("Tools"), m_tools);
+    m_appearance = new Zero::AppearancePage(m_shell);
+    m_shell->addPage(QStringLiteral("appearance"), QStringLiteral("palette"), tr("Appearance"), m_appearance);
     m_shell->finishRail();
 
     // The toolbars and menu bar are hidden, so their shortcuts would be dead: register every action on the window.
@@ -1989,6 +1992,16 @@ void MainWindow::setupZeroShell()
         if (id == QLatin1String("tools") && m_selectedInstance)
             m_tools->setPreferredInstance(m_selectedInstance->id());  // Crash Detective defaults to the Library selection
     });
+
+    // Appearance: the page asks, MainWindow applies and persists (same as the legacy theme menu).
+    connect(m_appearance, &Zero::AppearancePage::applyThemeRequested, this, [](const QString& id) {
+        if (!APPLICATION->themeManager()->isValidApplicationTheme(id))
+            return;
+        APPLICATION->themeManager()->setApplicationTheme(id);
+        APPLICATION->settings()->set("ApplicationTheme", id);
+    });
+    connect(m_appearance, &Zero::AppearancePage::moreOptionsRequested, this,
+            [this]() { APPLICATION->ShowGlobalSettings(this, QStringLiteral("appearance-settings")); });
 
     // Tools: Crash Detective opens an instance's settings through the same window the Edit button uses.
     connect(m_tools, &Zero::ToolsPage::instanceSettingsRequested, this, [withInstance](const QString& id) {
@@ -2137,7 +2150,13 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
             qWarning() << "ZERO_SCREENSHOT_THEME: unknown theme" << themeId;
     }
     const bool library = page == QLatin1String("library");
-    m_shell->setCurrentPage(library ? QStringLiteral("library") : page == QLatin1String("tools") ? QStringLiteral("tools") : QStringLiteral("home"));
+    m_shell->setCurrentPage(library                              ? QStringLiteral("library")
+                            : page == QLatin1String("tools")      ? QStringLiteral("tools")
+                            : page == QLatin1String("appearance") ? QStringLiteral("appearance")
+                                                                  : QStringLiteral("home"));
+    // Dev aid: ZERO_SCREENSHOT_SELECT_THEME=<theme id> selects that card on the Appearance page (nothing is applied).
+    if (const QString pick = qEnvironmentVariable("ZERO_SCREENSHOT_SELECT_THEME"); !pick.isEmpty())
+        m_appearance->selectTheme(pick);
     QSize size(1280, 800);
     // Dev aid: ZERO_SCREENSHOT_SIZE=<w>x<h> (e.g. 1100x700 to review the collapsed rail).
     const QStringList dims = qEnvironmentVariable("ZERO_SCREENSHOT_SIZE").split(QLatin1Char('x'));
@@ -2156,6 +2175,31 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     if (!runningId.isEmpty()) {
         if (auto* inst = APPLICATION->instances()->getInstanceById(runningId))
             inst->setRunning(true);
+    }
+
+    // Dev aid: ZERO_SCREENSHOT_TOAST=1 shows one toast of each kind (info, success, warning, error).
+    if (qEnvironmentVariableIntValue("ZERO_SCREENSHOT_TOAST") == 1) {
+        QTimer::singleShot(300, this, [this]() {
+            Zero::ZeroToast::show(this, tr("Instance copied"), Zero::ZeroToast::Kind::Info);
+            Zero::ZeroToast::show(this, tr("Launch finished"), Zero::ZeroToast::Kind::Success);
+            Zero::ZeroToast::show(this, tr("Fabulous Survival stopped unexpectedly"), Zero::ZeroToast::Kind::Warning, tr("Diagnose"), []() {});
+            Zero::ZeroToast::show(this, tr("Could not start the game"), Zero::ZeroToast::Kind::Error);
+        });
+    }
+
+    // Dev aid: ZERO_SCREENSHOT_LAUNCH_PHASE=<instance id>:<preparing|running> emits Application::launchPhaseChanged for that
+    // instance (the signal the Play buttons listen to), so the Preparing / Running looks can be reviewed without a launch.
+    if (const QString spec = qEnvironmentVariable("ZERO_SCREENSHOT_LAUNCH_PHASE"); !spec.isEmpty()) {
+        const int colon = spec.lastIndexOf(QLatin1Char(':'));
+        const QString id = spec.left(colon), phase = spec.mid(colon + 1);
+        if (colon > 0 && (phase == QLatin1String("preparing") || phase == QLatin1String("running"))) {
+            QTimer::singleShot(300, this, [id, phase]() {
+                emit APPLICATION->launchPhaseChanged(id, phase == QLatin1String("running") ? Application::LaunchPhase::Running
+                                                                                          : Application::LaunchPhase::Preparing);
+            });
+        } else {
+            qWarning() << "ZERO_SCREENSHOT_LAUNCH_PHASE: expected <instance id>:<preparing|running>, got" << spec;
+        }
     }
 
     // Dev aid: ZERO_SCREENSHOT_DIAGNOSE=<instance id> opens Tools > Crash Detective for that instance and analyzes it

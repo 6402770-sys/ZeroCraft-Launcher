@@ -18,7 +18,7 @@ Default 1280×800, minimum 1100×700. Rail 220 px (collapses to 64 px below 1200
 
 ## Nav rail (top → bottom)
 1. Wordmark "ZERO" (display weight 600, letter-spacing 3px) + caption "Launcher", padding xl.
-2. Items: **Home** (`house`), **Library** (`library-big`), **Tools** (`wrench`). Later tasks add Discover, Worlds, Downloads, Theme Studio.
+2. Items: **Home** (`house`), **Library** (`library-big`), **Tools** (`wrench`), **Appearance** (`palette`). Later tasks add Discover, Worlds, Downloads, Theme Studio.
 3. Stretch.
 4. **Account chip**: 28 px avatar (account skin face if available, else `user` icon on elevated circle) + profile name
    (label) + caption "Microsoft account"/"Offline"/"No account". Click → Prism's existing accounts menu (switch / manage).
@@ -61,6 +61,32 @@ Content max width 1280, page padding xl, vertical gap xxl between sections.
   Change group (`list-filter`), Copy (`copy`), Export ▸ (Zip / Modrinth / CurseForge), Create shortcut (`terminal`),
   Delete (danger, `trash-2`). All mapped to the existing MainWindow actions; disabled states mirror them.
 
+## Play button (`ZeroPlayButton`)
+One painted 40 px button (Home hero, Library details panel; the small play icons on "Recently played" cards stay plain), bound to an
+instance id and driven by `Application::launchPhaseChanged(id, Idle|Preparing|Running)` / `launchEnded(id, success, aborted,
+gameStarted)`, so it is right however the launch started. `Preparing` = launch controller created (`Application::launch`),
+`Running` = game process up (`LauncherPartLaunch`, `LoggedProcess::Running`), `Idle` = `controllerFinished`.
+- **Idle**: accent fill, `play` icon + "Play"; hover -> `accentHover` (140 ms) and the icon nudges 2 px right; press scales the content to 0.97
+  (Minecraft: block press, content drops 2 px, bevel collapses); release springs back (OutBack).
+- **Preparing**: "Launching...", `accentPressed` fill, clicks ignored. Activity sweep (white 18 % band, 40 % width, 1100 ms per pass; Minecraft:
+  12-segment XP bar along the bottom edge lighting up in `accentHover`). The sweep runs even with motion off and stops when the state changes.
+- **Running**: the sweep finishes, then 280 ms crossfade to `elevated` + 1 px `border`, success dot + "Running". Hover morphs to a danger `square` "Stop";
+  click emits `stopRequested` (MainWindow's kill flow).
+- **Failed** (launch ended, not aborted, game never ran): "Launch failed" in danger for 2.5 s with a +-4 px content shake (320 ms, none with motion off), then
+  Idle. Aborted by the user -> Idle silently. A crash after the game started is not a launch failure (Crash Detective toast handles it).
+- Accessible name + tooltip per state; Space / Enter activate; keyboard focus draws a 2 px `accent2` ring.
+
+## Appearance page (`AppearancePage`)
+Rail item "Appearance" (`palette`). Max width 960, scrolls when short.
+- **Theme**: `ThemePreview` (full width, 16:9, max 340 px) paints a miniature ZERO window from a `ThemeSpec` (never the active one: textured background,
+  rail + active pill, header in the spec's title font, hero card with primary button bevelled/notched per spec, two cards). One card per ZERO theme
+  (`ZeroTheme.h: specForThemeId`): swatches (bg, surface, accent, accent2), name, tooltip, "Current" badge on the applied one. Selecting a card
+  crossfades the preview (200 ms) and applies nothing; **Apply theme** (enabled when selection != applied) emits `applyThemeRequested`, MainWindow applies
+  through `ThemeManager::setApplicationTheme` and persists `ApplicationTheme` (the global theme transition plays). The page follows theme changes made elsewhere.
+- **Motion**: segmented "Follow Windows" / "On" / "Off" bound to the `ZeroMotion` setting (live). Caption states what the choice means; for Follow Windows it says whether
+  Windows animation effects are on or off. "Preview" replays a Rise transition on the preview (nothing with motion off).
+- "More appearance options" opens Prism's global settings on `appearance-settings`.
+
 ## Tools page and Crash Detective
 - `ToolsPage` (`pages/ToolsPage`): header "Tools" + grid of tool cards (only Crash Detective for now). A card opens the tool inside the
   page; the tool has a back button ("Tools").
@@ -76,7 +102,7 @@ Content max width 1280, page padding xl, vertical gap xxl between sections.
 - Instance settings action: `APPLICATION->showInstanceWindow(inst, "settings")` (the Edit window, Settings page).
 
 ## Dev aids
-- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|tools>`): show main window, wait for layout, `grab()` to PNG,
+- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|tools|appearance>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
 - Screenshot-mode environment variables (dev only, read by `MainWindow::zeroScreenshot`): `ZERO_SCREENSHOT_SIZE=<w>x<h>`
   (default 1280x800), `ZERO_SCREENSHOT_THEME=<theme id>` (`zero-obsidian` | `zero-minecraft`: applies that theme through
@@ -84,6 +110,8 @@ Content max width 1280, page padding xl, vertical gap xxl between sections.
   path), `ZERO_SCREENSHOT_SEARCH=<text>` (types into the Library search). List mode is the `ZeroLibraryView=list` setting.
   `ZERO_SCREENSHOT_DIAGNOSE=<instance id>` opens Tools > Crash Detective for that instance and analyzes it
   (`ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code>` passes an exit code, `ZERO_SCREENSHOT_EVIDENCE=1` expands every evidence block).
+- `ZERO_SCREENSHOT_LAUNCH_PHASE=<instance id>:<preparing|running>` emits `Application::launchPhaseChanged` for that instance 300 ms after start (the signal the Play
+  buttons listen to), `ZERO_SCREENSHOT_SELECT_THEME=<theme id>` selects a card on the Appearance page (nothing applied), `ZERO_SCREENSHOT_TOAST=1` shows one toast of each kind.
 - Motion evidence frames (after the normal grab): `ZERO_SCREENSHOT_TRANSITION=<page id>` (`home` | `library` | `tools`)
   switches to that page and `ZERO_SCREENSHOT_THEME_TO=<theme id>` switches theme, each saving the window grab every 40 ms
   for 320 ms as `<file>-t0.png` .. `<file>-t8.png`, plus `<file>-tfinal.png` once everything settled (the last frame must

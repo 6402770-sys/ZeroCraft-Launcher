@@ -21,6 +21,7 @@ namespace Zero {
 
 class ElidedLabel;
 class IconTile;
+class ZeroPlayButton;
 
 /// The MainWindow actions the panel mirrors. Buttons trigger the action and follow its enabled state.
 struct LibraryActions {
@@ -79,13 +80,12 @@ class InstanceDetailsPanel : public ZeroCard {
     QLabel* m_lastPlayed;
     QLabel* m_playtime;
     ElidedLabel* m_group;
-    QPushButton* m_play;
+    ZeroPlayButton* m_play;
     QVector<Binding> m_bindings;
     LibraryActions m_actions;
     QPointer<MinecraftInstance> m_instance;
     QLayout* m_actionHost = nullptr;
     QString m_nameText;
-    bool m_isRunning = false;
     bool m_renaming = false;
     // icon name + color token per button, to re-tint on theme changes
     struct IconSpec {

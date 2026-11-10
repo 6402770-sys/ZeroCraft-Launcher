@@ -41,6 +41,7 @@
 
 #include <QApplication>
 #include <QDateTime>
+#include <QSet>
 #include <QDebug>
 #include <QFlag>
 #include <QIcon>
@@ -99,6 +100,10 @@ class Application : public QApplication {
     Q_OBJECT
    public:
     enum Status : std::uint8_t { StartingUp, Failed, Succeeded, Initialized };
+
+    /// Launch progress of one instance (ZERO Play button). Preparing: the launch controller exists (login, downloads,
+    /// updates); Running: the game process is up.
+    enum class LaunchPhase : std::uint8_t { Idle, Preparing, Running };
 
     enum Capability : std::uint8_t {
         None = 0U,
@@ -197,6 +202,10 @@ class Application : public QApplication {
 
     static QUrl normalizeImportUrl(const QString& url);
 
+    LaunchPhase launchPhase(const QString& instanceId) const;
+    /// Called by the launch part when the game process is up (Preparing -> Running).
+    void noteGameProcessRunning(const QString& instanceId);
+
    signals:
     void updateAllowedChanged(bool status);
     void globalSettingsAboutToOpen();
@@ -208,6 +217,12 @@ class Application : public QApplication {
     /// The game process of `instanceId` ended abnormally (crashed, or exited with a non-zero code) without the user
     /// stopping it. Used by ZERO's Crash Detective hook.
     void gameStoppedUnexpectedly(const QString& instanceId, int exitCode);
+
+    /// The launch phase of `instanceId` changed (see LaunchPhase).
+    void launchPhaseChanged(const QString& instanceId, Application::LaunchPhase phase);
+    /// A launch controller finished (the game exited, the launch failed or it was aborted). `gameStarted` tells whether
+    /// the game process was ever running.
+    void launchEnded(const QString& instanceId, bool success, bool aborted, bool gameStarted);
 
 #ifdef Q_OS_MACOS
     void clickedOnDock();
@@ -277,6 +292,8 @@ class Application : public QApplication {
     // main state variables
     size_t m_openWindows = 0;
     size_t m_runningInstances = 0;
+    QHash<QString, LaunchPhase> m_launchPhases;  // absent = Idle
+    QSet<QString> m_gameStartedIds;
     bool m_updateRunning = false;
 
     // main window, if any

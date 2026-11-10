@@ -331,7 +331,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" },
           { "zero-screenshot", "Dev aid: show the main window, save a screenshot to the given PNG file and quit (use with -d)", "file" },
-          { "zero-page", "Page for --zero-screenshot: home, library or tools (default: home)", "page" } });
+          { "zero-page", "Page for --zero-screenshot: home, library, tools or appearance (default: home)", "page" } });
     // Has to be positional for some OS to handle that properly
     parser.addPositionalArgument("URL", "Import the resource(s) at the given URL(s) (same as -I / --import)", "[URL...]");
 
@@ -1620,6 +1620,9 @@ bool Application::launch(MinecraftInstance* instance,
         }
         connect(controller, &LaunchController::finished, this, &Application::controllerFinished);
         addRunningInstance();
+        m_gameStartedIds.remove(instance->id());
+        m_launchPhases.insert(instance->id(), LaunchPhase::Preparing);
+        emit launchPhaseChanged(instance->id(), LaunchPhase::Preparing);
         QMetaObject::invokeMethod(controller, &Task::start, Qt::QueuedConnection);
         return true;
     } else if (instance->isRunning()) {
@@ -1630,6 +1633,20 @@ bool Application::launch(MinecraftInstance* instance,
         return true;
     }
     return false;
+}
+
+Application::LaunchPhase Application::launchPhase(const QString& instanceId) const
+{
+    return m_launchPhases.value(instanceId, LaunchPhase::Idle);
+}
+
+void Application::noteGameProcessRunning(const QString& instanceId)
+{
+    if (m_launchPhases.value(instanceId, LaunchPhase::Idle) != LaunchPhase::Preparing)
+        return;
+    m_gameStartedIds.insert(instanceId);
+    m_launchPhases.insert(instanceId, LaunchPhase::Running);
+    emit launchPhaseChanged(instanceId, LaunchPhase::Running);
 }
 
 bool Application::kill(BaseInstance* instance)
@@ -1696,6 +1713,10 @@ void Application::controllerFinished()
     auto* instance = controller->instance();
 
     const bool wasSuccessful = controller->wasSuccessful();
+    const bool wasAborted = controller->getState() == Task::State::AbortedByUser;
+    const QString instanceId = instance->id();
+    const bool gameStarted = m_gameStartedIds.remove(instanceId);
+    m_launchPhases.remove(instanceId);
     // on success, do...
     if (wasSuccessful && instance->settings()->get("AutoCloseConsole").toBool()) {
         if (instance->window() != nullptr) {
@@ -1703,6 +1724,8 @@ void Application::controllerFinished()
         }
     }
     instance->setLaunchController(nullptr);
+    emit launchEnded(instanceId, wasSuccessful, wasAborted, gameStarted);
+    emit launchPhaseChanged(instanceId, LaunchPhase::Idle);
     subRunningInstance();
 
     // quit when there are no more windows.

@@ -202,6 +202,17 @@ bool isZeroThemeId(const QString& id)
     return id.startsWith(QLatin1String("zero-"));
 }
 
+bool specForThemeId(const QString& id, ThemeSpec* out)
+{
+    if (id == QLatin1String(ZeroTheme::kId))
+        *out = ThemeSpec::obsidian();
+    else if (id == QLatin1String(ZeroMinecraftTheme::kId))
+        *out = ThemeSpec::minecraft();
+    else
+        return false;
+    return true;
+}
+
 ThemeSpec ZeroTheme::baseSpec()
 {
     return ThemeSpec::obsidian();

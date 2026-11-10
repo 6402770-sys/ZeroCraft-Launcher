@@ -96,6 +96,44 @@ class ToastHost : public QObject {
     QWidget* m_host;
 };
 
+namespace {
+
+/// 8x8 original gem bitmap drawn at 2x (16x16 px) with a 1 px darker outline. Legend: o outline, h highlight, b base, d shade.
+class PixelGem : public QWidget {
+   public:
+    PixelGem(const QColor& color, QWidget* parent) : QWidget(parent), m_color(color) { setFixedSize(16, 16); }
+
+   protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        static const char* const rows[8] = { "..oooo..", ".ohhbbo.", "ohhbbbbo", "ohbbbbdo", "obbbbbdo", ".obbbdo.", "..obdo..", "...oo..." };
+        const auto& t = Theme::current();
+        const QColor outline = mix(m_color, t.bevelDark, 0.7);
+        const QColor light = mix(m_color, Qt::white, 0.45);
+        const QColor shade = mix(m_color, t.bevelDark, 0.3);
+        QPainter p(this);
+        p.setPen(Qt::NoPen);
+        for (int y = 0; y < 8; ++y) {
+            for (int x = 0; x < 8; ++x) {
+                QColor c;
+                switch (rows[y][x]) {
+                    case 'o': c = outline; break;
+                    case 'h': c = light; break;
+                    case 'b': c = m_color; break;
+                    case 'd': c = shade; break;
+                    default: continue;
+                }
+                p.fillRect(x * 2, y * 2, 2, 2, c);
+            }
+        }
+    }
+
+   private:
+    QColor m_color;
+};
+
+}  // namespace
+
 ZeroToast::ZeroToast(QWidget* host, const QString& text, Kind kind, const QString& actionText, std::function<void()> action)
     : QWidget(host)
 {
@@ -128,10 +166,15 @@ ZeroToast::ZeroToast(QWidget* host, const QString& text, Kind kind, const QStrin
     lay->setContentsMargins(Tokens::spaceMd, Tokens::spaceMd, Tokens::spaceMd, Tokens::spaceMd);
     lay->setSpacing(Tokens::spaceMd);
 
-    auto* icon = new QLabel(this);
-    icon->setFixedSize(16, 16);
-    icon->setPixmap(Icons::pixmap(iconName, iconColor, 16, devicePixelRatioF()));
-    lay->addWidget(icon, 0, Qt::AlignTop);
+    if (t.corners == Corners::Notched) {
+        // Minecraft theme: a pixel gem (emerald / gold / redstone / lapis) instead of the vector status icon.
+        lay->addWidget(new PixelGem(iconColor, this), 0, Qt::AlignVCenter);
+    } else {
+        auto* icon = new QLabel(this);
+        icon->setFixedSize(16, 16);
+        icon->setPixmap(Icons::pixmap(iconName, iconColor, 16, devicePixelRatioF()));
+        lay->addWidget(icon, 0, Qt::AlignTop);
+    }
 
     auto* label = new QLabel(text, this);
     Style::applyRole(label, Role::Body);

@@ -202,6 +202,7 @@ void LauncherPartLaunch::on_state(LoggedProcess::State state)
         case LoggedProcess::Running:
             emit logLine(QString("Minecraft process ID: %1\n\n").arg(m_process.processId()), MessageLevel::Launcher);
             m_parent->setPid(m_process.processId());
+            APPLICATION->noteGameProcessRunning(m_parent->instance()->id());
             // send the launch script to the launcher part
             m_process.write(m_launchScript.toUtf8());
 

@@ -67,6 +67,7 @@ namespace Zero {
 class HomePage;
 class LibraryPage;
 class ToolsPage;
+class AppearancePage;
 class ZeroShell;
 }  // namespace Zero
 
@@ -284,6 +285,7 @@ class MainWindow : public QMainWindow {
     Zero::HomePage* m_home = nullptr;
     Zero::LibraryPage* m_library = nullptr;
     Zero::ToolsPage* m_tools = nullptr;
+    Zero::AppearancePage* m_appearance = nullptr;
     QList<QAction*> m_accountActions;  // per-account actions (they carry the Ctrl+N shortcuts), recreated on repopulate
 
     unique_qobject_ptr<NewsChecker> m_newsChecker;

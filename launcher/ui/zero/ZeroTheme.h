@@ -15,6 +15,10 @@ bool isThemeActive();
 /// True for the ids of every built-in ZERO theme ("zero-obsidian", "zero-minecraft", ...).
 bool isZeroThemeId(const QString& id);
 
+/// The ThemeSpec behind a built-in ZERO theme id (before user settings such as motion are merged in). False for ids
+/// that are not ZERO themes. Used by the Appearance page to preview a theme without applying it.
+bool specForThemeId(const QString& id, ThemeSpec* out);
+
 /// Applies a ZERO ThemeSpec app-wide: Fusion base style, palette, base font and the generated stylesheet.
 /// The spec comes from baseSpec() (Obsidian here); the motion setting ("ZeroMotion", legacy "ZeroReduceMotion"; when an
 /// Application exists) is carried into it.

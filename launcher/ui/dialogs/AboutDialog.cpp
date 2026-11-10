@@ -114,10 +114,16 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent), ui(new Ui::AboutDia
     else
         ui->channelLabel->setVisible(false);
 
-    QString urlText("<html><head/><body><p><a href=\"%1\">%1</a></p></body></html>");
-    ui->urlLabel->setText(urlText.arg(BuildConfig.LAUNCHER_GIT));
+    // ZERO: no public repository by default; hide the link when LAUNCHER_GIT is empty.
+    if (BuildConfig.LAUNCHER_GIT.isEmpty()) {
+        ui->urlLabel->setVisible(false);
+    } else {
+        QString urlText("<html><head/><body><p><a href=\"%1\">%1</a></p></body></html>");
+        ui->urlLabel->setText(urlText.arg(BuildConfig.LAUNCHER_GIT));
+    }
 
-    ui->copyLabel->setText(BuildConfig.LAUNCHER_COPYRIGHT);
+    ui->copyLabel->setText(BuildConfig.LAUNCHER_COPYRIGHT + "\n\n" +
+                           tr("%1 is based on Prism Launcher and is distributed under the GPL-3.0-only license.").arg(launcherName));
 
     connect(ui->closeButton, &QPushButton::clicked, this, &AboutDialog::close);
 

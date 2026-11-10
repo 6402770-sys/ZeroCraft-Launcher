@@ -46,6 +46,13 @@ NewsChecker::NewsChecker(QNetworkAccessManager* network, QString feedUrl) : m_fe
 
 void NewsChecker::reloadNews()
 {
+    // ZERO: an empty feed URL means the news feature is disabled; do not issue any request.
+    if (m_feedUrl.isEmpty()) {
+        m_newsEntries.clear();
+        succeed();
+        return;
+    }
+
     // Start a netjob to download the RSS feed and call rssDownloadFinished() when it's done.
     if (isLoadingNews()) {
         qDebug() << "Ignored request to reload news. Currently reloading already.";

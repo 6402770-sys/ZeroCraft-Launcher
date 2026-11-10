@@ -176,16 +176,20 @@ include(CTest)
 ##################################### Set Application options #####################################
 
 ######## Set URLs ########
-set(Launcher_NEWS_RSS_URL "https://prismlauncher.org/feed/feed.xml" CACHE STRING "URL to fetch Prism Launcher's news RSS feed from.")
-set(Launcher_NEWS_OPEN_URL "https://prismlauncher.org/news" CACHE STRING "URL that gets opened when the user clicks 'More News'")
+set(Launcher_NEWS_RSS_URL "" CACHE STRING "URL to fetch the news RSS feed from. Empty disables the news feature.")
+set(Launcher_NEWS_OPEN_URL "" CACHE STRING "URL that gets opened when the user clicks 'More News'. Empty hides the button.")
+# ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md
 set(Launcher_WIKI_URL "https://prismlauncher.org/wiki/" CACHE STRING "URL that gets opened when the user clicks 'Launcher Help'")
+# ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md
 set(Launcher_HELP_URL "https://prismlauncher.org/wiki/help-pages/%1" CACHE STRING "URL (with arg %1 to be substituted with page-id) that gets opened when the user requests help in a dialog window")
+# ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md
 set(Launcher_LOGIN_CALLBACK_URL "https://prismlauncher.org/successful-login" CACHE STRING "URL that gets opened when the user successfully logins.")
+# ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md
 set(Launcher_LEGACY_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" CACHE STRING "URL for legacy (<=1.5.2) FML Libraries.")
 
 ######## Set version numbers ########
-set(Launcher_VERSION_MAJOR 12)
-set(Launcher_VERSION_MINOR 0)
+set(Launcher_VERSION_MAJOR 0)
+set(Launcher_VERSION_MINOR 1)
 set(Launcher_VERSION_PATCH 0)
 
 set(Launcher_VERSION_NAME "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}")
@@ -196,32 +200,35 @@ set(Launcher_VERSION_NAME4_COMMA "${Launcher_VERSION_MAJOR},${Launcher_VERSION_M
 set(Launcher_BUILD_PLATFORM "unknown" CACHE STRING "A short string identifying the platform that this build was built for. Only used to display in the about dialog.")
 
 # Github repo URL with releases for updater
-set(Launcher_UPDATER_GITHUB_REPO "https://github.com/PrismLauncher/PrismLauncher" CACHE STRING "Base github URL for the updater.")
+set(Launcher_UPDATER_GITHUB_REPO "" CACHE STRING "Base github URL for the updater. Empty disables the updater.")
 
 # Name to help updater identify valid artifacts
 set(Launcher_BUILD_ARTIFACT "" CACHE STRING "Artifact name to help the updater identify valid artifacts.")
 
 # The metadata server
+# ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md
 set(Launcher_META_URL "https://meta.prismlauncher.org/v1/" CACHE STRING "URL to fetch Launcher's meta files from.")
 
 # Imgur API Client ID
-set(Launcher_IMGUR_CLIENT_ID "5b97b0713fba4a3" CACHE STRING "Client ID you can get from Imgur when you register an application")
+set(Launcher_IMGUR_CLIENT_ID "" CACHE STRING "Client ID you can get from Imgur when you register an application. Empty disables Imgur uploads.")
 
 # Bug tracker URL
-set(Launcher_BUG_TRACKER_URL "https://github.com/PrismLauncher/PrismLauncher/issues" CACHE STRING "URL for the bug tracker.")
+set(Launcher_BUG_TRACKER_URL "" CACHE STRING "URL for the bug tracker. Empty hides the link.")
 
 # Translations Platform URL
+# ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md
 set(Launcher_TRANSLATIONS_URL "https://hosted.weblate.org/projects/prismlauncher/launcher/" CACHE STRING "URL for the translations platform.")
+# ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md
 set(Launcher_TRANSLATION_FILES_URL "https://i18n.prismlauncher.org/" CACHE STRING "URL for the translations files.")
 
 # Matrix Space
-set(Launcher_MATRIX_URL "https://prismlauncher.org/matrix" CACHE STRING "URL to the Matrix Space")
+set(Launcher_MATRIX_URL "" CACHE STRING "URL to the Matrix Space. Empty hides the link.")
 
 # Discord URL
-set(Launcher_DISCORD_URL "https://prismlauncher.org/discord" CACHE STRING "URL for the Discord guild.")
+set(Launcher_DISCORD_URL "" CACHE STRING "URL for the Discord guild. Empty hides the link.")
 
 # Subreddit URL
-set(Launcher_SUBREDDIT_URL "https://prismlauncher.org/reddit" CACHE STRING "URL for the subreddit.")
+set(Launcher_SUBREDDIT_URL "" CACHE STRING "URL for the subreddit. Empty hides the link.")
 
 # Builds
 set(Launcher_QT_VERSION_MAJOR "6" CACHE STRING "Major Qt version to build against")
@@ -278,6 +285,21 @@ set(Launcher_MSA_CLIENT_ID "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb" CACHE STRING "
 # NOTE: CurseForge requires you to change this if you make any kind of derivative work.
 # This key was issued specifically for Prism Launcher
 set(Launcher_CURSEFORGE_API_KEY "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC" CACHE STRING "API key for the CurseForge platform")
+
+# ZERO: the defaults above are Prism Launcher's credentials, kept for local development only.
+# Official ZERO releases must use their own registrations, see docs/zero/CREDENTIALS.md
+option(ZERO_RELEASE_BUILD "Official ZERO release build" OFF)
+if(ZERO_RELEASE_BUILD)
+    set(_zero_upstream_msa "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb")
+    set(_zero_upstream_cf "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC")
+    if(Launcher_MSA_CLIENT_ID STREQUAL _zero_upstream_msa OR Launcher_CURSEFORGE_API_KEY STREQUAL _zero_upstream_cf)
+        message(FATAL_ERROR "ZERO_RELEASE_BUILD is ON but Launcher_MSA_CLIENT_ID and/or Launcher_CURSEFORGE_API_KEY still use "
+            "the upstream Prism Launcher defaults. ZERO releases must use their own Azure app registration (with Minecraft "
+            "API approval) and their own CurseForge API key. See docs/zero/CREDENTIALS.md.")
+    endif()
+    unset(_zero_upstream_msa)
+    unset(_zero_upstream_cf)
+endif()
 
 set(Launcher_COMPILER_NAME ${CMAKE_CXX_COMPILER_ID})
 set(Launcher_COMPILER_VERSION ${CMAKE_CXX_COMPILER_VERSION})
@@ -383,7 +405,9 @@ include(ECMQtDeclareLoggingCategory)
 
 ####################################### Program Info #######################################
 
-set(Launcher_APP_BINARY_NAME "prismlauncher" CACHE STRING "Name of the Launcher binary")
+# ZERO has no public repository yet; empty hides the source link.
+set(Launcher_Git "" CACHE STRING "URL of the source code repository. Empty hides the link.")
+set(Launcher_APP_BINARY_NAME "zerolauncher" CACHE STRING "Name of the Launcher binary")
 add_subdirectory(program_info)
 
 ####################################### Install layout #######################################
@@ -418,7 +442,7 @@ if(UNIX AND APPLE)
     set(MACOSX_BUNDLE_ICON_FILE ${Launcher_Name}.icns)
     set(MACOSX_BUNDLE_COPYRIGHT "${Launcher_Copyright_Mac}")
     set(MACOSX_SPARKLE_UPDATE_PUBLIC_KEY "v55ZWWD6QlPoXGV6VLzOTZxZUggWeE51X8cRQyQh6vA=" CACHE STRING "Public key for Sparkle update feed")
-    set(MACOSX_SPARKLE_UPDATE_FEED_URL "https://prismlauncher.org/feed/appcast.xml" CACHE STRING "URL for Sparkle update feed")
+    set(MACOSX_SPARKLE_UPDATE_FEED_URL "" CACHE STRING "URL for Sparkle update feed")
 
     set(MACOSX_SPARKLE_DOWNLOAD_URL "https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz" CACHE STRING "URL to Sparkle release archive")
     set(MACOSX_SPARKLE_SHA256 "52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192" CACHE STRING "SHA256 checksum for Sparkle release archive")

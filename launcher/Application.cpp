@@ -588,14 +588,16 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "<> Log initialized.";
     }
 
-    {
-        auto migrated = handleDataMigration(
-            dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
-            "polymc.cfg");
+    // ZERO: offer to import (copy) data from Prism Launcher, then PolyMC, then MultiMC.
+    // Only done for the default per-user data path so that --dir / ZEROLAUNCHER_DATA_DIR runs never prompt.
+    if (adjustedBy == "Persistent data path") {
+        const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        auto migrated = handleDataMigration(dataPath, FS::PathCombine(appData, "../../PrismLauncher"), "Prism Launcher", "prismlauncher.cfg");
         if (!migrated) {
-            handleDataMigration(dataPath,
-                                FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"),
-                                "MultiMC", "multimc.cfg");
+            migrated = handleDataMigration(dataPath, FS::PathCombine(appData, "../../PolyMC"), "PolyMC", "polymc.cfg");
+        }
+        if (!migrated) {
+            handleDataMigration(dataPath, FS::PathCombine(appData, "../../multimc"), "MultiMC", "multimc.cfg");
         }
     }
 
@@ -646,8 +648,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
     // Initialize application settings
     {
-        // Provide a fallback for migration from PolyMC
-        m_settings.reset(new INISettingsObject({ BuildConfig.LAUNCHER_CONFIGFILE, "polymc.cfg", "multimc.cfg" }, this));
+        // Provide a fallback for migration from Prism Launcher / PolyMC / MultiMC (copied, originals untouched)
+        m_settings.reset(new INISettingsObject({ BuildConfig.LAUNCHER_CONFIGFILE, "prismlauncher.cfg", "polymc.cfg", "multimc.cfg" }, this));
 
         // Theming
         m_settings->registerSetting("IconTheme", QString());
@@ -1101,7 +1103,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                               "\n"
                               "This likely means that a update attempt failed. Please ensure your installation is in working order before "
                               "proceeding.\n"
-                              "Check the Prism Launcher updater log at: \n"
+                              "Check the updater log at: \n"
                               "%7\n"
                               "for details on the last update attempt.\n"
                               "\n"
@@ -1141,7 +1143,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                               "\n"
                               "Please ensure your installation is in working order before "
                               "proceeding.\n"
-                              "Check the Prism Launcher updater log at: \n"
+                              "Check the updater log at: \n"
                               "%1\n"
                               "for details on the last update attempt.")
                                .arg(updateLogPath);
@@ -1176,7 +1178,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             auto infoMsg = tr("Update succeeded\n"
                               "\n"
                               "You are now running %1 .\n"
-                              "Check the Prism Launcher updater log at: \n"
+                              "Check the updater log at: \n"
                               "%2\n"
                               "for details.")
                                .arg(BuildConfig.printableVersionString())
@@ -1979,23 +1981,23 @@ bool Application::handleDataMigration(const QString& currentData, const QString&
         return false;
     }
 
-    QString message;
-    bool currentExists = QFileInfo::exists(FS::PathCombine(currentData, BuildConfig.LAUNCHER_CONFIGFILE));
+    // ZERO: only offer an import into a fresh install. If ZERO already has a config, never prompt (and never touch anything).
+    if (QFileInfo::exists(FS::PathCombine(currentData, BuildConfig.LAUNCHER_CONFIGFILE))) {
+        qDebug() << "<> Skipping migration from" << name << "because" << BuildConfig.LAUNCHER_DISPLAYNAME << "already has data";
+        return true;
+    }
+    const bool currentExists = false;
 
-    if (currentExists) {
-        message = tr("Old data from %1 was found, but you already have existing data for %2. Sadly you will need to migrate yourself. Do "
-                     "you want to be reminded of the pending data migration next time you start %2?")
-                      .arg(name, BuildConfig.LAUNCHER_DISPLAYNAME);
-    } else {
-        message = tr("It looks like you used %1 before. Do you want to migrate your data to the new location of %2?")
-                      .arg(name, BuildConfig.LAUNCHER_DISPLAYNAME);
+    QString message = tr("It looks like you used %1 before. Do you want to copy your data (instances, accounts and settings) to %2?\n\n"
+                         "Your %1 installation will stay untouched. Nothing is moved or deleted.")
+                          .arg(name, BuildConfig.LAUNCHER_DISPLAYNAME);
 
-        QFileInfo logInfo(FS::PathCombine(oldData, name + "-0.log"));
-        if (logInfo.exists()) {
-            QString lastModified = logInfo.lastModified().toString(locale.dateFormat());
-            message = tr("It looks like you used %1 on %2 before. Do you want to migrate your data to the new location of %3?")
-                          .arg(name, lastModified, BuildConfig.LAUNCHER_DISPLAYNAME);
-        }
+    QFileInfo logInfo(FS::PathCombine(oldData, QString(name).remove(' ') + "-0.log"));
+    if (logInfo.exists()) {
+        QString lastModified = logInfo.lastModified().toString(locale.dateFormat());
+        message = tr("It looks like you used %1 on %2 before. Do you want to copy your data (instances, accounts and settings) to "
+                     "%3?\n\nYour %1 installation will stay untouched. Nothing is moved or deleted.")
+                      .arg(name, lastModified, BuildConfig.LAUNCHER_DISPLAYNAME);
     }
 
     QMessageBox::StandardButton askMoveDialogue =
@@ -2037,6 +2039,31 @@ bool Application::handleDataMigration(const QString& currentData, const QString&
         if (diag.execWithTask(&task) != 0) {
             qDebug() << "<> Migration succeeded";
             setDoNotMigrate();
+
+            // ZERO: the copied config may hold absolute paths into the old install (e.g. a custom InstanceDir inside it).
+            // Rebase those onto our own data dir so ZERO never operates on the old launcher's files.
+            const QString copiedConfig = FS::PathCombine(currentData, configFile);
+            INIFile ini;
+            if (QFileInfo::exists(copiedConfig) && ini.loadFile(copiedConfig)) {
+                const QString oldRoot = QDir(oldData).canonicalPath();
+                bool changed = false;
+                for (const auto& key : { "InstanceDir", "CentralModsDir", "IconsDir", "SkinsDir", "JavaDir" }) {
+                    const QString value = ini.get(key, QString()).toString();
+                    if (value.isEmpty() || QDir::isRelativePath(value))
+                        continue;
+                    const QString canonical = QDir(value).canonicalPath();
+                    if (!canonical.isEmpty() && (canonical == oldRoot || canonical.startsWith(oldRoot + '/'))) {
+                        const QString rebased = QDir(currentData).absoluteFilePath(QDir(oldRoot).relativeFilePath(canonical));
+                        ini.set(key, rebased);
+                        changed = true;
+                        qDebug() << "<> Rebased migrated setting" << key << "into" << BuildConfig.LAUNCHER_DISPLAYNAME << "data dir";
+                    } else {
+                        qWarning() << "<> Migrated setting" << key << "points outside the old data dir and is shared with" << name;
+                    }
+                }
+                if (changed && !ini.saveFile(copiedConfig))
+                    qWarning() << "<> Failed to save rebased migrated config";
+            }
         } else {
             QString reason = task.failReason();
             QMessageBox::critical(nullptr, BuildConfig.LAUNCHER_DISPLAYNAME, tr("Migration failed! Reason: %1").arg(reason));

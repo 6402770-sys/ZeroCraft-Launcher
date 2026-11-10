@@ -278,6 +278,8 @@ ScreenshotsPage::ScreenshotsPage(QString path, QWidget* parent)
 
     ui->setupUi(this);
     ui->toolBar->insertSpacer(ui->actionView_Folder);
+    // ZERO: Imgur uploads need a client ID; hide the action when none is configured.
+    ui->actionUpload->setVisible(!BuildConfig.IMGUR_CLIENT_ID.isEmpty());
 
     ui->listView->setIconSize(QSize(128, 128));
     ui->listView->setGridSize(QSize(192, 160));

@@ -262,8 +262,9 @@ void InstanceView::leaveEvent(QEvent* event)
 {
     QAbstractItemView::leaveEvent(event);
     if (m_hoverIndex.isValid()) {
+        const QRect old = visualRect(m_hoverIndex);
         m_hoverIndex = QModelIndex();
-        viewport()->update();
+        viewport()->update(old.adjusted(-12, -12, 12, 16));  // only the card that lost the hover (margin: lift + shadow)
     }
 }
 
@@ -330,8 +331,14 @@ void InstanceView::mouseMoveEvent(QMouseEvent* event)
     {
         const QModelIndex hovered = indexAt(event->pos());
         if (hovered != m_hoverIndex) {
+            // Only the two cards involved repaint (margin: card lift + shadow of the delegate).
+            const QRect old = m_hoverIndex.isValid() ? visualRect(m_hoverIndex) : QRect();
             m_hoverIndex = hovered;
-            viewport()->update();
+            const QRect now = hovered.isValid() ? visualRect(hovered) : QRect();
+            if (old.isValid())
+                viewport()->update(old.adjusted(-12, -12, 12, 16));
+            if (now.isValid())
+                viewport()->update(now.adjusted(-12, -12, 12, 16));
         }
     }
 

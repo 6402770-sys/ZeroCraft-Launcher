@@ -23,8 +23,10 @@
 #include <QDirListing>
 #include <QIcon>
 #include <QImageReader>
+#include <QPointer>
 #include <QStyle>
 #include <QStyleFactory>
+#include <vector>
 #include "Result.h"
 #include "ui/themes/BrightTheme.h"
 #include "ui/themes/CatPack.h"
@@ -32,6 +34,7 @@
 #include "ui/themes/DarkTheme.h"
 #include "ui/themes/SystemTheme.h"
 #include "ui/zero/ZeroTheme.h"
+#include "ui/zero/ZeroTransition.h"
 
 #include "Application.h"
 #include "settings/SettingsObject.h"
@@ -281,8 +284,38 @@ void ThemeManager::setApplicationTheme(const QString& name, bool initial)
     if (themeIter != m_themes.end()) {
         auto& theme = themeIter->second;
         themeDebugLog() << "applying theme" << theme->name();
+
+        // Theme transition: snapshot every visible window, restyle synchronously, then lay the old picture over each
+        // window and dissolve it (Minecraft: pixel dissolve, otherwise crossfade). The restyle and the overlay
+        // happen in the same event-loop turn, so no partially restyled frame is ever painted.
+        static QString appliedThemeId;
+        const QString newId = theme->id();
+        const bool changing = !initial && !appliedThemeId.isEmpty() && newId != appliedThemeId;
+        struct WindowSnapshot {
+            QPointer<QWidget> window;
+            Zero::Transition::Snapshot snapshot;
+        };
+        std::vector<WindowSnapshot> snapshots;
+        if (changing) {
+            for (QWidget* w : QApplication::topLevelWidgets()) {
+                const bool framed = w->windowType() == Qt::Window || w->windowType() == Qt::Dialog;
+                if (framed && w->isVisible() && !w->isMinimized())
+                    snapshots.push_back({ w, Zero::Transition::capture(w) });
+            }
+        }
+
         theme->apply(initial);
-        Zero::setThemeActive(Zero::isZeroThemeId(theme->id()));
+        Zero::setThemeActive(Zero::isZeroThemeId(newId));
+        appliedThemeId = newId;
+
+        if (changing) {
+            const bool dissolve = newId == QLatin1String(Zero::ZeroMinecraftTheme::kId);
+            for (const auto& s : snapshots) {
+                if (s.window)
+                    Zero::Transition::run(s.window, s.snapshot, dissolve ? Zero::Transition::Kind::PixelDissolve : Zero::Transition::Kind::Crossfade,
+                                          dissolve ? Zero::Tokens::durDissolve : Zero::Tokens::durTheme);
+            }
+        }
         setTitlebarColorOfAllWindowsOnMac(qApp->palette().window().color());
 
         m_logColors = theme->logColorScheme();

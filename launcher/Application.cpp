@@ -661,7 +661,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
         // ZERO: one-time switch to Obsidian + flat_white (so users imported from Prism get the ZERO look once)
         m_settings->registerSetting("ZeroThemeInitialized", false);
-        m_settings->registerSetting("ZeroReduceMotion", false);
+        m_settings->registerSetting("ZeroReduceMotion", false);  // legacy: only consulted while ZeroMotion was never set
+        // "system" (follow Windows "Animation effects") | "on" | "off". Empty = never chosen = "system", except that a
+        // legacy ZeroReduceMotion=true keeps meaning "off" (Zero::Motion::resolveEnabled).
+        m_settings->registerSetting("ZeroMotion", QString());
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
 
         // Remembered state

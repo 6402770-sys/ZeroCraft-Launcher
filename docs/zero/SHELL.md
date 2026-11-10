@@ -6,7 +6,7 @@ Binding design for the main window. Tokens/components: `docs/zero/DESIGN.md`.
 - `MainWindow` stays the **controller**: it owns every `QAction`, the `InstanceView` + `InstanceProxyModel`,
   selection, launch/kill, dialogs. Its view layer is replaced: central widget = `ZeroShell`.
 - `ZeroShell` (`launcher/ui/zero/shell/`): `[ZeroNavRail | QStackedWidget]`. API: `addPage(id, icon, label, QWidget*)`,
-  `setCurrentPage(id)`, signal `pageChanged(id)`. 180 ms fade between pages (instant with reduce-motion).
+  `setCurrentPage(id)`, signal `pageChanged(id)`. Page enter = `Transition::Rise` snapshot overlay, 200 ms (instant with motion off).
 - Pages live in `launcher/ui/zero/pages/`. They never duplicate launcher logic: they trigger MainWindow's existing
   actions or call the same APIs MainWindow calls (e.g. `APPLICATION->launch(...)`).
 - Prism's `mainToolBar`, `newsToolBar`, `instanceToolBar`, menu bar, status bar and cat background are no longer shown.
@@ -84,3 +84,8 @@ Content max width 1280, page padding xl, vertical gap xxl between sections.
   path), `ZERO_SCREENSHOT_SEARCH=<text>` (types into the Library search). List mode is the `ZeroLibraryView=list` setting.
   `ZERO_SCREENSHOT_DIAGNOSE=<instance id>` opens Tools > Crash Detective for that instance and analyzes it
   (`ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code>` passes an exit code, `ZERO_SCREENSHOT_EVIDENCE=1` expands every evidence block).
+- Motion evidence frames (after the normal grab): `ZERO_SCREENSHOT_TRANSITION=<page id>` (`home` | `library` | `tools`)
+  switches to that page and `ZERO_SCREENSHOT_THEME_TO=<theme id>` switches theme, each saving the window grab every 40 ms
+  for 320 ms as `<file>-t0.png` .. `<file>-t8.png`, plus `<file>-tfinal.png` once everything settled (the last frame must
+  equal the settled UI). With both set the page switch runs first, then the theme switch (files `<file>-theme-t*.png`).
+  Needs motion on (default `system`; set the `ZeroMotion` setting to `on` when Windows "Animation effects" is off).

@@ -24,6 +24,7 @@
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/ZeroTransition.h"
 
 namespace Zero {
 
@@ -223,6 +224,16 @@ void InstanceDetailsPanel::syncButtons()
 }
 
 void InstanceDetailsPanel::setInstance(MinecraftInstance* instance)
+{
+    // Selecting a different instance crossfades the panel (snapshot overlay: the new content is live immediately).
+    const bool switching = m_instance && instance && m_instance != instance;
+    const Transition::Snapshot before = switching ? Transition::capture(this) : Transition::Snapshot();
+    applyInstance(instance);
+    if (!before.isNull())
+        Transition::run(this, before, Transition::Kind::Crossfade, Tokens::durFast);
+}
+
+void InstanceDetailsPanel::applyInstance(MinecraftInstance* instance)
 {
     m_instance = instance;
     if (!instance) {

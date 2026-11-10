@@ -59,7 +59,8 @@ class LibraryPage : public QWidget {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
    private:
-    void setViewMode(bool list);
+    void setViewMode(bool list);    // crossfades when the mode changes
+    void applyViewMode(bool list);  // the switch itself
     void applyFilter(const QString& text);
     void updateState();
     void syncListFromGrid();

@@ -2,6 +2,7 @@
 #include "ZeroCard.h"
 
 #include <QKeyEvent>
+#include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -51,7 +52,25 @@ void ZeroCard::paintEvent(QPaintEvent*)
     const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
     painter.setBrush(bg);
     painter.setPen(QPen(border, 1));
-    painter.drawPath(Paint::panelPath(r, t.radiusLg));
+    const QPainterPath shape = Paint::panelPath(r, t.radiusLg);
+    painter.drawPath(shape);
+    if (p > 0.0) {
+        // Hover depth: a soft shadow gathering along the bottom edge, painted inside the card (a widget cannot paint
+        // outside its rect and children must not move). Grows with the hover progress.
+        painter.save();
+        painter.setClipPath(shape);
+        painter.setPen(Qt::NoPen);
+        const qreal depth = 18.0;
+        QLinearGradient g(0, r.bottom() - depth, 0, r.bottom());
+        g.setColorAt(0.0, QColor(0, 0, 0, 0));
+        g.setColorAt(1.0, QColor(0, 0, 0, int(Tokens::shadowAlpha * 0.5 * p)));
+        painter.setBrush(g);
+        painter.drawRect(QRectF(r.left(), r.bottom() - depth, r.width(), depth));
+        painter.restore();
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(border, 1));
+        painter.drawPath(shape);
+    }
     Paint::paintBevel(painter, QRectF(rect()), m_pressed);
 }
 

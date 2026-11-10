@@ -29,6 +29,7 @@
 #include "ui/zero/ZeroPageHeader.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/ZeroTransition.h"
 
 namespace Zero {
 
@@ -296,6 +297,16 @@ void LibraryPage::syncSortFromSettings()
 }
 
 void LibraryPage::setViewMode(bool list)
+{
+    // grid <-> list: crossfade over the collection area (the real view is switched and usable immediately).
+    const bool switching = list != m_listMode && m_collection && m_collection->isVisible();
+    const Transition::Snapshot before = switching ? Transition::capture(m_collection) : Transition::Snapshot();
+    applyViewMode(list);
+    if (!before.isNull())
+        Transition::run(m_collection, before, Transition::Kind::Crossfade, Tokens::durFast);
+}
+
+void LibraryPage::applyViewMode(bool list)
 {
     m_listMode = list;
     (list ? m_listButton : m_gridButton)->setChecked(true);

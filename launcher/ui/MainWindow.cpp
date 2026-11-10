@@ -313,6 +313,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         // FIXME: leaks ListViewDelegate
         auto delegate = new Zero::ZeroInstanceDelegate(this);
         view->setItemDelegate(delegate);
+        delegate->attachTo(view);  // hover tracking for the card lift
         view->setFrameShape(QFrame::NoFrame);
         // do not show ugly blue border on the mac
         view->setAttribute(Qt::WA_MacShowFocusRect, false);
@@ -2176,6 +2177,64 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         QApplication::processEvents();
         const bool ok = grab().save(path);
         qInfo() << "ZERO screenshot" << (ok ? "saved to" : "FAILED for") << path;
-        APPLICATION->exit(ok ? 0 : 1);
+
+        // Dev aids (motion evidence): after the normal grab, trigger a page switch (ZERO_SCREENSHOT_TRANSITION=<page id>)
+        // and/or a theme switch (ZERO_SCREENSHOT_THEME_TO=<theme id>) and save the window every 40 ms for 320 ms as
+        // <file>-t0..t8.png, plus <file>-tfinal.png once everything has settled. Page first, then theme.
+        const QString toPage = qEnvironmentVariable("ZERO_SCREENSHOT_TRANSITION");
+        const QString toTheme = qEnvironmentVariable("ZERO_SCREENSHOT_THEME_TO");
+        if (!ok || (toPage.isEmpty() && toTheme.isEmpty())) {
+            APPLICATION->exit(ok ? 0 : 1);
+            return;
+        }
+        auto trigger = [this, toPage, toTheme]() {
+            if (!toPage.isEmpty())
+                m_shell->setCurrentPage(toPage);
+            else if (APPLICATION->themeManager()->isValidApplicationTheme(toTheme))
+                APPLICATION->themeManager()->setApplicationTheme(toTheme, false);
+            else
+                qWarning() << "ZERO_SCREENSHOT_THEME_TO: unknown theme" << toTheme;
+        };
+        recordTransitionFrames(path, trigger, [this, toPage, toTheme, path]() {
+            if (!toPage.isEmpty() && !toTheme.isEmpty()) {
+                // second round: the theme switch, on the page we just opened (files get a "-theme" suffix)
+                QString themePath = path;
+                themePath.insert(themePath.lastIndexOf(QLatin1Char('.')), QStringLiteral("-theme"));
+                recordTransitionFrames(themePath,
+                                       [this, toTheme]() {
+                                           if (APPLICATION->themeManager()->isValidApplicationTheme(toTheme))
+                                               APPLICATION->themeManager()->setApplicationTheme(toTheme, false);
+                                       },
+                                       []() { APPLICATION->exit(0); });
+            } else {
+                APPLICATION->exit(0);
+            }
+        });
+    });
+}
+
+void MainWindow::recordTransitionFrames(const QString& path, const std::function<void()>& trigger, const std::function<void()>& done)
+{
+    const int dot = path.lastIndexOf(QLatin1Char('.'));
+    const QString stem = dot > 0 ? path.left(dot) : path;
+    const QString ext = dot > 0 ? path.mid(dot) : QStringLiteral(".png");
+    constexpr int kFrames = 9, kStepMs = 40;
+    trigger();
+    for (int i = 0; i < kFrames; ++i) {
+        // Frame 0 is taken right after the trigger (same event-loop turn: the overlay's first picture).
+        auto save = [this, stem, ext, i]() {
+            const QString file = QStringLiteral("%1-t%2%3").arg(stem).arg(i).arg(ext);
+            qInfo() << "ZERO transition frame" << file << (grab().save(file) ? "saved" : "FAILED");
+        };
+        if (i == 0)
+            save();
+        else
+            QTimer::singleShot(i * kStepMs, this, save);
+    }
+    QTimer::singleShot(900, this, [this, stem, ext, done]() {
+        QApplication::processEvents();
+        const QString file = QStringLiteral("%1-tfinal%2").arg(stem, ext);
+        qInfo() << "ZERO transition frame" << file << (grab().save(file) ? "saved" : "FAILED");
+        done();
     });
 }

@@ -2,6 +2,7 @@
 #include "ZeroShell.h"
 
 #include <QHBoxLayout>
+#include <QLayout>
 #include <QPainter>
 #include <QStackedWidget>
 #include "AccountChip.h"
@@ -9,6 +10,7 @@
 #include "ui/zero/ZeroNavRail.h"
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/ZeroTransition.h"
 #include "ui/zero/ZeroTokens.h"
 
 namespace Zero {
@@ -77,10 +79,15 @@ void ZeroShell::showPage(const QString& id)
     if (!page || id == m_current)
         return;
     const bool first = m_current.isEmpty();
+    // Page enter: snapshot overlay (old page fades out, new one rises 10 px + fades in). The real page is current and
+    // interactive immediately; with motion off no overlay is created.
+    const Transition::Snapshot before = first ? Transition::Snapshot() : Transition::capture(m_stack);
     m_current = id;
     m_stack->setCurrentWidget(page);
-    if (!first)
-        Motion::fadeIn(page, Tokens::durPage);  // instant with reduce-motion
+    if (!before.isNull()) {
+        m_stack->layout()->activate();  // the new page needs its geometry before its picture is taken
+        Transition::run(m_stack, before, Transition::Kind::Rise, Tokens::durBase);
+    }
     emit pageChanged(id);
 }
 

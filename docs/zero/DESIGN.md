@@ -144,3 +144,15 @@ Signature motions: nav indicator glide · page enter (fade + 10 px rise) · card
 press ripple on ZERO buttons (Obsidian) / block press (Minecraft) · Play → Launching sweep → Running ·
 theme crossfade (Obsidian) / pixel dissolve (Minecraft) · toast slide-in, stack glide, slide-out ·
 command palette rise · grid/list crossfade.
+
+Implementation notes (motion system, `ZeroMotion` / `ZeroTransition` / `ZeroRipple`):
+- `ZeroMotion` setting is stored as `""` (never chosen) | `system` | `on` | `off`; `""` behaves like `system`, except that a
+  legacy `ZeroReduceMotion=true` keeps meaning `off`. Resolution is the pure `Motion::resolveEnabled()`; the Windows flag is
+  re-read when the setting changes and when the app is activated.
+- Rise: the old snapshot is the opaque base of the overlay (it has to hide the live page) and the new picture, taken on the
+  first animation tick so pending layouts have run, rises 10 px and fades in over it. That is what fades the old content out,
+  instead of a separate 120 ms fade-out (which would let the live page show through).
+- `ZeroCard` hover: a widget cannot paint outside its rect, so the "shadow" gathers along the card's inner bottom edge
+  (grid cards in the Library do lift 2 px with a real outer shadow because the delegate owns the whole viewport).
+- Dialogs fade in through the window opacity (160 ms): opacity 0 is set while the dialog polishes (before its native window
+  exists) and eased to 1 on show.

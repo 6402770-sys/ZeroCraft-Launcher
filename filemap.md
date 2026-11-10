@@ -14,7 +14,7 @@
 - `program_info/` — branding: names/AppID (`CMakeLists.txt`), icons (`zero-logo.svg` master, `zerolauncher.ico`), `.rc`, NSIS installer
 - `launcher/Application.cpp` — startup, data dir, CLI flags (`--zero-screenshot`), settings registration, Prism import (`handleDataMigration`)
 - `launcher/ui/MainWindow.*` — controller: actions, selection, launch/kill; builds `ZeroShell`
-- `launcher/ui/zero/` — design system: `ZeroTokens.h`, `ZeroThemeState` (runtime ThemeSpec), `ZeroStyle` (QSS/palette/fonts), `ZeroTheme` (ITheme, popup filter, dark title bar), `ZeroIcons`, `ZeroMotion`, `ZeroFormat` (relative time/playtime), components (`ZeroCard`, `ZeroNavRail`, `ZeroPageHeader`, `ZeroEmptyState`, `ZeroToast`, `ZeroSpinner`), `ZeroGallery` (dev gallery)
+- `launcher/ui/zero/` — design system: `ZeroTokens.h`, `ZeroThemeState` (runtime ThemeSpec), `ZeroStyle` (QSS/palette/fonts), `ZeroTheme` (ITheme, popup filter, dark title bar), `ZeroIcons`, `ZeroMotion` (tokens/easing, motion setting resolution, `StateAnimator`), `ZeroTransition` (snapshot overlays: crossfade / rise / pixel dissolve), `ZeroRipple` (press ripple filter), `ZeroFormat` (relative time/playtime), components (`ZeroCard`, `ZeroNavRail`, `ZeroPageHeader`, `ZeroEmptyState`, `ZeroToast`, `ZeroSpinner`), `ZeroGallery` (dev gallery)
 - `launcher/ui/zero/ZeroPaint.*` — theme-aware painting: `panelPath` (rounded/notched), `paintBevel`, `paintBackground` (stone texture)
 - `launcher/ui/zero/ZeroPixelFont.*` — original 5x7 "ZERO Pixel" font generated as TrueType in memory, `registerPixelFont()`
 - `launcher/ui/zero/shell/` — `ZeroShell` (rail + page stack), `AccountChip`
@@ -24,4 +24,5 @@
 - `launcher/ui/themes/ThemeManager.cpp` — registers the ZERO themes (`zero-obsidian`, `zero-minecraft`) first, defaults
 - `launcher/ui/instanceview/` — upstream grid view (ZERO metrics, group headers, text filter in `InstanceProxyModel`)
 - `tests/ZeroTheme_test.cpp`, `tests/ZeroPixelFont_test.cpp` — theme engine v2 (specs, contrast, panel shapes, texture) and pixel font tests
+- `tests/ZeroMotion_test.cpp` — motion system: setting resolution + legacy migration, overlays (self-deleting, replaceable, nothing with motion off), ripple, toasts
 - `tests/Zero*_test.cpp`, `tests/CrashDetective_test.cpp` — ZERO unit tests (in `LauncherTests`, listed in `tests/CMakeLists.txt`)

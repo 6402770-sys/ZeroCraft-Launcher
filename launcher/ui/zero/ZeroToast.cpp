@@ -4,12 +4,15 @@
 #include <QEvent>
 #include <QFontMetrics>
 #include <QGraphicsDropShadowEffect>
+#include <QGraphicsOpacityEffect>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
 #include <QPushButton>
 #include <QToolButton>
+#include <QVariantAnimation>
+#include <utility>
 #include "ZeroIcons.h"
 #include "ZeroMotion.h"
 #include "ZeroStyle.h"
@@ -21,6 +24,9 @@ namespace Zero {
 namespace {
 constexpr int kShadowMargin = 40;  // room for blur 24 + offset 8
 constexpr int kTextMaxWidth = 300;
+constexpr int kSlideDistance = 24;  // px the toast slides in from / out to (right)
+constexpr int kEnterMs = 220;
+constexpr int kExitMs = 160;
 
 QList<QPointer<ZeroToast>>& toastsFor(QWidget* host)
 {
@@ -73,7 +79,7 @@ class ToastHost : public QObject {
     bool eventFilter(QObject* watched, QEvent* event) override
     {
         if (watched == m_host && event->type() == QEvent::Resize)
-            ZeroToast::restack(m_host);
+            ZeroToast::restack(m_host, false);  // window resize: follow instantly, no glide
         return false;
     }
     static ToastHost* ensure(QWidget* host)
@@ -198,15 +204,99 @@ void ZeroToast::presentIn(QWidget* host)
 
     m_shadow = new ToastShadow(host);
     adjustSize();
+    m_presence = 0.0;  // starts slid out + transparent; the first placement is instant, the older toasts glide up
     restack(host);
 
     m_shadow->show();
     QWidget::show();
     m_shadow->stackUnder(this);
     raise();
-    Motion::fadeIn(this);
-    Motion::fadeIn(m_shadow);
+    applyPresence(0.0);
+    animatePresence(1.0, kEnterMs, Motion::easeEnter());
     m_timer.start();
+}
+
+void ZeroToast::setSlot(const QPoint& target, bool animate)
+{
+    if (!m_placed || !animate || Motion::duration(Tokens::durBase) == 0) {
+        if (m_slotAnim)
+            m_slotAnim->stop();
+        m_slotPos = target;
+        m_slotTarget = target;
+        m_placed = true;
+        layoutCard();
+        return;
+    }
+    if (target == m_slotTarget)
+        return;
+    m_slotTarget = target;
+    if (!m_slotAnim) {
+        m_slotAnim = new QVariantAnimation(this);
+        m_slotAnim->setEasingCurve(Motion::easeGlide());
+        connect(m_slotAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) {
+            m_slotPos = v.toPointF();
+            layoutCard();
+        });
+    }
+    m_slotAnim->stop();
+    m_slotAnim->setDuration(Motion::duration(Tokens::durBase));
+    m_slotAnim->setStartValue(m_slotPos);
+    m_slotAnim->setEndValue(QPointF(target));
+    m_slotAnim->start();
+}
+
+void ZeroToast::layoutCard()
+{
+    place(QPoint(qRound(m_slotPos.x() + (1.0 - m_presence) * kSlideDistance), qRound(m_slotPos.y())));
+}
+
+void ZeroToast::applyPresence(qreal presence)
+{
+    m_presence = presence;
+    for (QWidget* w : { static_cast<QWidget*>(this), m_shadow.data() }) {
+        if (!w)
+            continue;
+        if (presence >= 1.0) {
+            // Settled: drop the effect so the toast paints directly again (and its own shadow effect is untouched).
+            if (qobject_cast<QGraphicsOpacityEffect*>(w->graphicsEffect()))
+                w->setGraphicsEffect(nullptr);
+        } else {
+            auto* fx = qobject_cast<QGraphicsOpacityEffect*>(w->graphicsEffect());
+            if (!fx) {
+                fx = new QGraphicsOpacityEffect(w);
+                w->setGraphicsEffect(fx);
+            }
+            fx->setOpacity(presence);
+        }
+    }
+    layoutCard();
+}
+
+void ZeroToast::animatePresence(qreal to, int ms, const QEasingCurve& curve, std::function<void()> finished)
+{
+    if (m_presenceAnim)
+        m_presenceAnim->stop();
+    if (Motion::duration(ms) == 0 || qFuzzyCompare(m_presence, to)) {
+        applyPresence(to);
+        if (finished)
+            finished();
+        return;
+    }
+    if (!m_presenceAnim) {
+        m_presenceAnim = new QVariantAnimation(this);
+        connect(m_presenceAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) { applyPresence(v.toReal()); });
+        connect(m_presenceAnim, &QVariantAnimation::finished, this, [this]() {
+            auto done = std::exchange(m_presenceDone, {});
+            if (done)
+                done();
+        });
+    }
+    m_presenceDone = std::move(finished);
+    m_presenceAnim->setDuration(Motion::duration(ms));
+    m_presenceAnim->setEasingCurve(curve);
+    m_presenceAnim->setStartValue(m_presence);
+    m_presenceAnim->setEndValue(to);
+    m_presenceAnim->start();
 }
 
 void ZeroToast::place(const QPoint& cardTopLeft)
@@ -216,7 +306,7 @@ void ZeroToast::place(const QPoint& cardTopLeft)
         static_cast<ToastShadow*>(m_shadow.data())->setCardRect(QRect(cardTopLeft, size()));
 }
 
-void ZeroToast::restack(QWidget* host)
+void ZeroToast::restack(QWidget* host, bool animate)
 {
     auto& list = toastsFor(host);
     list.removeIf([](const QPointer<ZeroToast>& p) { return p.isNull(); });
@@ -226,7 +316,7 @@ void ZeroToast::restack(QWidget* host)
             continue;
         p->adjustSize();
         const QSize s = p->size();
-        p->place(QPoint(host->width() - Tokens::spaceXl - s.width(), bottom - s.height()));
+        p->setSlot(QPoint(host->width() - Tokens::spaceXl - s.width(), bottom - s.height()), animate);
         bottom -= s.height() + Tokens::spaceSm;
     }
     for (const auto& p : std::as_const(list))
@@ -242,17 +332,18 @@ void ZeroToast::dismiss()
         return;
     m_dismissing = true;
     m_timer.stop();
-    QWidget* host = parentWidget();
-    QPointer<ZeroToast> self(this);
-    Motion::fadeOut(m_shadow, Tokens::durPage);
-    Motion::fadeOut(this, Tokens::durPage, [self, host]() {
-        if (!self)
-            return;
-        emit self->dismissed();
-        self->deleteLater();
-        if (host)
-            QMetaObject::invokeMethod(host, [host]() { ZeroToast::restack(host); }, Qt::QueuedConnection);
-    });
+    if (QWidget* host = parentWidget())
+        restack(host);  // the others glide into the freed slot while this one slides out
+    animatePresence(0.0, kExitMs, Motion::easeExit(), [this]() { finishDismiss(); });
+}
+
+void ZeroToast::finishDismiss()
+{
+    hide();
+    if (m_shadow)
+        m_shadow->hide();
+    emit dismissed();
+    deleteLater();
 }
 
 void ZeroToast::paintEvent(QPaintEvent*)

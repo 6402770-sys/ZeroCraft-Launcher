@@ -57,6 +57,7 @@ class InstanceDetailsPanel : public ZeroCard {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
    private:
+    void applyInstance(MinecraftInstance* instance);  // setInstance() without the crossfade
     struct Binding {
         QPointer<QAction> action;
         QPushButton* button;

@@ -6,6 +6,7 @@
 #include <QFontMetrics>
 #include <QLabel>
 #include <QPainter>
+#include <QEvent>
 #include <QVBoxLayout>
 #include "ZeroIcons.h"
 #include "ZeroMotion.h"
@@ -32,6 +33,8 @@ class NavItem : public QAbstractButton {
         setFocusPolicy(Qt::StrongFocus);
         setCursor(Qt::PointingHandCursor);
         setAttribute(Qt::WA_Hover, true);
+        setProperty("zeroRipple", true);  // press ripple (see ZeroRipple), clipped to the pill
+        setProperty("zeroRippleInset", kPillInset);
         setFixedHeight(Tokens::navItemHeight);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(m_hover, &Motion::StateAnimator::progressChanged, this, qOverload<>(&QWidget::update));
@@ -45,6 +48,8 @@ class NavItem : public QAbstractButton {
         update();
     }
     bool showsLabel() const { return width() >= kLabelMinWidth; }
+    /// Pill rectangle of this item in rail coordinates (the rail paints the active pill, see ZeroNavRail::paintEvent).
+    QRectF pillRect() const { return QRectF(geometry()).adjusted(kPillInset, 0, -kPillInset, 0); }
 
     QSize sizeHint() const override { return { Tokens::navRailWidth, Tokens::navItemHeight }; }
 
@@ -94,15 +99,7 @@ class NavItem : public QAbstractButton {
         const QRectF pill = QRectF(rect()).adjusted(kPillInset, 0, -kPillInset, 0);
         QColor fg = mix(t.textSecondary, t.text, h);
         if (m_current) {
-            fg = t.text;
-            p.setPen(Qt::NoPen);
-            p.setBrush(t.elevated);
-            p.drawPath(Paint::panelPath(pill, t.radiusMd));
-            Paint::paintBevel(p, pill.adjusted(-1, -1, 1, 1));
-            // 2 px selection indicator at the rail's left edge.
-            p.setPen(Qt::NoPen);
-            p.setBrush(t.accent2);
-            p.drawRoundedRect(QRectF(0, 8, 2, height() - 16), 1, 1);
+            fg = t.text;  // the active pill + indicator are painted (and glide) by the rail, underneath this item
         } else if (h > 0.0) {
             p.setPen(Qt::NoPen);
             p.setBrush(withAlpha(t.surfaceHover, h));
@@ -139,7 +136,12 @@ class NavItem : public QAbstractButton {
 };
 
 ZeroNavRail::ZeroNavRail(QWidget* parent)
-    : QWidget(parent), m_layout(new QVBoxLayout(this)), m_wordmark(new QLabel(this)), m_caption(new QLabel(this)), m_anim(new QPropertyAnimation(this, "railWidth", this))
+    : QWidget(parent),
+      m_layout(new QVBoxLayout(this)),
+      m_wordmark(new QLabel(this)),
+      m_caption(new QLabel(this)),
+      m_anim(new QPropertyAnimation(this, "railWidth", this)),
+      m_glide(new QVariantAnimation(this))
 {
     setFixedWidth(Tokens::navRailWidth);
     m_layout->setContentsMargins(0, Tokens::spaceXl, 0, Tokens::spaceMd);
@@ -159,7 +161,18 @@ ZeroNavRail::ZeroNavRail(QWidget* parent)
     m_layout->addSpacing(Tokens::spaceXl);
     refreshWordmark();
 
-    m_anim->setEasingCurve(QEasingCurve::OutCubic);
+    m_anim->setEasingCurve(Motion::easeGlide());
+    m_glide->setEasingCurve(Motion::easeGlide());
+    m_glide->setStartValue(0.0);
+    m_glide->setEndValue(1.0);
+    connect(m_glide, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) {
+        m_glideT = v.toReal();
+        updatePill();
+    });
+    connect(m_glide, &QVariantAnimation::finished, this, [this]() {
+        m_gliding = false;  // idle again: the pill follows the item geometry live
+        updatePill();
+    });
     connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
 }
 
@@ -171,6 +184,7 @@ void ZeroNavRail::addItem(const QString& id, const QString& iconName, const QStr
     }
     auto* item = new NavItem(id, iconName, label, this);
     m_items.insert(id, item);
+    item->installEventFilter(this);  // geometry changes move the idle pill
     connect(item, &QAbstractButton::clicked, this, [this, id]() { setCurrent(id); });
     m_layout->addWidget(item);
     // keep the bottom holder (if any) before items added after it
@@ -227,10 +241,76 @@ void ZeroNavRail::setCurrent(const QString& id)
 {
     if (m_current == id || (!id.isEmpty() && !m_items.contains(id)))
         return;
+    const QRectF oldPill = currentPill();  // what is painted right now (also mid-glide)
     m_current = id;
     for (auto* item : std::as_const(m_items))
         item->setCurrentItem(item->id() == id);
+    startGlide(oldPill);
     emit currentChanged(id);
+}
+
+QRectF ZeroNavRail::targetPill() const
+{
+    NavItem* item = m_items.value(m_current);
+    if (!item || !item->isVisible() || item->height() <= 0 || item->width() <= 0)
+        return {};
+    return item->pillRect();
+}
+
+QRectF ZeroNavRail::currentPill() const
+{
+    const QRectF target = targetPill();
+    if (!m_gliding || target.isNull() || m_glideFrom.isNull())
+        return target;
+    const qreal t = m_glideT;
+    return QRectF(m_glideFrom.x() + (target.x() - m_glideFrom.x()) * t, m_glideFrom.y() + (target.y() - m_glideFrom.y()) * t,
+                  m_glideFrom.width() + (target.width() - m_glideFrom.width()) * t,
+                  m_glideFrom.height() + (target.height() - m_glideFrom.height()) * t);
+}
+
+void ZeroNavRail::startGlide(const QRectF& from)
+{
+    m_glide->stop();
+    m_gliding = false;
+    const QRectF target = targetPill();
+    if (from.isNull() || target.isNull() || from == target || Motion::duration(Tokens::durBase) == 0) {
+        updatePill();
+        return;
+    }
+    m_glideFrom = from;
+    m_glideT = 0.0;
+    m_gliding = true;
+    m_glide->setDuration(Motion::duration(Tokens::durBase));
+    m_glide->start();
+    updatePill();
+}
+
+void ZeroNavRail::updatePill()
+{
+    // Repaint only where the pill was and where it is now (plus the indicator strip at the left edge).
+    const QRectF now = currentPill();
+    const QRectF dirty = now.united(m_lastPill);
+    m_lastPill = now;
+    if (dirty.isNull())
+        return;
+    update(dirty.adjusted(-2, -2, 2, 2).toAlignedRect());
+    update(QRect(0, int(dirty.top()) - 2, 4, int(dirty.height()) + 4));
+}
+
+bool ZeroNavRail::eventFilter(QObject* watched, QEvent* event)
+{
+    switch (event->type()) {
+        case QEvent::Move:
+        case QEvent::Resize:
+        case QEvent::Show:
+        case QEvent::Hide:
+            if (!m_gliding && static_cast<NavItem*>(watched)->id() == m_current)
+                updatePill();  // collapse / resize / layout changes while idle
+            break;
+        default:
+            break;
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void ZeroNavRail::setItemVisible(const QString& id, bool visible)
@@ -246,10 +326,10 @@ void ZeroNavRail::setCollapsed(bool collapsed)
     m_collapsed = collapsed;
     const int target = collapsed ? Tokens::navRailCollapsedWidth : Tokens::navRailWidth;
     m_anim->stop();
-    if (Motion::duration(Tokens::durPage) == 0) {
+    if (Motion::duration(Tokens::durBase) == 0) {
         setRailWidth(target);
     } else {
-        m_anim->setDuration(Tokens::durPage);
+        m_anim->setDuration(Tokens::durBase);
         m_anim->setStartValue(width());
         m_anim->setEndValue(target);
         m_anim->start();
@@ -279,6 +359,18 @@ void ZeroNavRail::paintEvent(QPaintEvent*)
     QPainter p(this);
     Paint::paintBackground(p, rect(), t.surface);
     p.fillRect(QRect(width() - 1, 0, 1, height()), t.border);
+
+    // The one active pill (+ 2 px selection indicator at the rail's left edge), gliding between items.
+    const QRectF pill = currentPill();
+    if (!pill.isEmpty()) {
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setPen(Qt::NoPen);
+        p.setBrush(t.elevated);
+        p.drawPath(Paint::panelPath(pill, t.radiusMd));
+        Paint::paintBevel(p, pill.adjusted(-1, -1, 1, 1));
+        p.setBrush(t.accent2);
+        p.drawRoundedRect(QRectF(0, pill.top() + 8, 2, pill.height() - 16), 1, 1);
+    }
 }
 
 }  // namespace Zero

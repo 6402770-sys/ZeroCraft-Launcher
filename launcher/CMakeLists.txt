@@ -906,6 +906,10 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroToast.cpp
     ui/zero/ZeroToast.h
     ui/zero/ZeroTokens.h
+    ui/zero/ZeroTransition.cpp
+    ui/zero/ZeroTransition.h
+    ui/zero/ZeroRipple.cpp
+    ui/zero/ZeroRipple.h
     ui/zero/pages/CrashDetectiveView.cpp
     ui/zero/pages/CrashDetectiveView.h
     ui/zero/pages/ElidedLabel.h

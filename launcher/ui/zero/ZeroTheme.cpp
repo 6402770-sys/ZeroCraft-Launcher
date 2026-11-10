@@ -5,16 +5,20 @@
 #include <QEvent>
 #include <QAbstractSpinBox>
 #include <QDebug>
+#include <QDialog>
 #include <QGuiApplication>
 #include <QLineEdit>
 #include <QMenu>
 #include <QObject>
 #include <QStyleHints>
+#include <QVariantAnimation>
 #include <QWidget>
 #include <atomic>
 #include "Application.h"
 #include "settings/Setting.h"
 #include "settings/SettingsObject.h"
+#include "ui/zero/ZeroMotion.h"
+#include "ui/zero/ZeroRipple.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 
@@ -56,6 +60,29 @@ bool isFramedWindow(const QWidget* w)
     return w->isWindow() && (w->windowType() == Qt::Window || w->windowType() == Qt::Dialog);
 }
 
+/// Dialogs fade in through the window opacity (160 ms). The opacity is set to 0 while the dialog is polished (which
+/// happens before its native window is shown, so it never flashes at full opacity), then eased to 1 on Show.
+bool isFadingDialog(const QWidget* w)
+{
+    return qobject_cast<const QDialog*>(w) && isFramedWindow(w);
+}
+
+void fadeDialogIn(QWidget* dialog)
+{
+    if (!Motion::enabled()) {
+        dialog->setWindowOpacity(1.0);
+        return;
+    }
+    auto* anim = new QVariantAnimation(dialog);
+    anim->setDuration(Tokens::durFast + 20);  // 160 ms
+    anim->setStartValue(dialog->windowOpacity());
+    anim->setEndValue(1.0);
+    anim->setEasingCurve(Motion::easeEnter());
+    QObject::connect(anim, &QVariantAnimation::valueChanged, dialog, [dialog](const QVariant& v) { dialog->setWindowOpacity(v.toReal()); });
+    QObject::connect(anim, &QVariantAnimation::finished, dialog, [dialog]() { dialog->setWindowOpacity(1.0); });
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
 /// Qt style sheets cannot round the corners of top-level popup windows. Menus, tooltips and combo popups are
 /// made translucent + frameless so the border-radius from obsidian.qss shows through. The same filter gives every
 /// top-level window the dark title bar. Both only apply while the ZERO theme is active.
@@ -66,12 +93,20 @@ class PopupFilter : public QObject {
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override
     {
-        if (!g_themeActive.load() || !watched->isWidgetType())
+        if (!watched->isWidgetType())
             return false;
         auto* w = static_cast<QWidget*>(watched);
+        if (!g_themeActive.load()) {
+            // A dialog polished (opacity 0) under a ZERO theme but shown after switching to another theme must not stay invisible.
+            if (event->type() == QEvent::Show && isFadingDialog(w) && w->windowOpacity() < 1.0)
+                w->setWindowOpacity(1.0);
+            return false;
+        }
         if (event->type() == QEvent::Show) {
             if (isFramedWindow(w))
                 applyTitleBarMode(w, true);
+            if (isFadingDialog(w) && w->windowOpacity() < 1.0)
+                fadeDialogIn(w);
             return false;
         }
         if (event->type() == QEvent::Polish) {
@@ -84,6 +119,8 @@ class PopupFilter : public QObject {
         }
         if (event->type() != QEvent::Polish || !w->isWindow())
             return false;
+        if (isFadingDialog(w) && Motion::enabled())
+            w->setWindowOpacity(0.0);  // see fadeDialogIn()
         if (qobject_cast<QMenu*>(w) || w->inherits("QTipLabel") || w->inherits("QComboBoxPrivateContainer")) {
             w->setWindowFlag(Qt::FramelessWindowHint, true);
             w->setWindowFlag(Qt::NoDropShadowWindowHint, true);
@@ -93,6 +130,21 @@ class PopupFilter : public QObject {
     }
 };
 
+/// Motion on/off from the ZeroMotion setting (+ legacy ZeroReduceMotion + the Windows animation flag).
+bool motionEnabledFromSettings()
+{
+    if (auto* app = qobject_cast<Application*>(qApp)) {
+        return Motion::resolveEnabled(app->settings()->get("ZeroMotion").toString(), app->settings()->get("ZeroReduceMotion").toBool(),
+                                      Motion::systemAnimationsEnabled());
+    }
+    return true;
+}
+
+void refreshMotion()
+{
+    Theme::setReduceMotion(!motionEnabledFromSettings());
+}
+
 void installHooks()
 {
     static bool installed = false;
@@ -100,15 +152,29 @@ void installHooks()
         return;
     installed = true;
     qApp->installEventFilter(new PopupFilter(qApp));
+    Ripple::install();
 
     // Pixel/UI fonts follow the active spec for every widget that carries a zeroRole.
     QObject::connect(&Theme::instance(), &Theme::changed, qApp, []() { Style::refreshRoleFonts(); });
 
+    // Native menu / tooltip / combo popup animations follow the motion switch while a ZERO theme is active.
+    QObject::connect(&Theme::instance(), &Theme::changed, qApp, []() {
+        if (g_themeActive.load())
+            Motion::syncPopupEffects(Motion::enabled());
+    });
+    Motion::syncPopupEffects(Motion::enabled());
+
     if (auto* app = qobject_cast<Application*>(qApp)) {
-        if (auto setting = app->settings()->getSetting("ZeroReduceMotion")) {
-            QObject::connect(setting.get(), &Setting::SettingChanged, qApp,
-                             [](const Setting&, const QVariant& value) { Theme::setReduceMotion(value.toBool()); });
+        for (const char* key : { "ZeroMotion", "ZeroReduceMotion" }) {
+            if (auto setting = app->settings()->getSetting(key))
+                QObject::connect(setting.get(), &Setting::SettingChanged, qApp, [](const Setting&, const QVariant&) { refreshMotion(); });
         }
+        // The Windows "Animation effects" switch has no change notification we rely on: re-read it when the app is
+        // activated (the user comes back from the Settings app).
+        QObject::connect(qApp, &QGuiApplication::applicationStateChanged, qApp, [](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive)
+                refreshMotion();
+        });
     }
 }
 
@@ -144,8 +210,7 @@ ThemeSpec ZeroTheme::baseSpec()
 void ZeroTheme::apply(bool initial)
 {
     ThemeSpec spec = baseSpec();
-    if (auto* app = qobject_cast<Application*>(qApp))
-        spec.reduceMotion = app->settings()->get("ZeroReduceMotion").toBool();
+    spec.reduceMotion = !motionEnabledFromSettings();
     Theme::setCurrent(spec);
 
     ITheme::apply(initial);  // Fusion base + palette + stylesheet

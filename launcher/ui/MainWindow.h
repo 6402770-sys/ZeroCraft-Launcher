@@ -40,6 +40,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include <QMainWindow>
 #include <QProcess>
 #include <QTimer>
@@ -90,6 +92,7 @@ class MainWindow : public QMainWindow {
 
     /// Dev aid (`--zero-screenshot`): shows `page` ("home", "library" or "tools"), grabs the window to `path` and quits.
     void zeroScreenshot(const QString& path, const QString& page);
+    void recordTransitionFrames(const QString& path, const std::function<void()>& trigger, const std::function<void()>& done);
    signals:
     void isClosing();
 

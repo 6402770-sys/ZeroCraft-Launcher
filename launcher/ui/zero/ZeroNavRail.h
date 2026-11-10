@@ -4,6 +4,8 @@
 
 #include <QHash>
 #include <QPropertyAnimation>
+#include <QRectF>
+#include <QVariantAnimation>
 #include <QWidget>
 
 class QAbstractButton;
@@ -17,7 +19,8 @@ class NavItem;
 /// Navigation rail: 220 px wide (64 px collapsed), `surface` background, 1px right border.
 /// Layout (top to bottom): ZERO wordmark, items added before the first addStretch(), a stretch, the bottom widget
 /// (account chip), then items added after the stretch (e.g. Settings). Items are 36 px tall; the active item has an
-/// `elevated` pill and a 2 px `accent` indicator at the rail's left edge.
+/// `elevated` pill and a 2 px `accent` indicator at the rail's left edge; both are painted once by the rail and glide
+/// between items (200 ms OutQuint) when the current item changes.
 class ZeroNavRail : public QWidget {
     Q_OBJECT
     Q_PROPERTY(int railWidth READ railWidth WRITE setRailWidth)
@@ -51,10 +54,15 @@ class ZeroNavRail : public QWidget {
 
    protected:
     void paintEvent(QPaintEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
    private:
     void ensureBottomHolder();
     void refreshWordmark();
+    QRectF targetPill() const;   // active item's pill from live geometry (empty if none)
+    QRectF currentPill() const;  // what is painted: the target when idle, interpolated while gliding
+    void startGlide(const QRectF& from);
+    void updatePill();
 
     QVBoxLayout* m_layout;
     QLabel* m_wordmark;
@@ -66,6 +74,11 @@ class ZeroNavRail : public QWidget {
     bool m_collapsed = false;
     bool m_hasStretch = false;
     QPropertyAnimation* m_anim;
+    QVariantAnimation* m_glide;  // 0..1 progress of the pill glide (200 ms OutQuint)
+    QRectF m_glideFrom;
+    QRectF m_lastPill;
+    qreal m_glideT = 0.0;
+    bool m_gliding = false;
 };
 
 }  // namespace Zero

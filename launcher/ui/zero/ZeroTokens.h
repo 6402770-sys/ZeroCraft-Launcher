@@ -99,7 +99,14 @@ constexpr int badgeHeight = 20;
 constexpr int emptyStateIconSize = 40;
 constexpr int emptyStateMaxWidth = 360;
 
-// Motion (ms)
+// Motion (ms). Docs: DESIGN.md "Motion language". durHover/durPage are the pre-motion-system names, kept for
+// existing users (new code uses the dur* tokens below).
+constexpr int durPress = 90;      // press feedback
+constexpr int durFast = 140;      // hover, toggles, chips
+constexpr int durBase = 200;      // page enter, panels, indicator glide
+constexpr int durSlow = 280;      // dialogs, palette, toasts
+constexpr int durTheme = 360;     // theme transition
+constexpr int durDissolve = 420;  // Minecraft pixel dissolve
 constexpr int durHover = 120;
 constexpr int durPage = 180;
 constexpr int durToast = 4000;

@@ -16,8 +16,8 @@ bool isThemeActive();
 bool isZeroThemeId(const QString& id);
 
 /// Applies a ZERO ThemeSpec app-wide: Fusion base style, palette, base font and the generated stylesheet.
-/// The spec comes from baseSpec() (Obsidian here); the "ZeroReduceMotion" setting (when an Application exists) is
-/// carried into it.
+/// The spec comes from baseSpec() (Obsidian here); the motion setting ("ZeroMotion", legacy "ZeroReduceMotion"; when an
+/// Application exists) is carried into it.
 class ZeroTheme : public FusionTheme {
    public:
     static constexpr const char* kId = "zero-obsidian";

@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ZeroMotion.h"
 
+#include <QApplication>
 #include <QGraphicsOpacityEffect>
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QTimer>
 #include <QWidget>
 #include "ZeroThemeState.h"
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace Zero {
 namespace Motion {
@@ -19,6 +24,57 @@ bool enabled()
 int duration(int ms)
 {
     return enabled() ? ms : 0;
+}
+
+bool resolveEnabled(const QString& setting, bool legacyReduceMotion, bool systemAnimations)
+{
+    if (setting == QLatin1String("on"))
+        return true;
+    if (setting == QLatin1String("off"))
+        return false;
+    if (setting == QLatin1String("system"))
+        return systemAnimations;
+    // Never chosen (or unknown value): an old ZeroReduceMotion=true keeps meaning "off", otherwise follow the system.
+    return legacyReduceMotion ? false : systemAnimations;
+}
+
+bool systemAnimationsEnabled()
+{
+#ifdef Q_OS_WIN
+    BOOL on = TRUE;
+    if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &on, 0))
+        return on != FALSE;
+#endif
+    return true;
+}
+
+void syncPopupEffects(bool motionOn)
+{
+    QApplication::setEffectEnabled(Qt::UI_FadeMenu, motionOn);
+    QApplication::setEffectEnabled(Qt::UI_FadeTooltip, motionOn);
+    QApplication::setEffectEnabled(Qt::UI_AnimateCombo, motionOn);
+}
+
+QEasingCurve easeEnter()
+{
+    return QEasingCurve(QEasingCurve::OutCubic);
+}
+
+QEasingCurve easeExit()
+{
+    return QEasingCurve(QEasingCurve::InCubic);
+}
+
+QEasingCurve easeGlide()
+{
+    return QEasingCurve(QEasingCurve::OutQuint);
+}
+
+QEasingCurve easeRelease()
+{
+    QEasingCurve c(QEasingCurve::OutBack);
+    c.setOvershoot(1.3);
+    return c;
 }
 
 namespace {

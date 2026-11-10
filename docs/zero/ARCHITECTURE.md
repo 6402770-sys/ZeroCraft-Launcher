@@ -28,3 +28,18 @@ install/launch, auth, mod platforms, tasks, networking) is kept and only changed
 ## Build
 MSYS2 UCRT64 (GCC, Qt 6.12, CMake, Ninja) — `scripts/zero/build.sh`. Helper Java jars target `--release 8`.
 The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
+
+## Additions in session 2 (Mission 002)
+- **Themes**: `Zero::ThemeSpec` v2; one `ITheme` per spec (`ZeroTheme` = `zero-obsidian`, `ZeroMinecraftTheme` =
+  `zero-minecraft`) registered first in `ThemeManager`; stylesheet = `obsidian.qss` + optional `<id>.qss` overlay.
+  Painted panels go through `ZeroPaint` (corner style, bevel, texture). `ZeroPixelFont` builds an original TrueType
+  font in memory.
+- **Motion**: `ZeroMotion` (tokens, easings, setting resolution incl. Windows animation flag), `ZeroTransition`
+  (mouse-transparent snapshot overlays; widgets never animate their layout), `ZeroRipple` (app-wide press filter).
+  `ThemeManager::setApplicationTheme` snapshots windows before applying and dissolves/crossfades after.
+- **Launch state**: `Application::launchPhase()/launchPhaseChanged/launchEnded` (Preparing when the controller starts,
+  Running when `LauncherPartLaunch` sees the process run). UI reads these; launch behaviour unchanged.
+- **Shell v2**: `ZeroShell` = `[ZeroNavRail | ZeroTopBar over page stack]`; pages derive from `ShellPage`
+  (title/subtitle/breadcrumb/top-bar actions). MainWindow remains the controller.
+- **Command palette**: ranking is pure logic in `launcher/zero/palette/CommandMatcher` (unit-tested); UI in
+  `launcher/ui/zero/palette/`; MainWindow supplies command descriptors that call existing QActions/APIs.

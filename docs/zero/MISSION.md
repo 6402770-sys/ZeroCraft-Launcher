@@ -75,3 +75,27 @@ data migration, UI consistency, Windows-specific behavior.
 - **P2 Management**: Worlds, Smart Backup, Downloads, Storage Manager, Instance Profiles.
 - **P3 Intelligence**: Crash Detective *(done, Ollama pending)*, Mod Health, Java Doctor, Command Palette, local AI.
 - **P4 Completion**: Theme Studio, polish, performance, installer, updater, documentation.
+
+## Mission 002 — "The Next Evolution" (2026-11-10, binding, condensed)
+ZERO must feel like an independent premium product, not a customized Prism. **Preserve the engine, reimagine the
+experience.** The owner authorizes replacing the UI layer, big refactors and new subsystems; Qt Widgets stays unless
+QML/other gives a substantial, justified advantage (no Electron/web UI).
+- **Design**: Obsidian palette unchanged; premium desktop feel, deliberate typography/spacing, cohesive product (not a
+  pile of dashboard widgets). Every page: loading, empty, error, success states; keyboard accessible; no fake data.
+- **Motion is a major requirement**: very cool, purposeful, fluid animations (navigation, panels, dialogs, cards, buttons,
+  Play/launch, theme switch, toasts, loading), ~60 FPS, no idle timers, reduced-motion respected, animation settings.
+- **Minecraft Theme**: second complete selectable theme (deepslate/stone/grass/diamond/gold), block/pixel character,
+  readable, original assets only; persisted, live-switchable, preview before applying, ready for future custom themes.
+- **Productivity**: Library 2.0 (favorites, categories, tags, descriptions, artwork, filters, sorting, bulk), command
+  palette (Ctrl+K) with shortcut reference, instance templates, session history.
+- **Management**: Worlds Hub (read-only safe discovery, import/export/backup/restore), Smart Backup (manual/automatic/
+  scheduled, pre-update and pre-mod-change snapshots, retention, integrity checks, restore previews, never overwrite
+  silently), Update center + downloads (queue, retry, history, recovery points), Storage Manager (never auto-delete user
+  content), Mod Intelligence (Confirmed/Likely/Possible/Unknown, no false conflict claims).
+- **Intelligence**: Crash Detective 2.0 (more rules, history, realistic logs; optional Ollama only with consent), Java
+  Doctor (never change Java selection without permission), Repair Center (preview before repair).
+- **Extras when valuable**: Server Vault (no credentials, ping ≠ availability), Screenshot Gallery, Discover with
+  installed/available/outdated/incompatible states via official APIs.
+- **Process**: phases A (experience) → B (productivity) → C (management) → D (intelligence) → E (extras) →
+  F (stabilization). Multi-session: coherent vertical slices, each compiled, tested, verified, committed locally and
+  documented in HANDOFF.md. Never push, never rewrite history, never claim unfinished work as done.

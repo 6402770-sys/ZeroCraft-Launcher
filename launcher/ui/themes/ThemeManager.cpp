@@ -31,6 +31,7 @@
 #include "ui/themes/CustomTheme.h"
 #include "ui/themes/DarkTheme.h"
 #include "ui/themes/SystemTheme.h"
+#include "ui/zero/ZeroTheme.h"
 
 #include "Application.h"
 #include "settings/SettingsObject.h"
@@ -142,6 +143,7 @@ void ThemeManager::initializeIcons()
 void ThemeManager::initializeWidgets()
 {
     themeDebugLog() << "<> Initializing Widget Themes";
+    themeDebugLog() << "Loading Built-in Theme:" << addTheme(std::make_unique<Zero::ZeroTheme>());
     themeDebugLog() << "Loading Built-in Theme:" << addTheme(std::make_unique<SystemTheme>(m_defaultStyle, m_defaultPalette, true));
     auto darkThemeId = addTheme(std::make_unique<DarkTheme>());
     themeDebugLog() << "Loading Built-in Theme:" << darkThemeId;
@@ -213,6 +215,13 @@ QList<ITheme*> ThemeManager::getValidApplicationThemes()
     for (auto&& [id, theme] : m_themes) {
         ret.append(theme.get());
     }
+    // ZERO: the default theme is listed first
+    for (qsizetype i = 0; i < ret.size(); ++i) {
+        if (ret[i]->id() == Zero::ZeroTheme::kId) {
+            ret.move(i, 0);
+            break;
+        }
+    }
     return ret;
 }
 
@@ -280,11 +289,15 @@ void ThemeManager::setApplicationTheme(const QString& name, bool initial)
 void ThemeManager::applyCurrentlySelectedTheme(bool initial)
 {
     auto* settings = APPLICATION->settings();
-    setIconTheme(settings->get("IconTheme").toString());
+    auto iconTheme = settings->get("IconTheme").toString();
+    if (iconTheme.isEmpty()) {
+        iconTheme = "flat_white";  // ZERO default
+    }
+    setIconTheme(iconTheme);
     themeDebugLog() << "<> Icon theme set.";
     auto applicationTheme = settings->get("ApplicationTheme").toString();
     if (applicationTheme == "") {
-        applicationTheme = m_defaultStyle;
+        applicationTheme = Zero::ZeroTheme::kId;  // ZERO default (was: system style)
     }
     setApplicationTheme(applicationTheme, initial);
     themeDebugLog() << "<> Application theme set.";

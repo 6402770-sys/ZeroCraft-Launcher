@@ -655,6 +655,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("IconTheme", QString());
         m_settings->registerSetting("ApplicationTheme", QString());
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
+        // ZERO: one-time switch to Obsidian + flat_white (so users imported from Prism get the ZERO look once)
+        m_settings->registerSetting("ZeroThemeInitialized", false);
+        m_settings->registerSetting("ZeroReduceMotion", false);
 
         // Remembered state
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());
@@ -975,6 +978,13 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
     // Themes
     m_themeManager = std::make_unique<ThemeManager>();
+
+    // ZERO: first start (including a fresh import from Prism) selects Obsidian + flat_white once; later choices stick.
+    if (!m_settings->get("ZeroThemeInitialized").toBool()) {
+        m_settings->set("ApplicationTheme", "zero-obsidian");
+        m_settings->set("IconTheme", "flat_white");
+        m_settings->set("ZeroThemeInitialized", true);
+    }
 
 #ifdef Q_OS_MACOS
     // for macOS: getting directory settings will generate URL security-scoped bookmarks if needed and not present

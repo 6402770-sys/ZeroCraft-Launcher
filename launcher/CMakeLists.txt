@@ -867,6 +867,33 @@ SET(LAUNCHER_SOURCES
     ui/themes/CatPainter.cpp
     ui/themes/CatPainter.h
 
+    # ZERO design system
+    ui/zero/ZeroCard.cpp
+    ui/zero/ZeroCard.h
+    ui/zero/ZeroEmptyState.cpp
+    ui/zero/ZeroEmptyState.h
+    ui/zero/ZeroGallery.cpp
+    ui/zero/ZeroGallery.h
+    ui/zero/ZeroIcons.cpp
+    ui/zero/ZeroIcons.h
+    ui/zero/ZeroMotion.cpp
+    ui/zero/ZeroMotion.h
+    ui/zero/ZeroNavRail.cpp
+    ui/zero/ZeroNavRail.h
+    ui/zero/ZeroPageHeader.cpp
+    ui/zero/ZeroPageHeader.h
+    ui/zero/ZeroSpinner.cpp
+    ui/zero/ZeroSpinner.h
+    ui/zero/ZeroStyle.cpp
+    ui/zero/ZeroStyle.h
+    ui/zero/ZeroTheme.cpp
+    ui/zero/ZeroTheme.h
+    ui/zero/ZeroThemeState.cpp
+    ui/zero/ZeroThemeState.h
+    ui/zero/ZeroToast.cpp
+    ui/zero/ZeroToast.h
+    ui/zero/ZeroTokens.h
+
     # Processes
     LaunchMode.h
     LaunchController.h
@@ -1201,6 +1228,7 @@ qt_add_resources(LAUNCHER_RESOURCES
     resources/breeze_light/breeze_light.qrc
     resources/flat/flat.qrc
     resources/flat_white/flat_white.qrc
+    resources/zero/zero.qrc
     resources/documents/documents.qrc
     resources/shaders/shaders.qrc
     "${CMAKE_CURRENT_BINARY_DIR}/../${Launcher_Branding_LogoQRC}"
@@ -1274,6 +1302,7 @@ target_link_libraries(Launcher_logic
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::NetworkAuth
+    Qt${QT_VERSION_MAJOR}::Svg
     Qt${QT_VERSION_MAJOR}::OpenGL
     ${Launcher_QT_DBUS}
     ${Launcher_QT_LIBS}

@@ -80,6 +80,11 @@ class InstanceView : public QAbstractItemView {
     int spacing() const { return m_spacing; };
     void setPaintCat(bool visible);
 
+    /// ZERO: card grid metrics. `itemWidth` is the width of one cell; `spacing` the gap between cells and rows.
+    void setGridMetrics(int itemWidth, int spacing);
+    /// Number of visual groups currently laid out.
+    int groupCount() const { return m_groups.size(); }
+
    public slots:
     virtual void updateGeometries() override;
 
@@ -103,6 +108,7 @@ class InstanceView : public QAbstractItemView {
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
@@ -120,12 +126,13 @@ class InstanceView : public QAbstractItemView {
     visibilityFunction m_fVisibility;
 
     // geometry
-    int m_leftMargin = 5;
-    int m_rightMargin = 5;
-    int m_bottomMargin = 5;
-    int m_categoryMargin = 5;
-    int m_spacing = 5;
-    int m_itemWidth = 100;
+    int m_leftMargin = 0;
+    int m_rightMargin = 12;  // leaves room for the 8 px scroll bar so the last column never sits under it
+    int m_bottomMargin = 8;
+    int m_categoryMargin = 8;
+    int m_spacing = 12;
+    int m_itemWidth = 168;
+    QPersistentModelIndex m_hoverIndex;
     int m_currentItemsPerRow = -1;
     int m_currentCursorColumn = -1;
     mutable QCache<int, QRect> m_geometryCache;

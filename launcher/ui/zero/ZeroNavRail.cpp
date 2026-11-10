@@ -136,19 +136,23 @@ class NavItem : public QAbstractButton {
 };
 
 ZeroNavRail::ZeroNavRail(QWidget* parent)
-    : QWidget(parent), m_layout(new QVBoxLayout(this)), m_wordmark(new QLabel(this)), m_anim(new QPropertyAnimation(this, "railWidth", this))
+    : QWidget(parent), m_layout(new QVBoxLayout(this)), m_wordmark(new QLabel(this)), m_caption(new QLabel(this)), m_anim(new QPropertyAnimation(this, "railWidth", this))
 {
     setFixedWidth(Tokens::navRailWidth);
     m_layout->setContentsMargins(0, Tokens::spaceXl, 0, Tokens::spaceMd);
     m_layout->setSpacing(2);
 
-    Style::applyRole(m_wordmark, Role::Heading);
+    // Wordmark: display role (weight 600), 3 px letter spacing; caption "Launcher" below it.
+    Style::applyRole(m_wordmark, Role::Display);
     QFont wf = m_wordmark->font();
-    wf.setWeight(QFont::Bold);
-    wf.setLetterSpacing(QFont::AbsoluteSpacing, 4.0);
+    wf.setLetterSpacing(QFont::AbsoluteSpacing, 3.0);
     m_wordmark->setFont(wf);
     m_wordmark->setContentsMargins(kPillInset + kIconPad, 0, 0, 0);
     m_layout->addWidget(m_wordmark);
+    Style::applyRole(m_caption, Role::Caption);
+    m_caption->setText(tr("Launcher"));
+    m_caption->setContentsMargins(kPillInset + kIconPad, 0, 0, 0);
+    m_layout->addWidget(m_caption);
     m_layout->addSpacing(Tokens::spaceXl);
     refreshWordmark();
 
@@ -167,6 +171,13 @@ void ZeroNavRail::addItem(const QString& id, const QString& iconName, const QStr
     connect(item, &QAbstractButton::clicked, this, [this, id]() { setCurrent(id); });
     m_layout->addWidget(item);
     // keep the bottom holder (if any) before items added after it
+}
+
+QAbstractButton* ZeroNavRail::addActionItem(const QString& id, const QString& iconName, const QString& label)
+{
+    auto* item = new NavItem(id, iconName, label, this);
+    m_layout->addWidget(item);
+    return item;
 }
 
 void ZeroNavRail::addSpacing(int px)
@@ -256,6 +267,7 @@ void ZeroNavRail::refreshWordmark()
     m_wordmark->setText(wide ? QStringLiteral("ZERO") : QStringLiteral("Z"));
     m_wordmark->setContentsMargins(wide ? kPillInset + kIconPad : 0, 0, 0, 0);
     m_wordmark->setAlignment(wide ? (Qt::AlignLeft | Qt::AlignVCenter) : Qt::AlignCenter);
+    m_caption->setVisible(wide);
 }
 
 void ZeroNavRail::paintEvent(QPaintEvent*)

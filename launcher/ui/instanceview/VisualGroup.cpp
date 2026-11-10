@@ -48,6 +48,13 @@
 #include "InstanceList.h"
 #include "InstanceView.h"
 #include "icons/IconList.h"
+#include "ui/zero/ZeroIcons.h"
+#include "ui/zero/ZeroStyle.h"
+#include "ui/zero/ZeroThemeState.h"
+
+namespace {
+constexpr int kHeaderHeight = 36;
+}
 
 VisualGroup::VisualGroup(QString text, InstanceView* view) : view(view), text(std::move(text)), collapsed(false) {}
 
@@ -73,7 +80,7 @@ void VisualGroup::update()
             if (currentRow >= rows.size()) {
                 currentRow = rows.size() - 1;
             }
-            offsetFromTop += maxRowHeight + 5;
+            offsetFromTop += maxRowHeight + view->spacing();
             positionInRow = 0;
             maxRowHeight = 0;
         }
@@ -145,95 +152,59 @@ VisualGroup::HitResults VisualGroup::hitScan(const QPoint& pos) const
 
 void VisualGroup::drawHeader(QPainter* painter, const QStyleOptionViewItem& option) const
 {
+    if (headerHeight() == 0)
+        return;
+
+    const auto& theme = Zero::Theme::current();
     const QString& iconKey = APPLICATION->instances()->getGroupIconKey(text);
-    bool hasIcon = !iconKey.isEmpty();
+    const bool hasIcon = !iconKey.isEmpty();
 
-    QRect optRect = option.rect;
-    optRect.setTop(optRect.top() + 7);
-    QFont font(QApplication::font());
-    font.setBold(true);
-    const QFontMetrics fontMetrics = QFontMetrics(font);
-    painter->setFont(font);
+    const QRect optRect = option.rect;
+    const QRect row(optRect.left(), optRect.top(), optRect.width(), kHeaderHeight - 8);
+    const int centerY = row.center().y();
 
-    QPen pen;
-    pen.setWidth(2);
-    QColor penColor = option.palette.text().color();
-    penColor.setAlphaF(0.6f);
-    pen.setColor(penColor);
-    painter->setPen(pen);
+    painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
 
-    // sizes and offsets, to keep things consistent below
-    const int arrowOffsetLeft = fontMetrics.height() / 2 + 7;
-    const int iconOffsetLeft = arrowOffsetLeft * 2;
-    const int textOffsetLeft = hasIcon ? iconOffsetLeft * 2 - fontMetrics.height() / 2 : iconOffsetLeft;
-    const int centerHeight = optRect.top() + fontMetrics.height() / 2;
-    const int iconSize = fontMetrics.height() * 1.2;
-    const QString& textToDraw = text.isEmpty() ? QObject::tr("Ungrouped") : text;
+    // chevron (collapsible as before)
+    constexpr int chevron = 14;
+    int x = row.left();
+    Zero::Icons::icon(collapsed ? QStringLiteral("chevron-right") : QStringLiteral("chevron-down"), theme.textTertiary)
+        .paint(painter, QRect(x, centerY - chevron / 2, chevron, chevron));
+    x += chevron + 6;
 
-    // BEGIN: arrow
-    {
-        constexpr int arrowSize = 6;
-        QPolygon arrowPolygon;
-        if (collapsed) {
-            arrowPolygon << QPoint(arrowOffsetLeft - arrowSize / 2, centerHeight - arrowSize)
-                         << QPoint(arrowOffsetLeft + arrowSize / 2, centerHeight)
-                         << QPoint(arrowOffsetLeft - arrowSize / 2, centerHeight + arrowSize);
-            painter->drawPolyline(arrowPolygon);
-        } else {
-            arrowPolygon << QPoint(arrowOffsetLeft - arrowSize, centerHeight - arrowSize / 2)
-                         << QPoint(arrowOffsetLeft, centerHeight + arrowSize / 2)
-                         << QPoint(arrowOffsetLeft + arrowSize, centerHeight - arrowSize / 2);
-            painter->drawPolyline(arrowPolygon);
-        }
-    }
-    // END: arrow
-
-    // BEGIN: icon
     if (hasIcon) {
-        QRect iconRect(optRect);
-
-        iconRect.setTop(iconRect.top());
-        iconRect.setLeft(iconOffsetLeft);
-        iconRect.setHeight(iconSize);
-        iconRect.setWidth(iconSize);
-
-        iconRect.moveLeft(iconOffsetLeft);
-        iconRect.moveTop(centerHeight - iconSize / 2);
-
-        QIcon icon = APPLICATION->icons()->getIcon(iconKey);
-        icon.paint(painter, iconRect, Qt::AlignLeft | Qt::AlignVCenter);
+        constexpr int iconSize = 16;
+        APPLICATION->icons()->getIcon(iconKey).paint(painter, QRect(x, centerY - iconSize / 2, iconSize, iconSize));
+        x += iconSize + 6;
     }
-    // END: icon
 
-    // BEGIN: text
-    {
-        QRect textRect(optRect);
-        textRect.setTop(textRect.top());
-        textRect.setLeft(textOffsetLeft);
-        textRect.setHeight(fontMetrics.height());
-        textRect.setRight(textRect.right() - 7);
+    // overline-styled name + count
+    int itemCount = 0;
+    for (const auto& r : rows)
+        itemCount += r.size();
 
-        painter->drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, textToDraw);
-    }
-    // END: text
+    const QString title = text.isEmpty() ? QObject::tr("Ungrouped") : text;
+    const QFont overline = Zero::Style::font(Zero::Role::Overline);
+    painter->setFont(overline);
+    painter->setPen(theme.textTertiary);
+    const QFontMetrics om(overline);
+    const int titleWidth = om.horizontalAdvance(title.toUpper());
+    painter->drawText(QRect(x, row.top(), titleWidth + 4, row.height()), Qt::AlignLeft | Qt::AlignVCenter, title);
+    x += titleWidth + 10;
 
-    // BEGIN: horizontal line
-    {
-        penColor.setAlphaF(0.05f);
-        pen.setColor(penColor);
-        painter->setPen(pen);
-        // startPoint is left + arrow + text + space
-        const int startPoint = optRect.left() + fontMetrics.height() +
-                               fontMetrics.size(Qt::AlignLeft | Qt::AlignVCenter, textToDraw).width() + 20 + (hasIcon ? iconSize + 3 : 0);
-        painter->setRenderHint(QPainter::Antialiasing, false);
-        QPolygon polygon;
-        // for some reason the height (yPos) doesn't look centered, so we are adding 1 to the center height
-        const int lineHeight = centerHeight + 1;
-        polygon << QPoint(startPoint, lineHeight) << QPoint(optRect.right() - 3, lineHeight);
-        painter->drawPolyline(polygon);
-    }
-    // END: horizontal line
+    const QFont caption = Zero::Style::font(Zero::Role::Caption);
+    painter->setFont(caption);
+    painter->setPen(theme.textTertiary);
+    const QString count = QString::number(itemCount);
+    painter->drawText(QRect(x, row.top(), 40, row.height()), Qt::AlignLeft | Qt::AlignVCenter, count);
+    x += QFontMetrics(caption).horizontalAdvance(count) + 12;
+
+    // separator line to the right edge
+    painter->setRenderHint(QPainter::Antialiasing, false);
+    painter->setPen(theme.border);
+    painter->drawLine(QPoint(x, centerY), QPoint(row.right(), centerY));
+    painter->restore();
 }
 
 int VisualGroup::totalHeight() const
@@ -241,22 +212,12 @@ int VisualGroup::totalHeight() const
     return headerHeight() + contentHeight();
 }
 
-int VisualGroup::headerHeight()
+int VisualGroup::headerHeight() const
 {
-    QFont font(QApplication::font());
-    font.setBold(true);
-    QFontMetrics fontMetrics(font);
-
-    const int height = fontMetrics.height() + 1 /* 1 pixel-width gradient */
-                       + 11 /* top and bottom separation */;
-    return height;
-    /*
-    int raw = view->viewport()->fontMetrics().height() + 4;
-    // add english. maybe. depends on font height.
-    if (raw % 2 == 0)
-        raw++;
-    return std::min(raw, 25);
-    */
+    // A single unnamed group needs no header; showing "UNGROUPED 6" above everything is just noise.
+    if (text.isEmpty() && view && view->groupCount() <= 1)
+        return 0;
+    return kHeaderHeight;
 }
 
 int VisualGroup::contentHeight() const

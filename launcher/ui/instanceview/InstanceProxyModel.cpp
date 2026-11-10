@@ -19,6 +19,9 @@
 #include <icons/IconList.h>
 #include "Application.h"
 #include "InstanceView.h"
+#include "InstanceList.h"
+#include "minecraft/MinecraftInstance.h"
+#include "ui/zero/pages/InstanceInfo.h"
 
 #include <QDebug>
 
@@ -28,6 +31,30 @@ InstanceProxyModel::InstanceProxyModel(QObject* parent) : QSortFilterProxyModel(
     m_naturalSort.setCaseSensitivity(Qt::CaseSensitivity::CaseInsensitive);
     // FIXME: use loaded translation as source of locale instead, hook this up to translation changes
     m_naturalSort.setLocale(QLocale::system());
+}
+
+void InstanceProxyModel::setFilterText(const QString& text)
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed == m_filterText)
+        return;
+    m_filterText = trimmed;
+    invalidateFilter();
+}
+
+bool InstanceProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const
+{
+    if (m_filterText.isEmpty())
+        return true;
+    const QModelIndex idx = sourceModel()->index(sourceRow, 0, sourceParent);
+    if (!idx.isValid())
+        return false;
+    auto* instance = static_cast<MinecraftInstance*>(idx.data(InstanceList::InstancePointerRole).value<void*>());
+    if (!instance)
+        return false;
+    const Qt::CaseSensitivity cs = Qt::CaseInsensitive;
+    return instance->name().contains(m_filterText, cs) || idx.data(InstanceViewRoles::GroupRole).toString().contains(m_filterText, cs) ||
+           Zero::InstanceInfo::of(instance).minecraftVersion.contains(m_filterText, cs);
 }
 
 QVariant InstanceProxyModel::data(const QModelIndex& index, int role) const

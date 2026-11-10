@@ -872,6 +872,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroCard.h
     ui/zero/ZeroEmptyState.cpp
     ui/zero/ZeroEmptyState.h
+    ui/zero/ZeroFormat.cpp
+    ui/zero/ZeroFormat.h
     ui/zero/ZeroGallery.cpp
     ui/zero/ZeroGallery.h
     ui/zero/ZeroIcons.cpp
@@ -893,6 +895,25 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroToast.cpp
     ui/zero/ZeroToast.h
     ui/zero/ZeroTokens.h
+    ui/zero/pages/ElidedLabel.h
+    ui/zero/pages/HomePage.cpp
+    ui/zero/pages/HomePage.h
+    ui/zero/pages/IconTile.cpp
+    ui/zero/pages/IconTile.h
+    ui/zero/pages/InstanceDetailsPanel.cpp
+    ui/zero/pages/InstanceDetailsPanel.h
+    ui/zero/pages/InstanceInfo.cpp
+    ui/zero/pages/InstanceInfo.h
+    ui/zero/pages/InstanceTableModel.cpp
+    ui/zero/pages/InstanceTableModel.h
+    ui/zero/pages/LibraryPage.cpp
+    ui/zero/pages/LibraryPage.h
+    ui/zero/pages/ZeroInstanceDelegate.cpp
+    ui/zero/pages/ZeroInstanceDelegate.h
+    ui/zero/shell/AccountChip.cpp
+    ui/zero/shell/AccountChip.h
+    ui/zero/shell/ZeroShell.cpp
+    ui/zero/shell/ZeroShell.h
 
     # Processes
     LaunchMode.h
@@ -1314,6 +1335,10 @@ target_link_libraries(Launcher_logic
 )
 if (TARGET ${Launcher_QT_DBUS})
     target_compile_definitions(Launcher_logic PUBLIC WITH_QTDBUS)
+endif()
+if(WIN32)
+    # ZERO: DwmSetWindowAttribute (dark title bar)
+    target_link_libraries(Launcher_logic dwmapi)
 endif()
 
 if(APPLE)

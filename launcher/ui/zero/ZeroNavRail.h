@@ -6,6 +6,7 @@
 #include <QPropertyAnimation>
 #include <QWidget>
 
+class QAbstractButton;
 class QLabel;
 class QVBoxLayout;
 
@@ -25,6 +26,9 @@ class ZeroNavRail : public QWidget {
 
     /// `iconName` is a Lucide icon name (see ZeroIcons); it is tinted per state (textSecondary / text).
     void addItem(const QString& id, const QString& iconName, const QString& label);
+    /// Like addItem(), but the item is an action button: clicking it never becomes the current page. Connect to the
+    /// returned button's clicked(); its geometry can be used to anchor a menu.
+    QAbstractButton* addActionItem(const QString& id, const QString& iconName, const QString& label);
     void addSpacing(int px);
     /// Adds a stretch; the bottom widget and later items are placed after the first stretch.
     void addStretch();
@@ -54,6 +58,7 @@ class ZeroNavRail : public QWidget {
 
     QVBoxLayout* m_layout;
     QLabel* m_wordmark;
+    QLabel* m_caption;
     QWidget* m_bottomHolder = nullptr;
     QVBoxLayout* m_bottomLayout = nullptr;
     QHash<QString, NavItem*> m_items;

@@ -210,7 +210,8 @@ class ZeroStyleTest : public QObject {
 
         // Hover can only be produced by a real pointer: move it over each "Hover" sample, check the :hover colors
         // from the stylesheet are applied, and composite the hovered look into the screenshot.
-        {
+        // Opt-in (ZERO_TEST_REAL_POINTER=1): it moves the user's actual cursor and is flaky while someone uses the PC.
+        if (qEnvironmentVariableIsSet("ZERO_TEST_REAL_POINTER")) {
             QPainter painter(&shot);
             for (auto* b : gallery.hoverSamples()) {
                 const QString variant = b->property("zeroVariant").toString();

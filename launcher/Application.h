@@ -298,6 +298,8 @@ class Application : public QApplication {
     QList<QUrl> m_urlsToImport;
     QString m_instanceIdToShowWindowOf;
     bool m_showMainWindow = false;
+    QString m_zeroScreenshotPath;  // --zero-screenshot
+    QString m_zeroScreenshotPage;  // --zero-page
     std::unique_ptr<QFile> logFile;
     std::unique_ptr<LogModel> logModel;
 

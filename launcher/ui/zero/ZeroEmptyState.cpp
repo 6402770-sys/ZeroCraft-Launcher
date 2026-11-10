@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ZeroEmptyState.h"
 
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -18,6 +19,7 @@ ZeroEmptyState::ZeroEmptyState(const QString& iconName, const QString& title, co
     , m_title(new QLabel(title, this))
     , m_body(new QLabel(body, this))
     , m_action(new QPushButton(actionText, this))
+    , m_actions(new QHBoxLayout)
 {
     m_iconLabel->setFixedSize(Tokens::emptyStateIconSize, Tokens::emptyStateIconSize);
     m_iconLabel->setAlignment(Qt::AlignCenter);
@@ -43,10 +45,22 @@ ZeroEmptyState::ZeroEmptyState(const QString& iconName, const QString& title, co
     lay->addStretch(1);
     lay->addWidget(m_iconLabel, 0, Qt::AlignHCenter);
     lay->addSpacing(Tokens::spaceSm);
-    lay->addWidget(m_title, 0, Qt::AlignHCenter);
-    lay->addWidget(m_body, 0, Qt::AlignHCenter);
+    // Wrapped labels are centered with side stretches instead of an alignment flag: with AlignHCenter the layout
+    // gives them their unwrapped size hint and long text loses lines (height-for-width is skipped).
+    for (QLabel* label : { m_title, m_body }) {
+        auto* row = new QHBoxLayout;
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addStretch(1);
+        row->addWidget(label, 100);
+        row->addStretch(1);
+        lay->addLayout(row);
+    }
     lay->addSpacing(Tokens::spaceMd);
-    lay->addWidget(m_action, 0, Qt::AlignHCenter);
+    m_actions->setContentsMargins(0, 0, 0, 0);
+    m_actions->setSpacing(Tokens::spaceSm);
+    m_actions->addWidget(m_action);
+    lay->addLayout(m_actions);
+    lay->setAlignment(m_actions, Qt::AlignHCenter);
     lay->addStretch(1);
 
     refreshIcon();
@@ -78,6 +92,14 @@ void ZeroEmptyState::setActionText(const QString& text)
 {
     m_action->setText(text);
     m_action->setVisible(!text.isEmpty());
+}
+
+QPushButton* ZeroEmptyState::addSecondaryAction(const QString& text)
+{
+    auto* button = new QPushButton(text, this);
+    Style::setProperty(button, "zeroVariant", "secondary");
+    m_actions->addWidget(button);
+    return button;
 }
 
 }  // namespace Zero

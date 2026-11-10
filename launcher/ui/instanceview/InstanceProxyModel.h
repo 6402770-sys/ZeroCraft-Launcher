@@ -24,11 +24,17 @@ class InstanceProxyModel : public QSortFilterProxyModel {
    public:
     InstanceProxyModel(QObject* parent = 0);
 
+    /// ZERO: case-insensitive substring filter over name, group and Minecraft version. Empty = show everything.
+    void setFilterText(const QString& text);
+    QString filterText() const { return m_filterText; }
+
    protected:
+    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
     QVariant data(const QModelIndex& index, int role) const override;
     bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
     bool subSortLessThan(const QModelIndex& left, const QModelIndex& right) const;
 
    private:
     QCollator m_naturalSort;
+    QString m_filterText;
 };

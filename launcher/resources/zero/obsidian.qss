@@ -52,6 +52,12 @@ QLabel[zeroTone="danger"]    { color: @danger@; }
 QLabel[zeroTone="info"]      { color: @info@; }
 QLabel:disabled { color: @textTertiary@; }
 
+/* Icon tile behind a small icon (Home shortcut cards) */
+QLabel[zeroTile="true"] {
+    background-color: @elevated@;
+    border-radius: @radiusMd@;
+}
+
 /* Tags / badges: QLabel with zeroBadge = neutral | success | warning | danger | info */
 QLabel[zeroBadge] {
     background-color: @elevated@;
@@ -163,6 +169,11 @@ QPushButton[zeroVariant="ghost"]:pressed, QToolButton[zeroVariant="ghost"]:press
     background-color: @elevated@;
     color: @text@;
 }
+QPushButton[zeroVariant="ghost"]:checked, QToolButton[zeroVariant="ghost"]:checked {
+    background-color: @elevated@;
+    color: @text@;
+    border-color: transparent;
+}
 QPushButton[zeroVariant="ghost"]:focus, QToolButton[zeroVariant="ghost"]:focus {
     border-color: @textTertiary@;
 }
@@ -227,6 +238,7 @@ QComboBox QLineEdit, QAbstractSpinBox QLineEdit {
     min-height: 0;
 }
 
+
 QTextEdit, QPlainTextEdit, QTextBrowser {
     background-color: @surface@;
     color: @text@;
@@ -283,6 +295,9 @@ QComboBox QAbstractItemView::item:hover, QComboBox QAbstractItemView::item:selec
     color: @text@;
 }
 
+/* NOTE: Qt never applies style sheet rules to the spin box's embedded editor (it is a "natural child"), and the
+ * spin box's own padding-left does not move it either, so the 10 px left text inset that matches QLineEdit is set in
+ * C++ (ZeroTheme.cpp, QLineEdit::setTextMargins on every QAbstractSpinBox editor). */
 QAbstractSpinBox {
     padding-right: 24px;
 }

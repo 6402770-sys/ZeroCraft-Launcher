@@ -1,0 +1,402 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "LibraryPage.h"
+
+#include <QAbstractItemView>
+#include <QApplication>
+#include <QButtonGroup>
+#include <QComboBox>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QKeyEvent>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QShortcut>
+#include <QSortFilterProxyModel>
+#include <QStackedWidget>
+#include <QStyledItemDelegate>
+#include <QToolButton>
+#include <QTreeView>
+#include <QVBoxLayout>
+#include "Application.h"
+#include "InstanceList.h"
+#include "InstanceTableModel.h"
+#include "ZeroInstanceDelegate.h"
+#include "settings/SettingsObject.h"
+#include "ui/instanceview/InstanceProxyModel.h"
+#include "ui/instanceview/InstanceView.h"
+#include "ui/zero/ZeroEmptyState.h"
+#include "ui/zero/ZeroIcons.h"
+#include "ui/zero/ZeroPageHeader.h"
+#include "ui/zero/ZeroStyle.h"
+#include "ui/zero/ZeroThemeState.h"
+
+namespace Zero {
+
+namespace {
+
+/// Fixed 36 px rows for the list mode.
+class RowDelegate : public QStyledItemDelegate {
+   public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        QSize size = QStyledItemDelegate::sizeHint(option, index);
+        size.setHeight(Tokens::navItemHeight);
+        return size;
+    }
+};
+
+QToolButton* makeToggle(const QString& tooltip, QWidget* parent)
+{
+    auto* button = new QToolButton(parent);
+    button->setCheckable(true);
+    button->setAutoRaise(false);
+    button->setToolTip(tooltip);
+    button->setFixedSize(Tokens::controlHeight, Tokens::controlHeight);
+    button->setIconSize(QSize(16, 16));
+    Style::setProperty(button, "zeroVariant", "ghost");
+    return button;
+}
+
+}  // namespace
+
+LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget* parent)
+    : QWidget(parent), m_grid(grid), m_proxy(proxy), m_table(new InstanceTableModel(proxy, this)), m_sort(new QSortFilterProxyModel(this))
+{
+    // ----- header -----
+    m_header = new ZeroPageHeader(tr("Library"), {}, this);
+
+    m_search = new QLineEdit(this);
+    m_search->setPlaceholderText(tr("Search instances"));
+    m_search->setFixedWidth(240);
+    m_search->setClearButtonEnabled(true);
+    m_search->installEventFilter(this);
+    m_header->addAction(m_search);
+
+    m_sortCombo = new QComboBox(this);
+    m_sortCombo->setToolTip(tr("Sort instances"));
+    m_sortCombo->addItem(tr("Name"), QStringLiteral("Name"));
+    m_sortCombo->addItem(tr("Last played"), QStringLiteral("LastLaunch"));
+    m_header->addAction(m_sortCombo);
+
+    auto* viewGroup = new QButtonGroup(this);
+    viewGroup->setExclusive(true);
+    m_gridButton = makeToggle(tr("Grid view"), this);
+    m_listButton = makeToggle(tr("List view"), this);
+    viewGroup->addButton(m_gridButton);
+    viewGroup->addButton(m_listButton);
+    auto* toggles = new QWidget(this);
+    auto* toggleLayout = new QHBoxLayout(toggles);
+    toggleLayout->setContentsMargins(0, 0, 0, 0);
+    toggleLayout->setSpacing(2);
+    toggleLayout->addWidget(m_gridButton);
+    toggleLayout->addWidget(m_listButton);
+    m_header->addAction(toggles);
+
+    auto* newButton = new QPushButton(tr("New instance"), this);
+    Style::setProperty(newButton, "zeroVariant", "primary");
+    newButton->setIconSize(QSize(16, 16));
+    m_newButton = newButton;
+    connect(newButton, &QPushButton::clicked, this, &LibraryPage::newInstanceRequested);
+    m_header->addAction(newButton);
+
+    // ----- grid -----
+    m_grid->setParent(this);
+    m_grid->setGridMetrics(ZeroInstanceDelegate::kCellWidth, Tokens::spaceLg - 4);
+    m_grid->setStyleSheet(QStringLiteral("QAbstractItemView { background: transparent; border: none; }"));
+    m_grid->viewport()->setAutoFillBackground(false);
+
+    // ----- list -----
+    m_sort->setSourceModel(m_table);
+    m_sort->setSortRole(InstanceTableModel::SortRole);
+    m_sort->setSortCaseSensitivity(Qt::CaseInsensitive);
+    m_sort->setSortLocaleAware(true);
+
+    m_list = new QTreeView(this);
+    m_list->setModel(m_sort);
+    m_list->setItemDelegate(new RowDelegate(m_list));
+    m_list->setRootIsDecorated(false);
+    m_list->setItemsExpandable(false);
+    m_list->setUniformRowHeights(true);
+    m_list->setAlternatingRowColors(false);
+    m_list->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_list->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_list->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_list->setIconSize(QSize(20, 20));
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_list->setAttribute(Qt::WA_MacShowFocusRect, false);
+    m_list->setSortingEnabled(true);
+    m_list->sortByColumn(-1, Qt::AscendingOrder);  // start in the grid's order (grouped, then by the sort mode)
+    m_list->header()->setStretchLastSection(false);
+    m_list->header()->setSectionResizeMode(InstanceTableModel::NameColumn, QHeaderView::Stretch);
+    for (int c : { InstanceTableModel::VersionColumn, InstanceTableModel::LoaderColumn, InstanceTableModel::GroupColumn,
+                   InstanceTableModel::LastPlayedColumn, InstanceTableModel::PlaytimeColumn })
+        m_list->header()->setSectionResizeMode(c, QHeaderView::Interactive);
+    m_list->setColumnWidth(InstanceTableModel::VersionColumn, 84);
+    m_list->setColumnWidth(InstanceTableModel::LoaderColumn, 90);
+    m_list->setColumnWidth(InstanceTableModel::GroupColumn, 110);
+    m_list->setColumnWidth(InstanceTableModel::LastPlayedColumn, 120);
+    m_list->setColumnWidth(InstanceTableModel::PlaytimeColumn, 100);
+    m_list->installEventFilter(this);
+    connect(m_list, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        const QModelIndex idx = m_list->indexAt(pos);
+        if (!idx.isValid())
+            return;
+        m_list->setCurrentIndex(idx);
+        emit listContextMenuRequested(m_list->viewport()->mapToGlobal(pos), m_table->sourceIndex(m_sort->mapToSource(idx)));
+    });
+    connect(m_list, &QAbstractItemView::activated, this, [this](const QModelIndex& idx) {
+        emit instanceActivated(m_table->sourceIndex(m_sort->mapToSource(idx)));
+    });
+    connect(m_list->selectionModel(), &QItemSelectionModel::currentChanged, this,
+            [this](const QModelIndex& current) { onListCurrentChanged(current); });
+
+    // ----- collection stack -----
+    m_collection = new QStackedWidget(this);
+    m_collection->addWidget(m_grid);
+    m_collection->addWidget(m_list);
+    m_collection->addWidget(new ZeroEmptyState(QStringLiteral("search"), tr("No instances found"), tr("Try a different search term."), {}, this));
+
+    m_details = new InstanceDetailsPanel(this);
+    connect(m_details, &InstanceDetailsPanel::renameRequested, this, &LibraryPage::renameRequested);
+    connect(m_details, &InstanceDetailsPanel::changeIconRequested, this, &LibraryPage::changeIconRequested);
+
+    auto* collectionRow = new QWidget(this);
+    auto* row = new QHBoxLayout(collectionRow);
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(Tokens::spaceLg);
+    row->addWidget(m_collection, 1);
+    row->addWidget(m_details);
+
+    auto* libraryEmpty = new ZeroEmptyState(QStringLiteral("library-big"), tr("Your library is empty"),
+                                            tr("Create an instance, install a modpack or import one you already have."), tr("New instance"), this);
+    connect(libraryEmpty, &ZeroEmptyState::actionTriggered, this, &LibraryPage::newInstanceRequested);
+    connect(libraryEmpty->addSecondaryAction(tr("Import")), &QPushButton::clicked, this, &LibraryPage::importRequested);
+
+    m_body = new QStackedWidget(this);
+    m_body->addWidget(collectionRow);
+    m_body->addWidget(libraryEmpty);
+
+    auto* page = new QVBoxLayout(this);
+    page->setContentsMargins(Tokens::spaceXl, Tokens::spaceXl, Tokens::spaceXl, Tokens::spaceXl);
+    page->setSpacing(0);
+    page->addWidget(m_header);
+    page->addWidget(m_body, 1);
+
+    // ----- behavior -----
+    connect(m_search, &QLineEdit::textChanged, this, &LibraryPage::applyFilter);
+    auto* findShortcut = new QShortcut(QKeySequence(QKeySequence::Find), this);
+    connect(findShortcut, &QShortcut::activated, this, [this]() { focusSearch(); });
+
+    connect(m_sortCombo, &QComboBox::activated, this, [this](int i) {
+        APPLICATION->settings()->set("InstSortMode", m_sortCombo->itemData(i).toString());
+        m_proxy->invalidate();
+        m_proxy->sort(0);
+    });
+    syncSortFromSettings();
+
+    connect(m_gridButton, &QAbstractButton::clicked, this, [this]() { setViewMode(false); });
+    connect(m_listButton, &QAbstractButton::clicked, this, [this]() { setViewMode(true); });
+
+    // keep counts / empty states live (instances added, removed, renamed, filtered)
+    connect(m_proxy, &QAbstractItemModel::rowsInserted, this, [this]() { updateState(); });
+    connect(m_proxy, &QAbstractItemModel::rowsRemoved, this, [this]() { updateState(); });
+    connect(m_proxy, &QAbstractItemModel::modelReset, this, [this]() { updateState(); });
+    connect(m_proxy, &QAbstractItemModel::layoutChanged, this, [this]() { updateState(); });
+    connect(APPLICATION->instances(), &QAbstractItemModel::rowsInserted, this, [this]() { updateState(); });
+    connect(APPLICATION->instances(), &QAbstractItemModel::rowsRemoved, this, [this]() { updateState(); });
+    connect(APPLICATION->instances(), &QAbstractItemModel::modelReset, this, [this]() { updateState(); });
+
+    // selection: the grid's selection model is the single source of truth
+    connect(m_grid->selectionModel(), &QItemSelectionModel::currentChanged, this, [this](const QModelIndex& current) {
+        if (current.isValid() && !m_filtering)
+            m_rememberedId = current.data(InstanceList::InstanceIDRole).toString();
+        syncListFromGrid();
+    });
+    connect(m_table, &QAbstractItemModel::modelReset, this, [this]() { syncListFromGrid(); });
+    connect(m_table, &QAbstractItemModel::layoutChanged, this, [this]() { syncListFromGrid(); });
+
+    connect(&Theme::instance(), &Theme::changed, this, &LibraryPage::refreshIcons);
+    refreshIcons();
+
+    const bool list = APPLICATION->settings()->get("ZeroLibraryView").toString() == QLatin1String("list");
+    setViewMode(list);
+    updateState();
+}
+
+void LibraryPage::refreshIcons()
+{
+    const auto& t = Theme::current();
+    m_gridButton->setIcon(Icons::icon(QStringLiteral("layout-grid"), t.textSecondary));
+    m_listButton->setIcon(Icons::icon(QStringLiteral("list"), t.textSecondary));
+    m_newButton->setIcon(Icons::icon(QStringLiteral("plus"), t.onAccent));
+    const QIcon searchIcon = Icons::icon(QStringLiteral("search"), t.textTertiary);
+    if (m_searchAction)
+        m_searchAction->setIcon(searchIcon);
+    else
+        m_searchAction = m_search->addAction(searchIcon, QLineEdit::LeadingPosition);
+}
+
+void LibraryPage::setActions(const LibraryActions& actions)
+{
+    m_details->setActions(actions);
+}
+
+void LibraryPage::setCurrentInstance(MinecraftInstance* instance)
+{
+    m_details->setInstance(instance);
+}
+
+bool LibraryPage::isListMode() const
+{
+    return m_listMode;
+}
+
+QAbstractItemView* LibraryPage::activeView() const
+{
+    return m_listMode ? static_cast<QAbstractItemView*>(m_list) : static_cast<QAbstractItemView*>(m_grid);
+}
+
+QAbstractItemView* LibraryPage::listView() const
+{
+    return m_list;
+}
+
+void LibraryPage::beginRename()
+{
+    if (!m_listMode && m_collection->currentWidget() == m_grid) {
+        if (m_grid->currentIndex().isValid())
+            m_grid->edit(m_grid->currentIndex());
+    } else {
+        m_details->beginRename();
+    }
+}
+
+void LibraryPage::focusSearch()
+{
+    m_search->setFocus(Qt::ShortcutFocusReason);
+    m_search->selectAll();
+}
+
+void LibraryPage::setSearchText(const QString& text)
+{
+    m_search->setText(text);
+}
+
+void LibraryPage::syncSortFromSettings()
+{
+    const QString mode = APPLICATION->settings()->get("InstSortMode").toString();
+    int index = m_sortCombo->findData(mode);
+    if (index < 0 && !mode.isEmpty()) {
+        // a mode the settings dialog offers but this page does not (e.g. Playtime): show it while it is active
+        m_sortCombo->addItem(mode == QLatin1String("Playtime") ? tr("Playtime") : mode, mode);
+        index = m_sortCombo->count() - 1;
+    }
+    m_sortCombo->setCurrentIndex(index);
+}
+
+void LibraryPage::setViewMode(bool list)
+{
+    m_listMode = list;
+    (list ? m_listButton : m_gridButton)->setChecked(true);
+    if (APPLICATION->settings()->get("ZeroLibraryView").toString() != (list ? QLatin1String("list") : QLatin1String("grid")))
+        APPLICATION->settings()->set("ZeroLibraryView", list ? QStringLiteral("list") : QStringLiteral("grid"));
+    updateState();
+    syncListFromGrid();
+    activeView()->setFocus();
+}
+
+void LibraryPage::applyFilter(const QString& text)
+{
+    const QString keep = m_rememberedId;
+    m_filtering = true;  // Qt moves the current index to a neighbor when its row is filtered out: do not remember that
+    m_proxy->setFilterText(text);
+    // The selected instance comes back when the filter shows it again; while it is hidden nothing is selected
+    // (the details panel would otherwise show an instance that is not highlighted anywhere).
+    const QModelIndex source = keep.isEmpty() ? QModelIndex() : APPLICATION->instances()->getInstanceIndexById(keep);
+    const QModelIndex mapped = source.isValid() ? m_proxy->mapFromSource(source) : QModelIndex();
+    if (mapped.isValid()) {
+        if (m_grid->currentIndex() != mapped || !m_grid->selectionModel()->isSelected(mapped))
+            m_grid->selectionModel()->setCurrentIndex(mapped, QItemSelectionModel::ClearAndSelect);
+    } else if (m_grid->currentIndex().isValid()) {
+        m_grid->selectionModel()->clear();  // clears the selection and the current index
+    }
+    m_filtering = false;
+    updateState();
+}
+
+void LibraryPage::updateState()
+{
+    const int total = APPLICATION->instances()->count();
+    const int shown = m_proxy->rowCount();
+    const bool filtering = !m_proxy->filterText().isEmpty();
+
+    if (total == 0)
+        m_header->setSubtitle(tr("No instances"));
+    else if (filtering)
+        m_header->setSubtitle(total == 1 ? tr("%1 of 1 instance").arg(shown) : tr("%1 of %2 instances").arg(shown).arg(total));
+    else
+        m_header->setSubtitle(total == 1 ? tr("1 instance") : tr("%1 instances").arg(total));
+
+    m_header->setVisible(true);
+    // nothing to search, sort or switch views for in an empty library
+    m_search->setVisible(total > 0);
+    m_sortCombo->setVisible(total > 0);
+    m_gridButton->parentWidget()->setVisible(total > 0);
+
+    if (total == 0) {
+        m_body->setCurrentIndex(1);
+        return;
+    }
+    m_body->setCurrentIndex(0);
+    m_details->setVisible(true);
+    if (shown == 0)
+        m_collection->setCurrentIndex(2);
+    else
+        m_collection->setCurrentIndex(m_listMode ? 1 : 0);
+}
+
+void LibraryPage::syncListFromGrid()
+{
+    if (m_syncing)
+        return;
+    m_syncing = true;
+    const QModelIndex current = m_grid->currentIndex();
+    if (current.isValid()) {
+        const QModelIndex mapped = m_sort->mapFromSource(m_table->fromSource(current));
+        if (mapped.isValid() && m_list->currentIndex() != mapped) {
+            m_list->selectionModel()->setCurrentIndex(mapped, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+            m_list->scrollTo(mapped);
+        }
+    } else {
+        m_list->selectionModel()->clearSelection();
+        m_list->setCurrentIndex(QModelIndex());
+    }
+    m_syncing = false;
+}
+
+void LibraryPage::onListCurrentChanged(const QModelIndex& current)
+{
+    if (m_syncing || !current.isValid())
+        return;
+    m_syncing = true;
+    const QModelIndex source = m_table->sourceIndex(m_sort->mapToSource(current));
+    if (source.isValid() && m_grid->currentIndex() != source)
+        m_grid->selectionModel()->setCurrentIndex(source, QItemSelectionModel::ClearAndSelect);
+    m_syncing = false;
+}
+
+bool LibraryPage::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_search && event->type() == QEvent::KeyPress) {
+        auto* key = static_cast<QKeyEvent*>(event);
+        if (key->key() == Qt::Key_Escape) {
+            m_search->clear();
+            activeView()->setFocus();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+}  // namespace Zero

@@ -61,7 +61,7 @@ InstanceView::InstanceView(QWidget* parent) : QAbstractItemView(parent)
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setAcceptDrops(true);
     setAutoScroll(true);
-    setPaintCat(APPLICATION->settings()->get("TheCat").toBool());
+    setMouseTracking(true);  // hover feedback on the ZERO cards
     connect(verticalScrollBar(), &QScrollBar::valueChanged, viewport(), QOverload<>::of(&QWidget::update));
     connect(horizontalScrollBar(), &QScrollBar::valueChanged, viewport(), QOverload<>::of(&QWidget::update));
 }
@@ -247,7 +247,24 @@ QString InstanceView::groupNameAt(const QPoint& point)
 
 int InstanceView::calculateItemsPerRow() const
 {
-    return qFloor((qreal)(contentWidth()) / (qreal)(itemWidth() + m_spacing));
+    return qMax(1, qFloor((qreal)(contentWidth() + m_spacing) / (qreal)(itemWidth() + m_spacing)));
+}
+
+void InstanceView::setGridMetrics(int itemWidth, int spacing)
+{
+    m_itemWidth = itemWidth;
+    m_spacing = spacing;
+    m_currentItemsPerRow = calculateItemsPerRow();
+    scheduleDelayedItemsLayout();
+}
+
+void InstanceView::leaveEvent(QEvent* event)
+{
+    QAbstractItemView::leaveEvent(event);
+    if (m_hoverIndex.isValid()) {
+        m_hoverIndex = QModelIndex();
+        viewport()->update();
+    }
 }
 
 int InstanceView::contentWidth() const
@@ -309,6 +326,14 @@ void InstanceView::mousePressEvent(QMouseEvent* event)
 void InstanceView::mouseMoveEvent(QMouseEvent* event)
 {
     executeDelayedItemsLayout();
+
+    {
+        const QModelIndex hovered = indexAt(event->pos());
+        if (hovered != m_hoverIndex) {
+            m_hoverIndex = hovered;
+            viewport()->update();
+        }
+    }
 
     QPoint topLeft;
     QPoint visualPos = event->pos();
@@ -527,6 +552,11 @@ void InstanceView::paintEvent([[maybe_unused]] QPaintEvent* event)
             option.state &= ~QStyle::State_Selected;
         }
         option.state |= (index == currentIndex()) ? QStyle::State_HasFocus : QStyle::State_None;
+        if (index == m_hoverIndex) {
+            option.state |= QStyle::State_MouseOver;
+        } else {
+            option.state &= ~QStyle::State_MouseOver;
+        }
         if (!(flags & Qt::ItemIsEnabled)) {
             option.state &= ~QStyle::State_Enabled;
         }
@@ -710,8 +740,8 @@ QRect InstanceView::geometryRect(const QModelIndex& index) const
     initViewItemOption(&option);
 
     QRect out;
-    out.setTop(cat->verticalPosition() + cat->headerHeight() + 5 + cat->rowTopOf(index));
-    out.setLeft(m_spacing + x * (itemWidth() + m_spacing));
+    out.setTop(cat->verticalPosition() + cat->headerHeight() + cat->rowTopOf(index));
+    out.setLeft(m_leftMargin + x * (itemWidth() + m_spacing));
     out.setSize(itemDelegate()->sizeHint(option, index));
     m_geometryCache.insert(row, new QRect(out));
     return out;

@@ -329,7 +329,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { "alive", "Write a small '" + g_liveCheckFile + "' file after the launcher starts" },
           { "show-window", "Show the main launcher window (useful in combination with --launch)" },
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
-          { "show", "Opens the window for the specified instance (by instance ID)", "show" } });
+          { "show", "Opens the window for the specified instance (by instance ID)", "show" },
+          { "zero-screenshot", "Dev aid: show the main window, save a screenshot to the given PNG file and quit (use with -d)", "file" },
+          { "zero-page", "Page for --zero-screenshot: home or library (default: home)", "page" } });
     // Has to be positional for some OS to handle that properly
     parser.addPositionalArgument("URL", "Import the resource(s) at the given URL(s) (same as -I / --import)", "[URL...]");
 
@@ -350,6 +352,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
     m_instanceIdToShowWindowOf = parser.value("show");
     m_showMainWindow = parser.isSet("show-window");
+    m_zeroScreenshotPath = parser.value("zero-screenshot");
+    m_zeroScreenshotPage = parser.isSet("zero-page") ? parser.value("zero-page") : QStringLiteral("home");
 
     for (const auto& url : parser.values("import")) {
         m_urlsToImport.append(normalizeImportUrl(url));
@@ -658,6 +662,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // ZERO: one-time switch to Obsidian + flat_white (so users imported from Prism get the ZERO look once)
         m_settings->registerSetting("ZeroThemeInitialized", false);
         m_settings->registerSetting("ZeroReduceMotion", false);
+        m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
 
         // Remembered state
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());
@@ -1257,6 +1262,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
 bool Application::createSetupWizard()
 {
+    // --zero-screenshot runs unattended: no wizard (the caller applies the theme).
+    if (!m_zeroScreenshotPath.isEmpty())
+        return false;
     bool javaRequired = [this]() {
         if (BuildConfig.JAVA_DOWNLOADER_ENABLED && settings()->get("AutomaticJavaDownload").toBool()) {
             return false;
@@ -1430,6 +1438,11 @@ void Application::performMainStartupAction()
         // normal main window
         showMainWindow(false);
         qDebug() << "<> Main window shown.";
+    }
+
+    if (!m_zeroScreenshotPath.isEmpty() && m_mainWindow) {
+        m_mainWindow->zeroScreenshot(m_zeroScreenshotPath, m_zeroScreenshotPage);
+        return;
     }
 
     // initialize the updater
@@ -1727,7 +1740,8 @@ MainWindow* Application::showMainWindow(bool minimized)
             m_mainWindow->show();
         }
 
-        m_mainWindow->checkInstancePathForProblems();
+        if (m_zeroScreenshotPath.isEmpty())  // modal warnings (temp folder, "!" in path) would block unattended runs
+            m_mainWindow->checkInstancePathForProblems();
         connect(this, &Application::updateAllowedChanged, m_mainWindow, &MainWindow::updatesAllowedChanged);
         connect(m_mainWindow, &MainWindow::isClosing, this, [this] {
             m_mainWindow = nullptr;

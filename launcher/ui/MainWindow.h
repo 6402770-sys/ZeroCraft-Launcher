@@ -59,6 +59,13 @@ class BaseProfilerFactory;
 class InstanceView;
 class KonamiCode;
 class InstanceTask;
+class QMenu;
+
+namespace Zero {
+class HomePage;
+class LibraryPage;
+class ZeroShell;
+}  // namespace Zero
 
 namespace Ui {
 class MainWindow;
@@ -79,11 +86,17 @@ class MainWindow : public QMainWindow {
     void updatesAllowedChanged(bool allowed);
 
     void processURLs(QList<QUrl> urls);
+
+    /// Dev aid (`--zero-screenshot`): shows `page` ("home" or "library"), grabs the window to `path` and quits.
+    void zeroScreenshot(const QString& path, const QString& page);
    signals:
     void isClosing();
 
    protected:
     QMenu* createPopupMenu() override;
+    void showEvent(QShowEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
    private slots:
     void onCatToggled(bool);
@@ -225,7 +238,7 @@ class MainWindow : public QMainWindow {
 
     void updateInstanceToolBarOrientation(Qt::Orientation orientation);
 
-    void addInstance(const QString& url = QString(), const QMap<QString, QString>& extra_info = {});
+    void addInstance(const QString& url = QString(), const QMap<QString, QString>& extra_info = {}, const QString& initialPage = QString());
     void setCatBackground(bool enabled);
     void updateCatState();
     void updateInstanceToolIcon(QString new_icon);
@@ -237,6 +250,16 @@ class MainWindow : public QMainWindow {
     void instanceFromInstanceTask(InstanceTask* task);
 
     void handleInstanceRename(const QString& before, const QString& after);
+
+    // ZERO shell
+    void setupZeroShell();
+    void hideLegacyChrome();
+    void updateAccountChip();
+    void showAccountMenu(const QPoint& anchor);
+    void showMoreMenu(const QPoint& anchor);
+    void showInstanceContextMenuAt(const QPoint& globalPos, bool onInstance, const QString& group);
+    void renameSelectedInstance(const QString& newName);
+    void editInstance(MinecraftInstance* instance);
 
    private:
     Ui::MainWindow* ui;
@@ -252,6 +275,11 @@ class MainWindow : public QMainWindow {
     EditableLabel* m_nameLabel = nullptr;
     QToolButton* helpMenuButton = nullptr;
     KonamiCode* secretEventFilter = nullptr;
+
+    Zero::ZeroShell* m_shell = nullptr;
+    Zero::HomePage* m_home = nullptr;
+    Zero::LibraryPage* m_library = nullptr;
+    QList<QAction*> m_accountActions;  // per-account actions (they carry the Ctrl+N shortcuts), recreated on repopulate
 
     unique_qobject_ptr<NewsChecker> m_newsChecker;
 

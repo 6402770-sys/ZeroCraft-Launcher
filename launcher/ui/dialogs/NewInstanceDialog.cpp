@@ -206,6 +206,11 @@ NewInstanceDialog::NewInstanceDialog(const QString& initialGroup,
     connect(m_container, &PageContainer::selectedPageChanged, this, &NewInstanceDialog::selectedPageChanged);
 }
 
+void NewInstanceDialog::selectPage(const QString& id)
+{
+    m_container->selectPage(id);
+}
+
 void NewInstanceDialog::reject()
 {
     APPLICATION->settings()->set("NewInstanceGeometry", QString::fromUtf8(saveGeometry().toBase64()));

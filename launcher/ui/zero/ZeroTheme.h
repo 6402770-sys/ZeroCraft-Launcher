@@ -6,6 +6,11 @@
 
 namespace Zero {
 
+/// Called by ThemeManager when the application theme changes. The popup / dark title bar hooks only act while
+/// the ZERO theme is active, so they stay inert after the user switches to another theme.
+void setThemeActive(bool active);
+bool isThemeActive();
+
 /// Applies the Obsidian ThemeSpec app-wide: Fusion base style, palette, base font and the generated stylesheet.
 /// Reads the "ZeroReduceMotion" setting (when an Application exists) into the active ThemeSpec.
 class ZeroTheme : public FusionTheme {

@@ -651,6 +651,8 @@ void InstanceList::add(std::vector<std::unique_ptr<MinecraftInstance>>& t)
         MinecraftInstance* inst = ptr.get();
         m_instances.push_back(std::move(ptr));
         connect(inst, &MinecraftInstance::propertiesChanged, this, [this, inst]() { propertiesChanged(inst); });
+        // ZERO: the shell (Home hero, Library cards and details) shows the running state, so announce changes through the model.
+        connect(inst, &MinecraftInstance::runningStatusChanged, this, [this, inst]() { propertiesChanged(inst); });
     }
     endInsertRows();
 }

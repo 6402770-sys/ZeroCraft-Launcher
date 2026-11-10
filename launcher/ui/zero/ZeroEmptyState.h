@@ -4,6 +4,7 @@
 
 #include <QWidget>
 
+class QHBoxLayout;
 class QLabel;
 class QPushButton;
 
@@ -21,6 +22,8 @@ class ZeroEmptyState : public QWidget {
     void setTitle(const QString& title);
     void setBody(const QString& body);
     void setActionText(const QString& text);
+    /// Adds a secondary (outlined) button next to the primary action and returns it; connect to its clicked().
+    QPushButton* addSecondaryAction(const QString& text);
 
    signals:
     void actionTriggered();
@@ -33,6 +36,7 @@ class ZeroEmptyState : public QWidget {
     QLabel* m_title;
     QLabel* m_body;
     QPushButton* m_action;
+    QHBoxLayout* m_actions;
 };
 
 }  // namespace Zero

@@ -46,6 +46,9 @@
 #include "ui_MainWindow.h"
 
 #include <QDir>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QFileInfo>
 #include <QUrl>
 #include <QUrlQuery>
@@ -106,6 +109,11 @@
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/dialogs/skins/SkinManageDialog.h"
 #include "ui/instanceview/InstanceDelegate.h"
+#include "ui/zero/ZeroToast.h"
+#include "ui/zero/pages/HomePage.h"
+#include "ui/zero/pages/LibraryPage.h"
+#include "ui/zero/pages/ZeroInstanceDelegate.h"
+#include "ui/zero/shell/ZeroShell.h"
 #include "ui/instanceview/InstanceProxyModel.h"
 #include "ui/instanceview/InstanceView.h"
 #include "ui/themes/ITheme.h"
@@ -150,6 +158,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 {
     ui->setupUi(this);
 
+    // ZERO: default / minimum size (a saved geometry from a previous run overrides the default in showMainWindow)
+    resize(1280, 800);
+    setMinimumSize(1100, 700);
+    setAcceptDrops(true);
+
     setWindowIcon(APPLICATION->logo());
     setWindowTitle(APPLICATION->applicationDisplayName());
 #ifndef QT_NO_ACCESSIBILITY
@@ -182,21 +195,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         m_nameLabel = new EditableLabel(infoWidget);
         m_nameLabel->setObjectName(QStringLiteral("nameLabel"));
         m_nameLabel->setText(tr("No Instance Selected"));
-        connect(m_nameLabel, &EditableLabel::textChanged, this, [this](const QString& newName) {
-            if (m_selectedInstance == nullptr) {
-                return;
-            }
-            auto* instances = APPLICATION->instances();
-            const auto oldName = m_selectedInstance->name();
-            const bool ok = instances->setData(instances->index(instances->getInstIndex(m_selectedInstance)), newName, Qt::EditRole);
-            if (!ok) {
-                m_nameLabel->setText(m_selectedInstance->name());
-                return;
-            }
-
-            handleInstanceRename(oldName, m_selectedInstance->name());
-            m_nameLabel->setText(m_selectedInstance->name());
-        });
+        connect(m_nameLabel, &EditableLabel::textChanged, this, &MainWindow::renameSelectedInstance);
 
         infoLayout->addWidget(m_nameLabel);
 
@@ -306,11 +305,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Create the instance list widget
     {
-        view = new InstanceView(ui->centralWidget);
+        view = new InstanceView(this);
 
         view->setSelectionMode(QAbstractItemView::SingleSelection);
         // FIXME: leaks ListViewDelegate
-        auto delegate = new ListViewDelegate(this);
+        auto delegate = new Zero::ZeroInstanceDelegate(this);
         view->setItemDelegate(delegate);
         view->setFrameShape(QFrame::NoFrame);
         // do not show ugly blue border on the mac
@@ -331,8 +330,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         view->setSourceOfGroupCollapseStatus(
             [](const QString& groupName) -> bool { return APPLICATION->instances()->isGroupCollapsed(groupName); });
         connect(view, &InstanceView::groupStateChanged, APPLICATION->instances(), &InstanceList::on_GroupStateChanged);
-        ui->horizontalLayout->addWidget(view);
     }
+    setupZeroShell();
     // The cat background
     {
         // set the cat action priority here so you can still see the action in qt designer
@@ -435,10 +434,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifndef Q_OS_MACOS
 void MainWindow::keyReleaseEvent(QKeyEvent* event)
 {
-    if (event->key() == Qt::Key_Alt && !APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool())
-        ui->menuBar->setVisible(!ui->menuBar->isVisible());
-    else
-        QMainWindow::keyReleaseEvent(event);
+    // ZERO: the menu bar is gone, Alt no longer toggles it.
+    QMainWindow::keyReleaseEvent(event);
 }
 #endif
 
@@ -487,7 +484,8 @@ QMenu* MainWindow::createPopupMenu()
 }
 void MainWindow::setStatusBarVisibility(bool state)
 {
-    statusBar()->setVisible(state);
+    // ZERO: the status bar is not part of the shell; the setting is kept for the legacy action.
+    statusBar()->setVisible(false);
     APPLICATION->settings()->set("StatusBarVisible", state);
 }
 void MainWindow::lockToolbars(bool state)
@@ -523,6 +521,12 @@ void MainWindow::konamiTriggered()
 
 void MainWindow::showInstanceContextMenu(const QPoint& pos)
 {
+    const bool onInstance = view->indexAt(pos).isValid();
+    showInstanceContextMenuAt(view->mapToGlobal(pos), onInstance, onInstance ? QString() : view->groupNameAt(pos));
+}
+
+void MainWindow::showInstanceContextMenuAt(const QPoint& globalPos, bool onInstance, const QString& group)
+{
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
     QList<QAction*> actions;
@@ -530,8 +534,7 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
     auto* actionSep = new QAction("", menu);
     actionSep->setSeparator(true);
 
-    bool onInstance = view->indexAt(pos).isValid();
-    if (onInstance) {
+    if (onInstance && m_selectedInstance) {
         // reuse the file menu actions
         actions = ui->fileMenu->actions();
 
@@ -549,8 +552,6 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         actionVoid->setEnabled(false);
         actions.prepend(actionVoid);
     } else {
-        auto group = view->groupNameAt(pos);
-
         auto* actionVoid = new QAction(group.isNull() ? BuildConfig.LAUNCHER_DISPLAYNAME : group, menu);
         actionVoid->setEnabled(false);
 
@@ -588,13 +589,13 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         }
     }
     menu->addActions(actions);
-    menu->popup(view->mapToGlobal(pos));
+    menu->popup(globalPos);
 }
 
 void MainWindow::updateMainToolBar()
 {
-    ui->menuBar->setVisible(APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
-    ui->mainToolBar->setVisible(ui->menuBar->isNativeMenuBar() || !APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
+    // ZERO: toolbars, menu bar and status bar are replaced by the shell. The QActions they hold stay alive.
+    hideLegacyChrome();
 }
 
 void MainWindow::updateLaunchButton()
@@ -671,6 +672,12 @@ void MainWindow::repopulateAccountsMenu()
 
     QActionGroup* accountsGroup = new QActionGroup(this);
 
+    for (QAction* old : std::as_const(m_accountActions)) {
+        removeAction(old);
+        old->deleteLater();
+    }
+    m_accountActions.clear();
+
     if (accounts->count() <= 0) {
         ui->actionNoAccountsAdded->setEnabled(false);
         ui->accountsMenu->addAction(ui->actionNoAccountsAdded);
@@ -700,6 +707,9 @@ void MainWindow::repopulateAccountsMenu()
             }
 
             ui->accountsMenu->addAction(action);
+            // The menu bar is hidden in the ZERO shell, so register the action (and its shortcut) on the window itself.
+            addAction(action);
+            m_accountActions.append(action);
             connect(action, &QAction::triggered, this, &MainWindow::changeActiveAccount);
         }
     }
@@ -754,6 +764,7 @@ void MainWindow::changeActiveAccount()
 void MainWindow::defaultAccountChanged()
 {
     repopulateAccountsMenu();
+    updateAccountChip();
 
     MinecraftAccountPtr account = APPLICATION->accounts()->defaultAccount();
 
@@ -777,7 +788,7 @@ void MainWindow::defaultAccountChanged()
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* ev)
 {
-    if (obj == view) {
+    if (obj == view || (m_library && obj == m_library->listView())) {
         if (ev->type() == QEvent::KeyPress) {
             secretEventFilter->input(ev);
             QKeyEvent* keyEvent = static_cast<QKeyEvent*>(ev);
@@ -833,8 +844,9 @@ void MainWindow::onCatToggled(bool state)
 
 void MainWindow::setCatBackground(bool enabled)
 {
-    view->setPaintCat(enabled);
-    view->viewport()->repaint();
+    // ZERO: the cat background is a Prism feature the card grid does not support.
+    Q_UNUSED(enabled);
+    view->setPaintCat(false);
 }
 
 void MainWindow::updateCatState()
@@ -890,7 +902,7 @@ void MainWindow::on_actionCopyInstance_triggered()
     runModalTask(task.get());
 }
 
-void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& extra_info)
+void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& extra_info, const QString& initialPage)
 {
     QString groupName;
     do {
@@ -911,6 +923,8 @@ void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& e
     }
 
     NewInstanceDialog newInstDlg(groupName, url, extra_info, this);
+    if (!initialPage.isEmpty())
+        newInstDlg.selectPage(initialPage);
     if (!newInstDlg.exec())
         return;
 
@@ -1414,6 +1428,7 @@ void MainWindow::globalSettingsClosed()
 {
     proxymodel->invalidate();
     proxymodel->sort(0);
+    m_library->syncSortFromSettings();
     updateMainToolBar();
     updateLaunchButton();
     updateThemeMenu();
@@ -1427,11 +1442,16 @@ void MainWindow::globalSettingsClosed()
 
 void MainWindow::on_actionEditInstance_triggered()
 {
-    if (!m_selectedInstance)
+    editInstance(m_selectedInstance);
+}
+
+void MainWindow::editInstance(MinecraftInstance* instance)
+{
+    if (!instance)
         return;
 
-    if (m_selectedInstance->canEdit()) {
-        APPLICATION->showInstanceWindow(m_selectedInstance);
+    if (instance->canEdit()) {
+        APPLICATION->showInstanceWindow(instance);
     } else {
         CustomMessageBox::selectable(this, tr("Instance not editable"),
                                      tr("This instance is not editable. It may be broken, invalid, or too old. Check logs for details."),
@@ -1543,6 +1563,7 @@ void MainWindow::on_actionDeleteInstance_triggered()
         return;
     }
     auto id = m_selectedInstance->id();
+    const QString deletedName = m_selectedInstance->name();
 
     QString shortcutStr;
     auto shortcuts = m_selectedInstance->shortcuts();
@@ -1564,6 +1585,8 @@ void MainWindow::on_actionDeleteInstance_triggered()
 
     if (APPLICATION->instances()->trashInstance(id)) {
         ui->actionUndoTrashInstance->setEnabled(APPLICATION->instances()->trashedSomething());
+        Zero::ZeroToast::show(this, tr("Deleted \"%1\"").arg(deletedName), Zero::ZeroToast::Kind::Info, tr("Undo"),
+                              [this]() { undoTrashInstance(); });
     } else {
         APPLICATION->instances()->deleteInstance(id);
     }
@@ -1605,7 +1628,7 @@ void MainWindow::on_actionExportInstanceFlamePack_triggered()
 void MainWindow::on_actionRenameInstance_triggered()
 {
     if (m_selectedInstance) {
-        view->edit(view->currentIndex());
+        m_library->beginRename();
     }
 }
 
@@ -1726,6 +1749,8 @@ void MainWindow::instanceChanged(const QModelIndex& current, [[maybe_unused]] co
         updateLaunchButton();
 
         APPLICATION->settings()->set("SelectedInstance", m_selectedInstance->id());
+        if (m_library)
+            m_library->setCurrentInstance(m_selectedInstance);
 
         connect(m_selectedInstance, &BaseInstance::runningStatusChanged, this, &MainWindow::refreshCurrentInstance);
         connect(m_selectedInstance, &BaseInstance::profilerChanged, this, &MainWindow::refreshCurrentInstance);
@@ -1762,6 +1787,8 @@ void MainWindow::selectionBad()
     updateLaunchButton();
     m_nameLabel->setText(tr("No Instance Selected"));
     updateInstanceToolIcon("default");
+    if (m_library)
+        m_library->setCurrentInstance(nullptr);
 
     // ...and then see if we can enable the previously selected instance
     setSelectedInstanceById(APPLICATION->settings()->get("SelectedInstance").toString());
@@ -1866,4 +1893,239 @@ void MainWindow::handleInstanceRename(const QString& before, const QString& afte
     if (syncGroup) {
         APPLICATION->instances()->setInstanceGroup(newID, origGroup);
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ZERO shell. MainWindow stays the controller; the pages only trigger its actions / APIs (docs/zero/SHELL.md).
+// ---------------------------------------------------------------------------------------------------------------------
+
+void MainWindow::setupZeroShell()
+{
+    m_shell = new Zero::ZeroShell(ui->centralWidget);
+    ui->horizontalLayout->addWidget(m_shell);
+
+    m_home = new Zero::HomePage(m_shell);
+    m_library = new Zero::LibraryPage(view, proxymodel, m_shell);
+    m_shell->addPage(QStringLiteral("home"), QStringLiteral("house"), tr("Home"), m_home);
+    m_shell->addPage(QStringLiteral("library"), QStringLiteral("library-big"), tr("Library"), m_library);
+    m_shell->finishRail();
+
+    // The toolbars and menu bar are hidden, so their shortcuts would be dead: register every action on the window.
+    addActions({ ui->actionAddInstance, ui->actionSettings, ui->actionUndoTrashInstance, ui->actionLaunchInstance,
+                 ui->actionKillInstance, ui->actionRenameInstance, ui->actionChangeInstGroup, ui->actionChangeInstIcon,
+                 ui->actionEditInstance, ui->actionViewSelectedInstFolder, ui->actionDeleteInstance, ui->actionCopyInstance,
+                 ui->actionExportInstance, ui->actionExportInstanceZip, ui->actionExportInstanceMrPack,
+                 ui->actionExportInstanceFlamePack, ui->actionCreateInstanceShortcut, ui->actionNoDefaultAccount,
+                 ui->actionManageAccounts });
+
+    Zero::LibraryActions actions;
+    actions.launch = ui->actionLaunchInstance;
+    actions.kill = ui->actionKillInstance;
+    actions.edit = ui->actionEditInstance;
+    actions.folder = ui->actionViewSelectedInstFolder;
+    actions.group = ui->actionChangeInstGroup;
+    actions.copy = ui->actionCopyInstance;
+    actions.exportInstance = ui->actionExportInstance;
+    actions.shortcut = ui->actionCreateInstanceShortcut;
+    actions.remove = ui->actionDeleteInstance;
+    m_library->setActions(actions);
+    m_library->listView()->installEventFilter(this);
+
+    // Library
+    connect(m_library, &Zero::LibraryPage::newInstanceRequested, this, &MainWindow::on_actionAddInstance_triggered);
+    connect(m_library, &Zero::LibraryPage::importRequested, this, [this]() { addInstance(QString(), {}, QStringLiteral("import")); });
+    connect(m_library, &Zero::LibraryPage::instanceActivated, this, &MainWindow::instanceActivated);
+    connect(m_library, &Zero::LibraryPage::listContextMenuRequested, this,
+            [this](const QPoint& globalPos, const QModelIndex&) { showInstanceContextMenuAt(globalPos, true, QString()); });
+    connect(m_library, &Zero::LibraryPage::renameRequested, this, &MainWindow::renameSelectedInstance);
+    connect(m_library, &Zero::LibraryPage::changeIconRequested, this, &MainWindow::on_actionChangeInstIcon_triggered);
+
+    // Home
+    auto withInstance = [](const QString& id, auto&& fn) {
+        if (auto* inst = APPLICATION->instances()->getInstanceById(id))
+            fn(inst);
+    };
+    connect(m_home, &Zero::HomePage::playRequested, this, [withInstance](const QString& id) {
+        withInstance(id, [](MinecraftInstance* inst) {
+            if (!inst->isRunning())
+                APPLICATION->launch(inst);
+        });
+    });
+    connect(m_home, &Zero::HomePage::stopRequested, this, [withInstance](const QString& id) {
+        withInstance(id, [](MinecraftInstance* inst) {
+            if (inst->isRunning())
+                APPLICATION->kill(inst);
+        });
+    });
+    connect(m_home, &Zero::HomePage::editRequested, this,
+            [this, withInstance](const QString& id) { withInstance(id, [this](MinecraftInstance* inst) { editInstance(inst); }); });
+    connect(m_home, &Zero::HomePage::folderRequested, this, [withInstance](const QString& id) {
+        withInstance(id, [](MinecraftInstance* inst) { DesktopServices::openPath(QFileInfo(inst->instanceRoot())); });
+    });
+    connect(m_home, &Zero::HomePage::openInLibraryRequested, this, [this](const QString& id) {
+        setSelectedInstanceById(id);
+        m_shell->setCurrentPage(QStringLiteral("library"));
+        if (view->currentIndex().isValid())
+            view->scrollTo(view->currentIndex());
+    });
+    connect(m_home, &Zero::HomePage::viewLibraryRequested, this, [this]() { m_shell->setCurrentPage(QStringLiteral("library")); });
+    connect(m_home, &Zero::HomePage::newInstanceRequested, this, &MainWindow::on_actionAddInstance_triggered);
+    connect(m_home, &Zero::HomePage::importRequested, this, [this]() { addInstance(QString(), {}, QStringLiteral("import")); });
+    connect(m_home, &Zero::HomePage::accountsRequested, this, &MainWindow::on_actionManageAccounts_triggered);
+    connect(m_home, &Zero::HomePage::instancesFolderRequested, this, &MainWindow::on_actionViewInstanceFolder_triggered);
+
+    // Rail
+    connect(m_shell, &Zero::ZeroShell::accountMenuRequested, this, &MainWindow::showAccountMenu);
+    connect(m_shell, &Zero::ZeroShell::moreMenuRequested, this, &MainWindow::showMoreMenu);
+    connect(m_shell, &Zero::ZeroShell::settingsRequested, ui->actionSettings, &QAction::trigger);
+    connect(m_shell, &Zero::ZeroShell::pageChanged, this, [this](const QString& id) {
+        if (id == QLatin1String("library"))
+            m_library->activeView()->setFocus();
+    });
+
+    hideLegacyChrome();
+}
+
+void MainWindow::hideLegacyChrome()
+{
+    ui->mainToolBar->hide();
+    ui->newsToolBar->hide();
+    ui->instanceToolBar->hide();
+    ui->menuBar->hide();
+    statusBar()->hide();
+}
+
+void MainWindow::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+    // restoreState() may bring the legacy toolbars back; they are not part of the ZERO shell.
+    hideLegacyChrome();
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (event->mimeData()->hasUrls())
+        event->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent* event)
+{
+    // Files / links dropped anywhere outside the instance grid (Home, list mode, empty library) are imported too.
+    if (!event->mimeData()->hasUrls())
+        return;
+    event->acceptProposedAction();
+    const auto urls = event->mimeData()->urls();
+    QMetaObject::invokeMethod(this, [this, urls]() { processURLs(urls); }, Qt::QueuedConnection);
+}
+
+void MainWindow::updateAccountChip()
+{
+    if (!m_shell)
+        return;
+    const MinecraftAccountPtr account = APPLICATION->accounts()->defaultAccount();
+    if (account && !account->profileName().isEmpty()) {
+        m_shell->setAccount(account->displayName(), account->accountType() == AccountType::MSA ? tr("Microsoft account") : tr("Offline"),
+                            account->getFace());
+    } else {
+        m_shell->setAccount(tr("Accounts"), tr("No account"), QPixmap());
+    }
+}
+
+namespace {
+void popupAbove(QMenu* menu, const QPoint& anchor)
+{
+    menu->popup(QPoint(anchor.x(), anchor.y() - menu->sizeHint().height()));
+}
+}  // namespace
+
+void MainWindow::showAccountMenu(const QPoint& anchor)
+{
+    if (auto* menu = ui->actionAccountsButton->menu())
+        popupAbove(menu, anchor);
+}
+
+void MainWindow::showMoreMenu(const QPoint& anchor)
+{
+    auto* menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+
+    menu->addMenu(ui->foldersMenu);
+
+    auto* help = menu->addMenu(tr("Help"));
+    bool lastWasSeparator = true;
+    for (QAction* action : ui->helpMenu->actions()) {
+        if (action == ui->actionCheckUpdate || action == ui->actionAbout || action == ui->actionMoreNews)
+            continue;
+        if (action->isSeparator()) {
+            if (!lastWasSeparator)
+                help->addSeparator();
+            lastWasSeparator = true;
+        } else if (action->isVisible() && action->isEnabled()) {
+            help->addAction(action);
+            lastWasSeparator = false;
+        }
+    }
+    if (!help->actions().isEmpty() && help->actions().last()->isSeparator())
+        help->removeAction(help->actions().last());
+    help->menuAction()->setVisible(!help->actions().isEmpty());
+
+    if (ui->actionUndoTrashInstance->isEnabled()) {
+        menu->addSeparator();
+        menu->addAction(ui->actionUndoTrashInstance);
+    }
+    menu->addSeparator();
+    menu->addAction(ui->actionAbout);
+    if (APPLICATION->updaterEnabled())
+        menu->addAction(ui->actionCheckUpdate);
+
+    popupAbove(menu, anchor);
+}
+
+void MainWindow::renameSelectedInstance(const QString& newName)
+{
+    if (m_selectedInstance == nullptr)
+        return;
+    auto* instances = APPLICATION->instances();
+    const auto oldName = m_selectedInstance->name();
+    const bool ok = instances->setData(instances->index(instances->getInstIndex(m_selectedInstance)), newName, Qt::EditRole);
+    if (!ok) {
+        m_nameLabel->setText(m_selectedInstance->name());
+        return;
+    }
+
+    handleInstanceRename(oldName, m_selectedInstance->name());
+    m_nameLabel->setText(m_selectedInstance->name());
+}
+
+void MainWindow::zeroScreenshot(const QString& path, const QString& page)
+{
+    const bool library = page == QLatin1String("library");
+    m_shell->setCurrentPage(library ? QStringLiteral("library") : QStringLiteral("home"));
+    QSize size(1280, 800);
+    // Dev aid: ZERO_SCREENSHOT_SIZE=<w>x<h> (e.g. 1100x700 to review the collapsed rail).
+    const QStringList dims = qEnvironmentVariable("ZERO_SCREENSHOT_SIZE").split(QLatin1Char('x'));
+    if (dims.size() == 2 && dims[0].toInt() > 0 && dims[1].toInt() > 0)
+        size = QSize(dims[0].toInt(), dims[1].toInt());
+    resize(size);
+    // Dev aid: ZERO_SCREENSHOT_SEARCH=<text> types into the Library search field.
+    if (const QString search = qEnvironmentVariable("ZERO_SCREENSHOT_SEARCH"); !search.isEmpty())
+        m_library->setSearchText(search);
+    if (library && !view->currentIndex().isValid() && proxymodel->rowCount() > 0)
+        view->selectionModel()->setCurrentIndex(proxymodel->index(0, 0), QItemSelectionModel::ClearAndSelect);
+
+    // Dev aid: ZERO_SCREENSHOT_RUNNING=<instance id> flips that instance to "running" through the normal signal path
+    // (BaseInstance::setRunning -> InstanceList::dataChanged -> pages), so the live running state can be reviewed.
+    const QString runningId = qEnvironmentVariable("ZERO_SCREENSHOT_RUNNING");
+    if (!runningId.isEmpty()) {
+        if (auto* inst = APPLICATION->instances()->getInstanceById(runningId))
+            inst->setRunning(true);
+    }
+
+    // Let the layout, icon loading and the page fade settle before grabbing.
+    QTimer::singleShot(1500, this, [this, path]() {
+        QApplication::processEvents();
+        const bool ok = grab().save(path);
+        qInfo() << "ZERO screenshot" << (ok ? "saved to" : "FAILED for") << path;
+        APPLICATION->exit(ok ? 0 : 1);
+    });
 }

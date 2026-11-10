@@ -61,6 +61,8 @@ class NewInstanceDialog : public QDialog, public BasePageProvider {
     ~NewInstanceDialog() override;
 
     void updateDialogState();
+    /// Opens the page with the given id (e.g. "import").
+    void selectPage(const QString& id);
 
     void setSuggestedPack(const QString& name = QString(), InstanceTask* task = nullptr);
     void setSuggestedPack(const QString& name, QString version, InstanceTask* task = nullptr);

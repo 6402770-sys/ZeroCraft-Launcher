@@ -64,3 +64,6 @@ Content max width 1280, page padding xl, vertical gap xxl between sections.
 ## Dev aids
 - `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
+- Screenshot-mode environment variables (dev only, read by `MainWindow::zeroScreenshot`): `ZERO_SCREENSHOT_SIZE=<w>x<h>`
+  (default 1280x800), `ZERO_SCREENSHOT_RUNNING=<instance id>` (flips that instance to running through the normal signal
+  path), `ZERO_SCREENSHOT_SEARCH=<text>` (types into the Library search). List mode is the `ZeroLibraryView=list` setting.

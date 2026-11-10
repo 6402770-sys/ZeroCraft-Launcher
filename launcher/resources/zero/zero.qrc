@@ -3,6 +3,7 @@
     <qresource prefix="/zero">
         <file>obsidian.qss</file>
         <file>minecraft.qss</file>
+        <file alias="zero-logo.svg">../../../program_info/zero-logo.svg</file>
         <file>icons/archive.svg</file>
         <file>icons/arrow-left.svg</file>
         <file>icons/box.svg</file>

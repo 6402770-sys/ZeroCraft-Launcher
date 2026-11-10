@@ -10,7 +10,6 @@
 #include "ElidedLabel.h"
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroIcons.h"
-#include "ui/zero/ZeroPageHeader.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 
@@ -36,7 +35,7 @@ QWidget* centered(QWidget* content, QWidget* parent)
 
 }  // namespace
 
-ToolsPage::ToolsPage(QWidget* parent) : QWidget(parent)
+ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
 {
     m_stack = new QStackedLayout(this);
 
@@ -45,8 +44,6 @@ ToolsPage::ToolsPage(QWidget* parent) : QWidget(parent)
     auto* col = new QVBoxLayout(overview);
     col->setContentsMargins(0, 0, 0, 0);
     col->setSpacing(0);
-    col->addWidget(new ZeroPageHeader(tr("Tools"), tr("Utilities for keeping your instances healthy"), overview));
-
     auto* grid = new QGridLayout;
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(Tokens::spaceLg);
@@ -89,7 +86,6 @@ ToolsPage::ToolsPage(QWidget* parent) : QWidget(parent)
 
     // ----- Crash Detective -----
     m_detective = new CrashDetectiveView(this);
-    connect(m_detective, &CrashDetectiveView::backRequested, this, &ToolsPage::showOverview);
     connect(m_detective, &CrashDetectiveView::instanceSettingsRequested, this, &ToolsPage::instanceSettingsRequested);
     m_stack->addWidget(centered(m_detective, this));
 }
@@ -101,9 +97,37 @@ void ToolsPage::showEvent(QShowEvent* event)
         m_detective->refreshInstances();
 }
 
+bool ToolsPage::isToolOpen() const
+{
+    return m_stack->currentIndex() == 1;
+}
+
+QString ToolsPage::title() const
+{
+    return isToolOpen() ? tr("Crash Detective") : tr("Tools");
+}
+
+QString ToolsPage::subtitle() const
+{
+    return isToolOpen() ? CrashDetectiveView::description() : tr("Utilities for keeping your instances healthy");
+}
+
+QString ToolsPage::breadcrumbParent() const
+{
+    return isToolOpen() ? tr("Tools") : QString();
+}
+
+QWidget* ToolsPage::topBarActions() const
+{
+    return isToolOpen() ? m_detective->controlsWidget() : nullptr;  // spinner, instance combo, Analyze
+}
+
 void ToolsPage::showOverview()
 {
+    if (m_stack->currentIndex() == 0)
+        return;
     m_stack->setCurrentIndex(0);
+    emit chromeChanged();
 }
 
 void ToolsPage::setPreferredInstance(const QString& instanceId)
@@ -118,6 +142,7 @@ void ToolsPage::openCrashDetective(const QString& instanceId, bool analyzeNow, s
     if (!instanceId.isEmpty())
         m_detective->setInstance(instanceId);
     m_stack->setCurrentIndex(1);
+    emit chromeChanged();
     if (analyzeNow)
         m_detective->analyze(exitCode);
 }

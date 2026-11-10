@@ -19,7 +19,7 @@
 - `launcher/ui/zero/ZeroPixelFont.*` — original 5x7 "ZERO Pixel" font generated as TrueType in memory, `registerPixelFont()`
 - `launcher/ui/zero/ZeroPlayButton.*` — the signature Play button: custom-painted, driven by `Application::launchPhaseChanged/launchEnded` (Idle / Preparing / Running / Failed)
 - `launcher/ui/zero/pages/AppearancePage.*` — Appearance page: theme cards + live `ThemePreview` (painted from a ThemeSpec), Apply theme, motion setting
-- `launcher/ui/zero/shell/` — `ZeroShell` (rail + page stack), `AccountChip`
+- `launcher/ui/zero/shell/` — `ZeroShell` (rail + top bar + page stack, Alt+N page shortcuts), `ShellPage` (page chrome API: title/subtitle/breadcrumb/top bar actions), `ZeroTopBar` (+ `ChromeTitle`), `AccountChip` (compact chip in the top bar)
 - `launcher/ui/zero/pages/` — `HomePage`, `LibraryPage`, `InstanceDetailsPanel`, `ZeroInstanceDelegate` (grid cards), `InstanceTableModel` (list view), `InstanceInfo` (version/loader read-only), `IconTile`, `ElidedLabel`
 - `launcher/zero/` — non-UI ZERO services (diagnostics/Crash Detective, …)
 - `launcher/resources/zero/` — `obsidian.qss` (base, token placeholders), `minecraft.qss` (per-theme overlay appended to the base), `zero.qrc`, `icons/` (Lucide SVGs + LICENSE)
@@ -28,4 +28,5 @@
 - `tests/ZeroTheme_test.cpp`, `tests/ZeroPixelFont_test.cpp` — theme engine v2 (specs, contrast, panel shapes, texture) and pixel font tests
 - `tests/ZeroPlayButton_test.cpp` — Play button state machine (cycle, failure, abort, crash, ignored clicks, stop request)
 - `tests/ZeroMotion_test.cpp` — motion system: setting resolution + legacy migration, overlays (self-deleting, replaceable, nothing with motion off), ripple, toasts
+- `tests/ZeroShell_test.cpp` — shell/top bar chrome swap, breadcrumb, Alt+N shortcuts
 - `tests/Zero*_test.cpp`, `tests/CrashDetective_test.cpp` — ZERO unit tests (in `LauncherTests`, listed in `tests/CMakeLists.txt`)

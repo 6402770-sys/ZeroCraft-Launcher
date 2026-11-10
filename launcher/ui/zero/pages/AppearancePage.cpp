@@ -18,7 +18,6 @@
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroMotion.h"
-#include "ui/zero/ZeroPageHeader.h"
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroPixelFont.h"
 #include "ui/zero/ZeroStyle.h"
@@ -344,7 +343,7 @@ class ThemeCard : public ZeroCard {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-AppearancePage::AppearancePage(QWidget* parent) : QWidget(parent)
+AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
 {
     auto* pageLay = new QVBoxLayout(this);
     pageLay->setContentsMargins(0, 0, 0, 0);
@@ -369,7 +368,6 @@ AppearancePage::AppearancePage(QWidget* parent) : QWidget(parent)
     auto* col = new QVBoxLayout(column);
     col->setContentsMargins(0, 0, 0, 0);
     col->setSpacing(0);
-    col->addWidget(new ZeroPageHeader(tr("Appearance"), tr("Themes and motion"), column));
 
     // ----- Theme -----
     col->addWidget(makeLabel(tr("Theme"), Role::Heading, column));

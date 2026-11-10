@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// ZERO Launcher - Library page: header with search / sort / view toggle, instance grid or list, details panel.
+// ZERO Launcher - Library page: toolbar row (search, sort), instance grid or list, details panel. The view toggle and
+// New instance live in the shell top bar (topBarActions).
 // MainWindow stays the controller: the grid is its InstanceView + InstanceProxyModel, the actions are its QActions.
 #pragma once
 
 #include <QModelIndex>
 #include <QWidget>
 #include "InstanceDetailsPanel.h"
+#include "ui/zero/shell/ShellPage.h"
 
 class InstanceProxyModel;
 class InstanceView;
@@ -24,12 +26,15 @@ namespace Zero {
 
 class InstanceTableModel;
 class ZeroEmptyState;
-class ZeroPageHeader;
 
-class LibraryPage : public QWidget {
+class LibraryPage : public ShellPage {
     Q_OBJECT
    public:
     LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget* parent = nullptr);
+
+    QString title() const override { return tr("Library"); }
+    /// "<N> instances" (live; "<shown> of <N>" while a search filters).
+    QString subtitle() const override { return m_subtitle; }
 
     void setActions(const LibraryActions& actions);
     /// The instance MainWindow has selected (nullptr = none). Feeds the details panel.
@@ -73,7 +78,8 @@ class LibraryPage : public QWidget {
     QSortFilterProxyModel* m_sort;
     QTreeView* m_list;
 
-    ZeroPageHeader* m_header;
+    QString m_subtitle;
+    QWidget* m_toolbar;  // search (left) and sort (right) row at the top of the content
     QLineEdit* m_search;
     QComboBox* m_sortCombo;
     QAbstractButton* m_gridButton;

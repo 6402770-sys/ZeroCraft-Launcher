@@ -9,7 +9,6 @@
 #include <QWidget>
 
 class QAbstractButton;
-class QLabel;
 class QVBoxLayout;
 
 namespace Zero {
@@ -17,8 +16,8 @@ namespace Zero {
 class NavItem;
 
 /// Navigation rail: 220 px wide (64 px collapsed), `surface` background, 1px right border.
-/// Layout (top to bottom): ZERO wordmark, items added before the first addStretch(), a stretch, the bottom widget
-/// (account chip), then items added after the stretch (e.g. Settings). Items are 36 px tall; the active item has an
+/// Layout (top to bottom): a 60 px header (logo + "ZERO" wordmark, 1 px bottom line), items added before the first
+/// addStretch(), a stretch, an optional bottom widget, then items added after the stretch (e.g. Settings). Items are 36 px tall; the active item has an
 /// `elevated` pill and a 2 px `accent` indicator at the rail's left edge; both are painted once by the rail and glide
 /// between items (200 ms OutQuint) when the current item changes.
 class ZeroNavRail : public QWidget {
@@ -38,6 +37,8 @@ class ZeroNavRail : public QWidget {
     /// Widget pinned above the items that follow the first stretch. The rail takes ownership.
     void setBottomWidget(QWidget* widget);
 
+    /// Text appended to the item's tooltip ("Alt+2"); an item with a hint always has a tooltip.
+    void setItemShortcutHint(const QString& id, const QString& hint);
     void setCurrent(const QString& id);
     QString current() const { return m_current; }
     void setItemVisible(const QString& id, bool visible);
@@ -58,15 +59,12 @@ class ZeroNavRail : public QWidget {
 
    private:
     void ensureBottomHolder();
-    void refreshWordmark();
     QRectF targetPill() const;   // active item's pill from live geometry (empty if none)
     QRectF currentPill() const;  // what is painted: the target when idle, interpolated while gliding
     void startGlide(const QRectF& from);
     void updatePill();
 
     QVBoxLayout* m_layout;
-    QLabel* m_wordmark;
-    QLabel* m_caption;
     QWidget* m_bottomHolder = nullptr;
     QVBoxLayout* m_bottomLayout = nullptr;
     QHash<QString, NavItem*> m_items;

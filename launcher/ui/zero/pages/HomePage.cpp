@@ -132,7 +132,7 @@ class RecentCard : public ZeroCard {
 
 }  // namespace
 
-HomePage::HomePage(QWidget* parent) : QWidget(parent), m_refreshTimer(new QTimer(this))
+HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTimer(this))
 {
     m_refreshTimer->setSingleShot(true);
     m_refreshTimer->setInterval(0);

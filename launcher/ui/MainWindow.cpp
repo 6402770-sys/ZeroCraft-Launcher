@@ -1915,7 +1915,8 @@ void MainWindow::setupZeroShell()
     m_tools = new Zero::ToolsPage(m_shell);
     m_shell->addPage(QStringLiteral("tools"), QStringLiteral("wrench"), tr("Tools"), m_tools);
     m_appearance = new Zero::AppearancePage(m_shell);
-    m_shell->addPage(QStringLiteral("appearance"), QStringLiteral("palette"), tr("Appearance"), m_appearance);
+    m_shell->addPage(QStringLiteral("appearance"), QStringLiteral("palette"), tr("Appearance"), m_appearance,
+                     Zero::ZeroShell::Placement::Bottom);  // bottom group: Appearance, More, Settings
     m_shell->finishRail();
 
     // The toolbars and menu bar are hidden, so their shortcuts would be dead: register every action on the window.
@@ -2083,8 +2084,9 @@ void popupAbove(QMenu* menu, const QPoint& anchor)
 
 void MainWindow::showAccountMenu(const QPoint& anchor)
 {
+    // `anchor` = bottom-right corner of the top bar chip: the menu opens below it, right-aligned.
     if (auto* menu = ui->actionAccountsButton->menu())
-        popupAbove(menu, anchor);
+        menu->popup(QPoint(anchor.x() - menu->sizeHint().width(), anchor.y() + Zero::Tokens::spaceXs));
 }
 
 void MainWindow::showMoreMenu(const QPoint& anchor)

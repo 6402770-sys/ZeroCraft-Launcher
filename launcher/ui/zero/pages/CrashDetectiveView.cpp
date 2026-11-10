@@ -22,7 +22,6 @@
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroEmptyState.h"
 #include "ui/zero/ZeroIcons.h"
-#include "ui/zero/ZeroPageHeader.h"
 #include "ui/zero/ZeroSpinner.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
@@ -323,9 +322,14 @@ class FindingCard : public ZeroCard {
 
 }  // namespace
 
+QString CrashDetectiveView::description()
+{
+    return tr("Why the game stopped, analyzed offline");
+}
+
 CrashDetectiveView::CrashDetectiveView(QWidget* parent)
     : QWidget(parent),
-      m_header(new ZeroPageHeader(tr("Crash Detective"), tr("Finds out why the game stopped. Everything is analyzed on this computer."), this)),
+      m_controls(new QWidget(this)),
       m_instances(new QComboBox(this)),
       m_analyze(new QPushButton(tr("Analyze"), this)),
       m_spinner(new ZeroSpinner(ZeroSpinner::Small, this))
@@ -334,28 +338,22 @@ CrashDetectiveView::CrashDetectiveView(QWidget* parent)
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
-    // back affordance
-    auto* back = makeButton(tr("Tools"), QStringLiteral("arrow-left"), "ghost", this);
-    connect(back, &QPushButton::clicked, this, &CrashDetectiveView::backRequested);
-    auto* backRow = new QHBoxLayout;
-    backRow->setContentsMargins(0, 0, 0, Tokens::spaceSm);
-    backRow->addWidget(back);
-    backRow->addStretch(1);
-    outer->addLayout(backRow);
-
-    // header actions
-    m_instances->setMinimumWidth(240);
+    // Controls (shown by the Tools page in the top bar): spinner, instance combo, Analyze. Hidden until the top bar borrows them.
+    auto* controls = new QHBoxLayout(m_controls);
+    controls->setContentsMargins(0, 0, 0, 0);
+    controls->setSpacing(Tokens::spaceSm);
+    m_instances->setFixedWidth(220);  // leaves room for the subtitle in the top bar
     m_instances->setToolTip(tr("Instance to analyze"));
-    m_header->addAction(m_spinner);
-    m_header->addAction(m_instances);
+    controls->addWidget(m_spinner);
+    controls->addWidget(m_instances);
     Style::setProperty(m_analyze, "zeroVariant", "primary");
     m_analyze->setIconSize(QSize(16, 16));
     auto applyAnalyzeIcon = [this]() { m_analyze->setIcon(Icons::icon(QStringLiteral("stethoscope"), Theme::current().onAccent)); };
     applyAnalyzeIcon();
     connect(&Theme::instance(), &Theme::changed, this, applyAnalyzeIcon);
-    m_header->addAction(m_analyze);
+    controls->addWidget(m_analyze);
     m_spinner->setVisible(false);
-    outer->addWidget(m_header);
+    m_controls->hide();
 
     m_caption = new QLabel(this);
     Style::applyRole(m_caption, Role::Caption);

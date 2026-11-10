@@ -4,7 +4,7 @@
 #include <QAbstractButton>
 #include <QFocusEvent>
 #include <QFontMetrics>
-#include <QLabel>
+#include <QIcon>
 #include <QPainter>
 #include <QEvent>
 #include <QVBoxLayout>
@@ -21,6 +21,8 @@ constexpr int kPillInset = 8;       // horizontal inset of the hover/active pill
 constexpr int kLabelMinWidth = 140; // below this the label is hidden (collapsed rail)
 constexpr int kIconPad = 12;        // pill-left to icon
 constexpr int kIconGap = 10;        // icon to label
+constexpr int kHeaderHeight = 60;   // logo header: same height as the top bar, so the two bottom lines are one rule
+constexpr int kLogoSize = 20;
 }  // namespace
 
 class NavItem : public QAbstractButton {
@@ -48,19 +50,19 @@ class NavItem : public QAbstractButton {
         update();
     }
     bool showsLabel() const { return width() >= kLabelMinWidth; }
+    /// Shortcut shown in the tooltip next to the label ("Library  Alt+2"). Items with a hint always have a tooltip; the
+    /// others only while the rail is collapsed (then the tooltip is the label).
+    void setShortcutHint(const QString& hint)
+    {
+        m_hint = hint;
+        updateTip();
+    }
     /// Pill rectangle of this item in rail coordinates (the rail paints the active pill, see ZeroNavRail::paintEvent).
     QRectF pillRect() const { return QRectF(geometry()).adjusted(kPillInset, 0, -kPillInset, 0); }
 
     QSize sizeHint() const override { return { Tokens::navRailWidth, Tokens::navItemHeight }; }
 
    protected:
-    bool event(QEvent* e) override
-    {
-        // Collapsed rail: the tooltip is the label.
-        if (e->type() == QEvent::ToolTip && showsLabel())
-            return true;
-        return QAbstractButton::event(e);
-    }
     void enterEvent(QEnterEvent* e) override
     {
         QAbstractButton::enterEvent(e);
@@ -86,7 +88,7 @@ class NavItem : public QAbstractButton {
     void resizeEvent(QResizeEvent* e) override
     {
         QAbstractButton::resizeEvent(e);
-        setToolTip(showsLabel() ? QString() : text());
+        updateTip();
     }
 
     void paintEvent(QPaintEvent*) override
@@ -128,38 +130,79 @@ class NavItem : public QAbstractButton {
     }
 
    private:
+    void updateTip()
+    {
+        if (m_hint.isEmpty())
+            setToolTip(showsLabel() ? QString() : text());
+        else
+            setToolTip(text() + QStringLiteral("  ") + m_hint);
+    }
+
     QString m_id;
     QString m_icon;
+    QString m_hint;
     Motion::StateAnimator* m_hover;
     bool m_current = false;
     bool m_keyboardFocus = false;
 };
 
+/// Top 60 px of the rail: logo mark + "ZERO" wordmark (logo only when collapsed) over a 1 px `border` line that lines up
+/// with the top bar's bottom line.
+class RailHeader : public QWidget {
+   public:
+    explicit RailHeader(QWidget* parent) : QWidget(parent)
+    {
+        setFixedHeight(kHeaderHeight);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
+    }
+
+   protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        const auto& t = Theme::current();
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        p.fillRect(QRect(0, height() - 1, width(), 1), t.border);
+
+        const int contentH = height() - 1;
+        const bool wide = width() >= kLabelMinWidth;
+        const int logoX = wide ? kPillInset + kIconPad : (width() - kLogoSize) / 2;
+        const QRect logo(logoX, (contentH - kLogoSize) / 2, kLogoSize, kLogoSize);
+        static const QIcon mark(QStringLiteral(":/zero/zero-logo.svg"));  // full-colour app mark: drawn as is
+        mark.paint(&p, logo);
+        if (!wide)
+            return;
+
+        // Obsidian: 16 px, weight 600, 2 px letter spacing. Pixel themes: the pixel font at 20 px (Title role), normal weight.
+        QFont f = Style::font(Role::Title);
+        if (!t.usesPixelFont(Role::Title)) {
+            f.setPixelSize(16);
+            f.setWeight(QFont::DemiBold);
+            f.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);
+        }
+        const QFontMetrics fm(f);
+        const int x = logo.right() + 1 + 10;
+        const int baseline = (contentH - fm.height()) / 2 + fm.ascent();
+        p.setFont(f);
+        p.setPen(t.text);
+        p.drawText(QPoint(x, baseline), QStringLiteral("ZERO"));
+    }
+};
+
 ZeroNavRail::ZeroNavRail(QWidget* parent)
     : QWidget(parent),
       m_layout(new QVBoxLayout(this)),
-      m_wordmark(new QLabel(this)),
-      m_caption(new QLabel(this)),
       m_anim(new QPropertyAnimation(this, "railWidth", this)),
       m_glide(new QVariantAnimation(this))
 {
     setFixedWidth(Tokens::navRailWidth);
-    m_layout->setContentsMargins(0, Tokens::spaceXl, 0, Tokens::spaceMd);
+    m_layout->setContentsMargins(0, 0, 0, Tokens::spaceMd);
     m_layout->setSpacing(2);
 
-    // Wordmark: display role (weight 600), 3 px letter spacing; caption "Launcher" below it.
-    Style::applyRole(m_wordmark, Role::Display);
-    QFont wf = m_wordmark->font();
-    wf.setLetterSpacing(QFont::AbsoluteSpacing, 3.0);
-    m_wordmark->setFont(wf);
-    m_wordmark->setContentsMargins(kPillInset + kIconPad, 0, 0, 0);
-    m_layout->addWidget(m_wordmark);
-    Style::applyRole(m_caption, Role::Caption);
-    m_caption->setText(tr("Launcher"));
-    m_caption->setContentsMargins(kPillInset + kIconPad, 0, 0, 0);
-    m_layout->addWidget(m_caption);
-    m_layout->addSpacing(Tokens::spaceXl);
-    refreshWordmark();
+    m_layout->addWidget(new RailHeader(this));
+    m_layout->addSpacing(Tokens::spaceMd);
 
     m_anim->setEasingCurve(Motion::easeGlide());
     m_glide->setEasingCurve(Motion::easeGlide());
@@ -235,6 +278,12 @@ void ZeroNavRail::setBottomWidget(QWidget* widget)
     if (widget)
         m_bottomLayout->addWidget(widget);
     m_bottomHolder->setVisible(widget != nullptr);
+}
+
+void ZeroNavRail::setItemShortcutHint(const QString& id, const QString& hint)
+{
+    if (auto* item = m_items.value(id))
+        item->setShortcutHint(hint);
 }
 
 void ZeroNavRail::setCurrent(const QString& id)
@@ -334,23 +383,12 @@ void ZeroNavRail::setCollapsed(bool collapsed)
         m_anim->setEndValue(target);
         m_anim->start();
     }
-    refreshWordmark();
     emit collapsedChanged(collapsed);
 }
 
 void ZeroNavRail::setRailWidth(int w)
 {
     setFixedWidth(w);
-    refreshWordmark();
-}
-
-void ZeroNavRail::refreshWordmark()
-{
-    const bool wide = !m_collapsed && width() >= kLabelMinWidth;
-    m_wordmark->setText(wide ? QStringLiteral("ZERO") : QStringLiteral("Z"));
-    m_wordmark->setContentsMargins(wide ? kPillInset + kIconPad : 0, 0, 0, 0);
-    m_wordmark->setAlignment(wide ? (Qt::AlignLeft | Qt::AlignVCenter) : Qt::AlignCenter);
-    m_caption->setVisible(wide);
 }
 
 void ZeroNavRail::paintEvent(QPaintEvent*)

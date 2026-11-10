@@ -79,7 +79,7 @@ Shell and new pages use Lucide icons (ISC license, attribution in `docs/zero/THI
 Legacy Prism pages keep Prism's icon themes; ZERO defaults the icon theme to `flat_white`.
 
 ## Layout rules
-- Shell: `[NavRail | Page]`. Pages scroll vertically inside; the rail never scrolls.
+- Shell: `[NavRail | TopBar over Page]` (60 px top bar and rail header share one continuous 1 px rule, see `docs/zero/SHELL.md`). Pages have no header of their own and scroll vertically inside; the rail and top bar never scroll.
 - Content max width 1280 px on Home; Library uses full width.
 - Never show a control that does nothing. Unfinished destinations are hidden, not stubbed.
 

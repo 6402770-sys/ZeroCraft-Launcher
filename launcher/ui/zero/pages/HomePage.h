@@ -4,6 +4,7 @@
 
 #include <QList>
 #include <QWidget>
+#include "ui/zero/shell/ShellPage.h"
 
 class MinecraftInstance;
 class QGridLayout;
@@ -19,10 +20,12 @@ class IconTile;
 class ZeroPlayButton;
 class ZeroCard;
 
-class HomePage : public QWidget {
+class HomePage : public ShellPage {
     Q_OBJECT
    public:
     explicit HomePage(QWidget* parent = nullptr);
+
+    QString title() const override { return tr("Home"); }
 
    signals:
     void playRequested(const QString& instanceId);

@@ -26,7 +26,6 @@
 #include "ui/instanceview/InstanceView.h"
 #include "ui/zero/ZeroEmptyState.h"
 #include "ui/zero/ZeroIcons.h"
-#include "ui/zero/ZeroPageHeader.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
@@ -62,24 +61,29 @@ QToolButton* makeToggle(const QString& tooltip, QWidget* parent)
 }  // namespace
 
 LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget* parent)
-    : QWidget(parent), m_grid(grid), m_proxy(proxy), m_table(new InstanceTableModel(proxy, this)), m_sort(new QSortFilterProxyModel(this))
+    : ShellPage(parent), m_grid(grid), m_proxy(proxy), m_table(new InstanceTableModel(proxy, this)), m_sort(new QSortFilterProxyModel(this))
 {
-    // ----- header -----
-    m_header = new ZeroPageHeader(tr("Library"), {}, this);
-
+    // ----- toolbar row (content) -----
     m_search = new QLineEdit(this);
     m_search->setPlaceholderText(tr("Search instances"));
-    m_search->setFixedWidth(240);
+    m_search->setFixedWidth(280);
     m_search->setClearButtonEnabled(true);
     m_search->installEventFilter(this);
-    m_header->addAction(m_search);
 
     m_sortCombo = new QComboBox(this);
     m_sortCombo->setToolTip(tr("Sort instances"));
     m_sortCombo->addItem(tr("Name"), QStringLiteral("Name"));
     m_sortCombo->addItem(tr("Last played"), QStringLiteral("LastLaunch"));
-    m_header->addAction(m_sortCombo);
 
+    m_toolbar = new QWidget(this);
+    auto* toolbarRow = new QHBoxLayout(m_toolbar);
+    toolbarRow->setContentsMargins(0, 0, 0, Tokens::spaceLg);
+    toolbarRow->setSpacing(Tokens::spaceLg);
+    toolbarRow->addWidget(m_search);
+    toolbarRow->addStretch(1);  // filter chips (Library 2.0) go here
+    toolbarRow->addWidget(m_sortCombo);
+
+    // ----- top bar actions: view toggle + New instance -----
     auto* viewGroup = new QButtonGroup(this);
     viewGroup->setExclusive(true);
     m_gridButton = makeToggle(tr("Grid view"), this);
@@ -92,14 +96,20 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     toggleLayout->setSpacing(2);
     toggleLayout->addWidget(m_gridButton);
     toggleLayout->addWidget(m_listButton);
-    m_header->addAction(toggles);
 
     auto* newButton = new QPushButton(tr("New instance"), this);
     Style::setProperty(newButton, "zeroVariant", "primary");
     newButton->setIconSize(QSize(16, 16));
     m_newButton = newButton;
     connect(newButton, &QPushButton::clicked, this, &LibraryPage::newInstanceRequested);
-    m_header->addAction(newButton);
+
+    auto* actions = new QWidget(this);
+    auto* actionsRow = new QHBoxLayout(actions);
+    actionsRow->setContentsMargins(0, 0, 0, 0);
+    actionsRow->setSpacing(Tokens::spaceSm);
+    actionsRow->addWidget(toggles);
+    actionsRow->addWidget(newButton);
+    setTopBarActions(actions);
 
     // ----- grid -----
     m_grid->setParent(this);
@@ -181,7 +191,7 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     auto* page = new QVBoxLayout(this);
     page->setContentsMargins(Tokens::spaceXl, Tokens::spaceXl, Tokens::spaceXl, Tokens::spaceXl);
     page->setSpacing(0);
-    page->addWidget(m_header);
+    page->addWidget(m_toolbar);
     page->addWidget(m_body, 1);
 
     // ----- behavior -----
@@ -342,17 +352,20 @@ void LibraryPage::updateState()
     const int shown = m_proxy->rowCount();
     const bool filtering = !m_proxy->filterText().isEmpty();
 
+    QString subtitle;
     if (total == 0)
-        m_header->setSubtitle(tr("No instances"));
+        subtitle = tr("No instances");
     else if (filtering)
-        m_header->setSubtitle(total == 1 ? tr("%1 of 1 instance").arg(shown) : tr("%1 of %2 instances").arg(shown).arg(total));
+        subtitle = total == 1 ? tr("%1 of 1 instance").arg(shown) : tr("%1 of %2 instances").arg(shown).arg(total);
     else
-        m_header->setSubtitle(total == 1 ? tr("1 instance") : tr("%1 instances").arg(total));
+        subtitle = total == 1 ? tr("1 instance") : tr("%1 instances").arg(total);
+    if (subtitle != m_subtitle) {
+        m_subtitle = subtitle;
+        emit chromeChanged();
+    }
 
-    m_header->setVisible(true);
     // nothing to search, sort or switch views for in an empty library
-    m_search->setVisible(total > 0);
-    m_sortCombo->setVisible(total > 0);
+    m_toolbar->setVisible(total > 0);
     m_gridButton->parentWidget()->setVisible(total > 0);
 
     if (total == 0) {

@@ -17,13 +17,17 @@ class QVBoxLayout;
 namespace Zero {
 
 class ZeroEmptyState;
-class ZeroPageHeader;
 class ZeroSpinner;
 
 class CrashDetectiveView : public QWidget {
     Q_OBJECT
    public:
     explicit CrashDetectiveView(QWidget* parent = nullptr);
+
+    /// One-line description of the tool (the Tools page shows it as the top bar subtitle).
+    static QString description();
+    /// Spinner, instance combo and Analyze. Hidden and owned by this view; the Tools page lends it to the top bar.
+    QWidget* controlsWidget() const { return m_controls; }
 
     /// Rebuilds the instance combo from the instance list, keeping the current selection when it still exists.
     void refreshInstances();
@@ -40,7 +44,6 @@ class CrashDetectiveView : public QWidget {
     void expandAllEvidence();
 
    signals:
-    void backRequested();
     void instanceSettingsRequested(const QString& instanceId);
     /// Emitted when an analysis has finished and the result is on screen (used by tests / screenshots).
     void analysisFinished();
@@ -61,7 +64,7 @@ class CrashDetectiveView : public QWidget {
     QString crashSourcePath() const;
     QString describeSources(const QList<Diagnostics::LogSource>& sources) const;
 
-    ZeroPageHeader* m_header;
+    QWidget* m_controls;
     QComboBox* m_instances;
     QPushButton* m_analyze;
     ZeroSpinner* m_spinner;

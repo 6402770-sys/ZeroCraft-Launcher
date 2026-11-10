@@ -935,8 +935,12 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/ZeroInstanceDelegate.h
     ui/zero/shell/AccountChip.cpp
     ui/zero/shell/AccountChip.h
+    ui/zero/shell/ShellPage.cpp
+    ui/zero/shell/ShellPage.h
     ui/zero/shell/ZeroShell.cpp
     ui/zero/shell/ZeroShell.h
+    ui/zero/shell/ZeroTopBar.cpp
+    ui/zero/shell/ZeroTopBar.h
 
     # Processes
     LaunchMode.h

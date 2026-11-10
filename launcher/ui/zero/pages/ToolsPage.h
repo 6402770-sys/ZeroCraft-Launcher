@@ -4,6 +4,7 @@
 
 #include <QWidget>
 #include <optional>
+#include "ui/zero/shell/ShellPage.h"
 
 class QStackedLayout;
 
@@ -11,10 +12,18 @@ namespace Zero {
 
 class CrashDetectiveView;
 
-class ToolsPage : public QWidget {
+class ToolsPage : public ShellPage {
     Q_OBJECT
    public:
     explicit ToolsPage(QWidget* parent = nullptr);
+
+    /// "Tools", or the open tool's name ("Crash Detective").
+    QString title() const override;
+    QString subtitle() const override;
+    /// "Tools" while a tool is open (clicking it goes back to the overview), otherwise none.
+    QString breadcrumbParent() const override;
+    void breadcrumbActivated() override { showOverview(); }
+    QWidget* topBarActions() const override;
 
     /// Opens Crash Detective for `instanceId`; analyzes right away when `analyzeNow` is set.
     void openCrashDetective(const QString& instanceId, bool analyzeNow, std::optional<int> exitCode = std::nullopt);
@@ -22,6 +31,8 @@ class ToolsPage : public QWidget {
     void setPreferredInstance(const QString& instanceId);
     /// Back to the grid of tools.
     void showOverview();
+    /// True while Crash Detective is open.
+    bool isToolOpen() const;
 
     CrashDetectiveView* crashDetective() const { return m_detective; }
 

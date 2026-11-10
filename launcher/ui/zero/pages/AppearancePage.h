@@ -5,6 +5,7 @@
 #include <QList>
 #include <QWidget>
 #include "ui/zero/ZeroTokens.h"
+#include "ui/zero/shell/ShellPage.h"
 
 class QButtonGroup;
 class QLabel;
@@ -15,10 +16,13 @@ namespace Zero {
 class ThemePreview;
 class ThemeCard;
 
-class AppearancePage : public QWidget {
+class AppearancePage : public ShellPage {
     Q_OBJECT
    public:
     explicit AppearancePage(QWidget* parent = nullptr);
+
+    QString title() const override { return tr("Appearance"); }
+    QString subtitle() const override { return tr("Themes and motion"); }
 
     /// Id of the theme card currently selected (not necessarily applied).
     QString selectedThemeId() const { return m_selectedId; }

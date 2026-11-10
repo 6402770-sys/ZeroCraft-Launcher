@@ -32,6 +32,7 @@ set(TEST_SOURCES
     ZeroFormat_test.cpp
     ZeroMotion_test.cpp
     ZeroPlayButton_test.cpp
+    ZeroShell_test.cpp
     CrashDetective_test.cpp
 )
 

@@ -30,6 +30,8 @@ struct WorldEntry {
 
     /// Stable identity across rescans: `<instanceId>/<folderName>`.
     QString key() const { return instanceId + QLatin1Char('/') + folderName; }
+
+    bool operator==(const WorldEntry&) const = default;
 };
 
 /// One instance to scan (`savesDir` = the instance's `saves` folder; it may not exist).

@@ -30,6 +30,8 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
+#include "ui/zero/ZeroReveal.h"
+#include "ui/zero/ZeroSkeleton.h"
 
 namespace Zero {
 
@@ -113,6 +115,7 @@ ServersPage::ServersPage(QWidget* parent)
     m_list = new QListView(this);
     m_list->setModel(m_model);
     m_list->setItemDelegate(new ServerRowDelegate(m_list));
+    m_reveal = Motion::installItemReveal(m_list);
     m_list->setUniformItemSizes(true);
     m_list->setFrameShape(QFrame::NoFrame);
     m_list->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -152,7 +155,7 @@ ServersPage::ServersPage(QWidget* parent)
 
     auto* none = new ZeroEmptyState(QStringLiteral("compass"), tr("No servers yet"),
                                     tr("Servers you add in Minecraft's Multiplayer menu show up here from every instance."), {}, this);
-    auto* scanning = new ZeroEmptyState(QStringLiteral("compass"), tr("Looking for servers…"), {}, {}, this);
+    auto* scanning = new ZeroSkeleton(ZeroSkeleton::Shape::Rows, tr("Looking for the servers saved in your instances…"), this);
 
     m_body = new QStackedWidget(this);
     m_body->addWidget(collectionRow);
@@ -177,11 +180,13 @@ ServersPage::ServersPage(QWidget* parent)
         m_instanceFilter = m_instanceCombo->itemData(i).toString();
         APPLICATION->settings()->set("ZeroServersInstance", m_instanceFilter);
         applyFilters();
+        m_reveal->start();
     });
     connect(m_sortCombo, &QComboBox::activated, this, [this](int i) {
         m_sort = Servers::sortModeFromString(m_sortCombo->itemData(i).toString());
         APPLICATION->settings()->set("ZeroServersSort", Servers::sortModeToString(m_sort));
         applyFilters();
+        m_reveal->start();
     });
 
     connect(m_scanner, &Servers::ServerVaultScanner::listChanged, this, &ServersPage::onListChanged);
@@ -366,10 +371,20 @@ void ServersPage::applyFilters()
     }
     Servers::sortServers(rows, m_sort, m_pinger->results());
 
+    // Same servers in the same order (a rescan, a ping that did not change the sort): no reset, no blink.
+    if (rows == m_model->servers()) {
+        updateState();
+        return;
+    }
+
     // The selected server comes back when the filter shows it again; while it is hidden nothing is highlighted.
     const int scroll = m_list->verticalScrollBar()->value();
+    const bool firstFill = m_model->rowCount() == 0;
     m_applying = true;
     m_model->setServers(rows);
+    m_list->doItemsLayout();  // lay out now (no empty frame, and the scroll position below is not clamped)
+    if (firstFill && !rows.isEmpty())
+        m_reveal->start();
     const int row = m_selectedAddress.isEmpty() ? -1 : m_model->rowForAddress(m_selectedAddress);
     if (row >= 0) {
         const QModelIndex index = m_model->index(row);

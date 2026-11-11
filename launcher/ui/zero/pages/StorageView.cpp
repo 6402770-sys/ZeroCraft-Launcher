@@ -19,6 +19,8 @@
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QVariantAnimation>
+#include <QTimer>
 #include <algorithm>
 #include "Application.h"
 #include "ElidedLabel.h"
@@ -35,6 +37,8 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
+#include "ui/zero/ZeroSkeleton.h"
+#include "ui/zero/ZeroMotion.h"
 #include "zero/backup/WorldBackupJobs.h"
 
 namespace Zero {
@@ -142,14 +146,38 @@ class Track : public QWidget {
         const double r = height() / 2.0;
         p.setBrush(t.border);
         p.drawRoundedRect(QRectF(rect()), r, r);
-        if (m_ratio > 0) {
+        const double shown = m_ratio * m_grow;
+        if (shown > 0) {
             p.setBrush(t.accent);
-            p.drawRoundedRect(QRectF(0, 0, std::max<double>(height(), width() * m_ratio), height()), r, r);
+            p.drawRoundedRect(QRectF(0, 0, std::max<double>(height(), width() * shown), height()), r, r);
         }
+    }
+
+    void showEvent(QShowEvent* event) override
+    {
+        QWidget::showEvent(event);
+        // The first time a bar shows it fills from the left; bars further down start a little later.
+        if (m_grown || !Motion::enabled() || m_ratio <= 0)
+            return;
+        m_grown = true;
+        m_grow = 0.0;
+        auto* anim = new QVariantAnimation(this);
+        anim->setDuration(Tokens::durReveal * 2);
+        anim->setEasingCurve(Motion::easeGlide());
+        anim->setStartValue(0.0);
+        anim->setEndValue(1.0);
+        connect(anim, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) {
+            m_grow = v.toReal();
+            update();
+        });
+        const int delay = std::clamp(mapTo(window(), QPoint(0, 0)).y() / 4, 0, 300);
+        QTimer::singleShot(delay, anim, [anim]() { anim->start(QAbstractAnimation::DeleteWhenStopped); });
     }
 
    private:
     double m_ratio;
+    double m_grow = 1.0;
+    bool m_grown = false;
 };
 
 /// Row with hover highlight and keyboard focus; emits `activated` on click or Enter/Space (not when a child button took the click).
@@ -313,7 +341,7 @@ StorageView::StorageView(QWidget* parent)
     m_stack = new QStackedLayout;
     outer->addLayout(m_stack, 1);
 
-    m_stack->addWidget(new ZeroEmptyState(QStringLiteral("hard-drive"), tr("Measuring disk usage…"), tr("Large worlds can take a moment."), {}, this));
+    m_stack->addWidget(new ZeroSkeleton(ZeroSkeleton::Shape::Report, tr("Measuring disk usage… Large worlds can take a moment."), this));
 
     m_scroll = new QScrollArea(this);
     m_scroll->setWidgetResizable(true);

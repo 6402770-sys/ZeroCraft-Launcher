@@ -43,6 +43,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
+#include "ui/zero/ZeroSkeleton.h"
 
 namespace Zero {
 
@@ -402,7 +403,7 @@ JavaDoctorView::JavaDoctorView(QWidget* parent) : QWidget(parent)
     m_stack = new QStackedLayout;
     outer->addLayout(m_stack, 1);
 
-    m_stack->addWidget(new ZeroEmptyState(QStringLiteral("cpu"), tr("Looking for Java runtimes…"), tr("This only takes a moment."), {}, this));
+    m_stack->addWidget(new ZeroSkeleton(ZeroSkeleton::Shape::Rows, tr("Looking for Java runtimes on this PC… This only takes a moment."), this));
 
     m_scroll = new QScrollArea(this);
     m_scroll->setWidgetResizable(true);

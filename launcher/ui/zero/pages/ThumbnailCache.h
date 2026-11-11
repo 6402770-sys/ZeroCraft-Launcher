@@ -5,6 +5,8 @@
 #pragma once
 
 #include <QCache>
+#include <QElapsedTimer>
+#include <QHash>
 #include <QObject>
 #include <QPixmap>
 #include <QSet>
@@ -28,6 +30,10 @@ class ThumbnailCache : public QObject {
     /// Files that cannot be decoded stay null (no retry until their modified time changes).
     QPixmap thumbnail(const QString& path, qint64 modifiedMs);
     bool isReady(const QString& path, qint64 modifiedMs) const;
+    /// 0..1: how far a thumbnail that just arrived has faded in (1 when it arrived long ago or motion is off).
+    qreal fadeIn(const QString& path, qint64 modifiedMs) const;
+    /// True while at least one thumbnail is still fading in (the page repaints until it is false).
+    bool fading() const;
     int cachedCount() const { return static_cast<int>(m_cache.size()); }
     int pendingCount() const { return static_cast<int>(m_pending.size()); }
 
@@ -44,6 +50,8 @@ class ThumbnailCache : public QObject {
     QCache<QString, QPixmap> m_cache{ kCapacity };  // cost 1 each: least recently used goes first
     QSet<QString> m_pending;
     QSet<QString> m_failed;
+    QElapsedTimer m_clock;
+    QHash<QString, qint64> m_arrivedAt;  // key -> m_clock time; only entries that may still be fading
 };
 
 }  // namespace Zero

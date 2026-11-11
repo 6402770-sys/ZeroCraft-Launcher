@@ -6,6 +6,9 @@
 #include <QLabel>
 #include <QPointer>
 #include <QDialog>
+#include <QDir>
+#include <QListWidget>
+#include <QPainter>
 #include <QPushButton>
 #include <QSet>
 #include <QTest>
@@ -13,7 +16,9 @@
 #include <memory>
 
 #include "ui/zero/ZeroMotion.h"
+#include "ui/zero/ZeroReveal.h"
 #include "ui/zero/ZeroRipple.h"
+#include "ui/zero/ZeroSkeleton.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/ZeroThemeState.h"
@@ -43,6 +48,63 @@ class ZeroMotionTest : public QObject {
     }
 
    private slots:
+    void skeletonSweepsOnlyWhileVisibleWithMotion()
+    {
+        Theme::setReduceMotion(false);
+        for (auto shape : { ZeroSkeleton::Shape::Rows, ZeroSkeleton::Shape::Tiles, ZeroSkeleton::Shape::Report }) {
+            ZeroSkeleton sk(shape, QStringLiteral("Looking for things..."));
+            sk.resize(900, 520);
+            QVERIFY(!sk.isSweeping());
+            sk.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&sk));
+            QVERIFY(sk.isSweeping());
+            QTest::qWait(120);
+            const QImage frame = sk.grab().toImage();
+            QVERIFY(!frame.isNull());
+            const QString dump = qEnvironmentVariable("ZERO_TEST_DUMP_DIR");  // dev aid: look at the shapes
+            if (!dump.isEmpty())
+                frame.save(QDir(dump).filePath(QStringLiteral("skeleton-%1.png").arg(int(shape))));
+            sk.hide();
+            QVERIFY(!sk.isSweeping());
+        }
+        Theme::setReduceMotion(true);
+        ZeroSkeleton still(ZeroSkeleton::Shape::Rows, QString());
+        still.resize(400, 300);
+        still.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&still));
+        QVERIFY(!still.isSweeping());  // reduced motion: static shapes
+        Theme::setReduceMotion(false);
+    }
+
+    void itemRevealStaggersAndFinishes()
+    {
+        Theme::setReduceMotion(false);
+        QCOMPARE(Motion::ItemReveal::delayFor(QRect(0, 0, 100, 40)), 0);
+        QVERIFY(Motion::ItemReveal::delayFor(QRect(0, 200, 100, 40)) > Motion::ItemReveal::delayFor(QRect(0, 0, 100, 40)));
+        QVERIFY(Motion::ItemReveal::delayFor(QRect(600, 0, 100, 40)) > 0);
+        QVERIFY(Motion::ItemReveal::delayFor(QRect(0, 100000, 10, 10)) <= Motion::ItemReveal::kMaxDelay);
+
+        QListWidget list;
+        list.addItems({ "a", "b", "c" });
+        Motion::ItemReveal* reveal = Motion::installItemReveal(&list);
+        list.resize(200, 200);
+        list.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&list));
+        QVERIFY(list.itemDelegate() != nullptr);
+        reveal->start();
+        QVERIFY(reveal->running());
+        QVERIFY(reveal->progress(QRect(0, 0, 10, 10)) < 1.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!reveal->running(), 3000);  // stops on its own
+        QCOMPARE(reveal->progress(QRect(0, 0, 10, 10)), 1.0);
+        // the wrapped delegate still sizes and paints the items
+        QVERIFY(list.visualItemRect(list.item(2)).height() > 0);
+
+        Theme::setReduceMotion(true);
+        reveal->start();
+        QVERIFY(!reveal->running());  // motion off: no entrance
+        Theme::setReduceMotion(false);
+    }
+
     void initTestCase() { setThemeActive(true); }
     void cleanupTestCase()
     {
@@ -83,11 +145,11 @@ class ZeroMotionTest : public QObject {
         QTest::newRow("system, animations on") << "system" << false << true << true;
         QTest::newRow("system, animations off") << "system" << false << false << false;
         QTest::newRow("explicit system beats legacy reduce") << "system" << true << true << true;
-        QTest::newRow("never set, defaults to system (on)") << "" << false << true << true;
-        QTest::newRow("never set, defaults to system (off)") << "" << false << false << false;
+        QTest::newRow("never set, on by default") << "" << false << true << true;
+        QTest::newRow("never set, on even when Windows animations are off") << "" << false << false << true;
         QTest::newRow("never set + legacy reduce -> off") << "" << true << true << false;
         QTest::newRow("never set + legacy reduce + system off") << "" << true << false << false;
-        QTest::newRow("unknown value behaves like never set") << "bogus" << false << true << true;
+        QTest::newRow("unknown value behaves like never set") << "bogus" << false << false << true;
         QTest::newRow("unknown value + legacy reduce -> off") << "bogus" << true << true << false;
     }
 
@@ -109,7 +171,7 @@ class ZeroMotionTest : public QObject {
 
         const Transition::Snapshot snap = Transition::capture(host.get());
         QVERIFY(snap.isNull());
-        for (auto kind : { Transition::Kind::Crossfade, Transition::Kind::Rise, Transition::Kind::PixelDissolve }) {
+        for (auto kind : { Transition::Kind::Crossfade, Transition::Kind::Rise, Transition::Kind::PixelDissolve, Transition::Kind::Cascade }) {
             Transition::run(host.get(), snap, kind, 100);
             QCOMPARE(Transition::overlayCount(host.get()), 0);
         }
@@ -144,6 +206,7 @@ class ZeroMotionTest : public QObject {
         QTest::newRow("crossfade") << int(Transition::Kind::Crossfade);
         QTest::newRow("rise") << int(Transition::Kind::Rise);
         QTest::newRow("pixel dissolve") << int(Transition::Kind::PixelDissolve);
+        QTest::newRow("cascade") << int(Transition::Kind::Cascade);
     }
 
     void overlayDeletesItself()

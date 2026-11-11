@@ -3,6 +3,7 @@
 
 #include <QEvent>
 #include <QImage>
+#include <QLinearGradient>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPointer>
@@ -11,6 +12,7 @@
 #include <QWidget>
 #include <algorithm>
 #include "ZeroMotion.h"
+#include "ZeroThemeState.h"
 
 namespace Zero {
 namespace Transition {
@@ -18,7 +20,8 @@ namespace Transition {
 namespace {
 
 constexpr int kBlockPx = 16;       // dissolve block edge (logical px)
-constexpr int kRisePx = 10;        // distance the new content rises in Kind::Rise
+constexpr int kRisePx = 10;        // distance the new content rises in Kind::Rise / Kind::Cascade
+constexpr int kCascadeFeatherPx = 180;  // soft edge of the Kind::Cascade reveal
 const char* const kOverlayName = "zeroTransitionOverlay";
 
 int defaultDuration(Kind kind)
@@ -30,6 +33,8 @@ int defaultDuration(Kind kind)
             return Tokens::durBase;
         case Kind::PixelDissolve:
             return Tokens::durDissolve;
+        case Kind::Cascade:
+            return Tokens::durCascade;
     }
     return Tokens::durBase;
 }
@@ -114,6 +119,33 @@ class Overlay : public QWidget {
                 }
                 break;
             }
+            case Kind::Cascade: {
+                // Opaque base (hides the live widgets): the old picture, quickly washed out to the window colour.
+                p.drawPixmap(0, 0, m_from);
+                const qreal wash = std::min(1.0, t / 0.45);
+                p.setOpacity(Motion::easeEnter().valueForProgress(wash));
+                p.fillRect(rect(), Theme::current().bg);
+                p.setOpacity(1.0);
+                if (!m_to.isNull()) {
+                    // The new picture, masked by a gradient whose edge moves from above the top to below the bottom.
+                    const qreal e = Motion::easeEnter().valueForProgress(t);
+                    const qreal edge = -kCascadeFeatherPx + e * (height() + 2.0 * kCascadeFeatherPx);
+                    QImage layer(m_to.size(), QImage::Format_ARGB32_Premultiplied);
+                    layer.setDevicePixelRatio(m_to.devicePixelRatio());
+                    layer.fill(Qt::transparent);
+                    {
+                        QPainter lp(&layer);
+                        lp.drawPixmap(0, qRound(kRisePx * (1.0 - e)), m_to);
+                        lp.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                        QLinearGradient mask(0, edge - kCascadeFeatherPx, 0, edge);
+                        mask.setColorAt(0.0, QColor(0, 0, 0, 255));
+                        mask.setColorAt(1.0, QColor(0, 0, 0, 0));
+                        lp.fillRect(QRectF(QPointF(0, 0), QSizeF(m_to.size()) / m_to.devicePixelRatio()), mask);
+                    }
+                    p.drawImage(0, 0, layer);
+                }
+                break;
+            }
             case Kind::PixelDissolve:
                 for (const QRect& r : event->region())
                     p.drawImage(QRectF(r), m_image, QRectF(QPointF(r.topLeft()) * m_image.devicePixelRatio(), QSizeF(r.size()) * m_image.devicePixelRatio()));
@@ -125,7 +157,7 @@ class Overlay : public QWidget {
     void advance(qreal t)
     {
         m_progress = t;
-        if (m_kind == Kind::Rise && m_to.isNull() && t > 0.0) {
+        if ((m_kind == Kind::Rise || m_kind == Kind::Cascade) && m_to.isNull() && t > 0.0) {
             // The picture of the new content is taken on the first tick, not at creation: by now the event loop has
             // run the pending layouts (item views lay out lazily), so it matches what the live widgets settle on.
             // The overlay is hidden for the grab so it does not show up in its own picture.

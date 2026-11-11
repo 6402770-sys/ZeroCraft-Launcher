@@ -27,7 +27,9 @@ namespace Transition {
 enum class Kind {
     Crossfade,     ///< old snapshot fades out over the live (new) widgets
     Rise,          ///< old snapshot is covered by a snapshot of the new content that rises 10 px -> 0 while fading in
-    PixelDissolve  ///< old snapshot is removed in 16 px blocks, in a deterministic shuffled order
+    PixelDissolve, ///< old snapshot is removed in 16 px blocks, in a deterministic shuffled order
+    Cascade        ///< page enter: the old snapshot fades to the background while the new content rises 10 px and is
+                   ///< revealed top to bottom behind a soft 180 px edge, so sections and cards appear in reading order
 };
 
 /// Pixels of a host captured before a UI change. Null when motion is off or the host is not visible.

@@ -25,6 +25,9 @@ class QTimer;
 class QTreeView;
 
 namespace Zero {
+namespace Motion {
+class ItemReveal;
+}
 
 class FilterChipBar;
 class InstanceTableModel;
@@ -84,12 +87,15 @@ class LibraryPage : public ShellPage {
     void applyFilters(bool chipChanged);
     void scheduleChipRefresh();
     void rebuildChips();
+    void revealItems();  ///< staggered entrance of the visible view (filter / sort changes)
     void updateState();
     void syncListFromGrid();
     void onListCurrentChanged(const QModelIndex& current);
     void refreshIcons();
 
     InstanceView* m_grid;
+    Motion::ItemReveal* m_gridReveal = nullptr;
+    Motion::ItemReveal* m_listReveal = nullptr;
     InstanceProxyModel* m_proxy;
     InstanceTableModel* m_table;
     QSortFilterProxyModel* m_sort;

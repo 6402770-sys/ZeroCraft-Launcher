@@ -29,6 +29,8 @@
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/ZeroReveal.h"
+#include "ui/zero/ZeroSkeleton.h"
 
 namespace Zero {
 
@@ -95,6 +97,7 @@ ScreenshotsPage::ScreenshotsPage(QWidget* parent)
     m_list->setModel(m_model);
     m_delegate = new ScreenshotDelegate(m_cache, m_list);
     m_list->setItemDelegate(m_delegate);
+    m_reveal = Motion::installItemReveal(m_list);
     m_list->viewport()->installEventFilter(this);
     m_list->setViewMode(QListView::IconMode);
     m_list->setResizeMode(QListView::Adjust);
@@ -115,7 +118,19 @@ ScreenshotsPage::ScreenshotsPage(QWidget* parent)
     m_list->viewport()->setAutoFillBackground(false);
     connect(m_list, &QListView::activated, this, &ScreenshotsPage::openViewerAt);
     connect(m_list, &QListView::doubleClicked, this, &ScreenshotsPage::openViewerAt);
-    connect(m_cache, &ThumbnailCache::thumbnailReady, this, [this]() { m_list->viewport()->update(); });
+    // Thumbnails fade in when they arrive: repaint every frame while one is still fading.
+    auto* fadeTimer = new QTimer(this);
+    fadeTimer->setInterval(16);
+    connect(fadeTimer, &QTimer::timeout, this, [this, fadeTimer]() {
+        m_list->viewport()->update();
+        if (!m_cache->fading())
+            fadeTimer->stop();
+    });
+    connect(m_cache, &ThumbnailCache::thumbnailReady, this, [this, fadeTimer]() {
+        m_list->viewport()->update();
+        if (m_cache->fading() && !fadeTimer->isActive())
+            fadeTimer->start();
+    });
 
     m_noMatches = new ZeroEmptyState(QStringLiteral("image"), tr("No screenshots match"), tr("Try a different search or clear the filters."),
                                      tr("Clear filters"), this);
@@ -127,7 +142,7 @@ ScreenshotsPage::ScreenshotsPage(QWidget* parent)
 
     auto* none = new ZeroEmptyState(QStringLiteral("image"), tr("No screenshots yet"),
                                     tr("Press F2 in game to take one. They show up here from every instance."), {}, this);
-    auto* scanning = new ZeroEmptyState(QStringLiteral("image"), tr("Looking for screenshots…"), {}, {}, this);
+    auto* scanning = new ZeroSkeleton(ZeroSkeleton::Shape::Tiles, tr("Looking for screenshots in every instance…"), this);
 
     m_body = new QStackedWidget(this);
     m_body->addWidget(m_collection);
@@ -169,11 +184,13 @@ ScreenshotsPage::ScreenshotsPage(QWidget* parent)
         m_instanceFilter = m_instanceCombo->itemData(i).toString();
         APPLICATION->settings()->set("ZeroScreenshotsInstance", m_instanceFilter);
         applyFilters();
+        m_reveal->start();
     });
     connect(m_sortCombo, &QComboBox::activated, this, [this](int i) {
         m_sort = Gallery::sortModeFromString(m_sortCombo->itemData(i).toString());
         APPLICATION->settings()->set("ZeroScreenshotsSort", Gallery::sortModeToString(m_sort));
         applyFilters();
+        m_reveal->start();
     });
 
     connect(m_scanner, &Gallery::ScreenshotScanner::listChanged, this, &ScreenshotsPage::onListChanged);
@@ -376,10 +393,13 @@ void ScreenshotsPage::applyFilters()
 
     const int scroll = m_list->verticalScrollBar()->value();
     const QString current = m_list->currentIndex().isValid() ? m_list->currentIndex().data(ScreenshotModel::PathRole).toString() : QString();
+    const bool firstFill = m_model->rowCount() == 0;
     m_model->setEntries(rows);
     // Lay the tiles out now: QListView's delayed layout paints one empty frame after a reset, and the scroll position below
     // would be clamped to the empty range.
     m_list->doItemsLayout();
+    if (firstFill && !rows.isEmpty())
+        m_reveal->start();
     const int row = current.isEmpty() ? -1 : m_model->rowForPath(current);
     if (row >= 0)
         m_list->selectionModel()->setCurrentIndex(m_model->index(row), QItemSelectionModel::ClearAndSelect);

@@ -23,6 +23,9 @@ class QTimer;
 class QAction;
 
 namespace Zero {
+namespace Motion {
+class ItemReveal;
+}
 
 class ServerDetailsPanel;
 class ServerRowModel;
@@ -105,6 +108,7 @@ class ServersPage : public ShellPage {
     QString m_selectedAddress;
     QString m_instanceFilter;  // instance id, empty = all (kept even while that instance has no servers)
     Servers::SortMode m_sort = Servers::SortMode::Name;
+    Motion::ItemReveal* m_reveal = nullptr;
 };
 
 }  // namespace Zero

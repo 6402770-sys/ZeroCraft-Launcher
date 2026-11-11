@@ -2229,9 +2229,9 @@ QString currentMotionValue()
 {
     auto* settings = APPLICATION->settings();
     const QString value = settings->get("ZeroMotion").toString();
-    if (value == QLatin1String("on") || value == QLatin1String("off"))
+    if (value == QLatin1String("on") || value == QLatin1String("off") || value == QLatin1String("system"))
         return value;
-    return (value.isEmpty() && settings->get("ZeroReduceMotion").toBool()) ? QStringLiteral("off") : QStringLiteral("system");
+    return settings->get("ZeroReduceMotion").toBool() ? QStringLiteral("off") : QStringLiteral("on");  // never chosen: on
 }
 }  // namespace
 

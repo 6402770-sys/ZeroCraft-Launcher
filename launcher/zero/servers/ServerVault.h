@@ -58,6 +58,8 @@ HostPort parseAddress(const QString& address);
 struct InstanceRef {
     QString id;
     QString name;
+
+    bool operator==(const InstanceRef&) const = default;
 };
 
 /// One server address, with every name it is saved under and every instance it is saved in.
@@ -71,6 +73,8 @@ struct VaultServer {
     /// First name, or the address when every entry is nameless.
     QString displayName() const { return names.isEmpty() ? address : names.first(); }
     bool inInstance(const QString& instanceId) const;
+
+    bool operator==(const VaultServer&) const = default;
 };
 
 /// Groups entries by normalized address (invalid addresses group by their trimmed text), sorted by display name (A-Z), then address.

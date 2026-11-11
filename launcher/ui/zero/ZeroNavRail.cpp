@@ -8,6 +8,7 @@
 #include <QFontMetrics>
 #include <QIcon>
 #include <QPainter>
+#include <QVariantAnimation>
 #include <QEvent>
 #include <QVBoxLayout>
 #include "ZeroIcons.h"
@@ -44,12 +45,22 @@ class NavItem : public QAbstractButton {
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(m_hover, &Motion::StateAnimator::progressChanged, this, qOverload<>(&QWidget::update));
         connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
+        connect(&m_pop, &QVariantAnimation::valueChanged, this, qOverload<>(&QWidget::update));
     }
 
     const QString& id() const { return m_id; }
     void setCurrentItem(bool c)
     {
+        const bool became = c && !m_current;
         m_current = c;
+        if (became && Motion::enabled()) {
+            // The icon of the section you go to pops (1 -> 1.18 -> 1, with a little overshoot on the way back).
+            m_pop.stop();
+            m_pop.setDuration(Tokens::durSlow);
+            m_pop.setStartValue(0.0);
+            m_pop.setEndValue(1.0);
+            m_pop.start();
+        }
         update();
     }
     bool showsLabel() const { return width() >= kLabelMinWidth; }
@@ -120,7 +131,22 @@ class NavItem : public QAbstractButton {
         const int iconSize = Tokens::navIconSize;
         const int iconX = label ? int(pill.left()) + kIconPad : int(pill.center().x() - iconSize / 2.0);
         const QRect iconRect(iconX, (height() - iconSize) / 2, iconSize, iconSize);
-        Icons::icon(m_icon, fg).paint(&p, iconRect);
+        qreal scale = 1.0;
+        if (m_pop.state() == QAbstractAnimation::Running) {
+            const qreal t = m_pop.currentValue().toReal();
+            scale = t < 0.4 ? 1.0 + 0.18 * Motion::easeEnter().valueForProgress(t / 0.4)
+                            : 1.0 + 0.18 * (1.0 - Motion::easeRelease().valueForProgress((t - 0.4) / 0.6));
+        }
+        if (scale != 1.0) {
+            p.save();
+            p.translate(QRectF(iconRect).center());
+            p.scale(scale, scale);
+            p.translate(-QRectF(iconRect).center());
+            Icons::icon(m_icon, fg).paint(&p, iconRect);
+            p.restore();
+        } else {
+            Icons::icon(m_icon, fg).paint(&p, iconRect);
+        }
 
         if (label) {
             p.setFont(Style::font(Role::Label));
@@ -145,6 +171,7 @@ class NavItem : public QAbstractButton {
     QString m_icon;
     QString m_hint;
     Motion::StateAnimator* m_hover;
+    QVariantAnimation m_pop;
     bool m_current = false;
     bool m_keyboardFocus = false;
 };

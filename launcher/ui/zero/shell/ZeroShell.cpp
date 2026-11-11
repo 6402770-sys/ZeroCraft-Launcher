@@ -119,7 +119,7 @@ void ZeroShell::showPage(const QString& id)
     m_topBar->showPage(page, !first);  // title / subtitle / actions crossfade
     if (!before.isNull()) {
         m_stack->layout()->activate();  // the new page needs its geometry before its picture is taken
-        Transition::run(m_stack, before, Transition::Kind::Rise, Tokens::durBase);
+        Transition::run(m_stack, before, Transition::Kind::Cascade, Tokens::durCascade);
     }
     emit pageChanged(id);
 }

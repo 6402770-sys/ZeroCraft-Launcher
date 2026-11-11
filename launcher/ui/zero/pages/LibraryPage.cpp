@@ -33,6 +33,7 @@
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
 #include "zero/profiles/InstanceProfile.h"
+#include "ui/zero/ZeroReveal.h"
 
 namespace Zero {
 
@@ -119,6 +120,7 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
 
     // ----- grid -----
     m_grid->setParent(this);
+    m_gridReveal = Motion::installItemReveal(m_grid);
     m_grid->setGridMetrics(ZeroInstanceDelegate::kCellWidth, Tokens::spaceLg - 4);
     m_grid->setStyleSheet(QStringLiteral("QAbstractItemView { background: transparent; border: none; }"));
     m_grid->viewport()->setAutoFillBackground(false);
@@ -132,6 +134,7 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     m_list = new QTreeView(this);
     m_list->setModel(m_sort);
     m_list->setItemDelegate(new RowDelegate(m_list));
+    m_listReveal = Motion::installItemReveal(m_list);
     m_list->setRootIsDecorated(false);
     m_list->setItemsExpandable(false);
     m_list->setUniformRowHeights(true);
@@ -235,6 +238,7 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
         APPLICATION->settings()->set("InstSortMode", m_sortCombo->itemData(i).toString());
         m_proxy->invalidate();
         m_proxy->sort(0);
+        revealItems();
     });
     syncSortFromSettings();
 
@@ -407,8 +411,10 @@ void LibraryPage::applyFilters(bool chipChanged)
     const QString keep = m_rememberedId;
     m_filtering = true;  // Qt moves the current index to a neighbor when its row is filtered out: do not remember that
     m_proxy->setFilterText(m_search->text());
-    if (chipChanged)
+    if (chipChanged) {
         m_proxy->refilter();
+        revealItems();
+    }
     // The selected instance comes back when the filter shows it again; while it is hidden nothing is selected
     // (the details panel would otherwise show an instance that is not highlighted anywhere).
     const QModelIndex source = keep.isEmpty() ? QModelIndex() : APPLICATION->instances()->getInstanceIndexById(keep);
@@ -421,6 +427,12 @@ void LibraryPage::applyFilters(bool chipChanged)
     }
     m_filtering = false;
     updateState();
+}
+
+void LibraryPage::revealItems()
+{
+    if (Motion::ItemReveal* reveal = m_listMode ? m_listReveal : m_gridReveal)
+        reveal->start();
 }
 
 void LibraryPage::updateState()

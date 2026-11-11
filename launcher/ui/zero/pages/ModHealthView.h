@@ -63,7 +63,7 @@ class ModHealthView : public QWidget {
     QStackedLayout* m_stack;
     QScrollArea* m_scroll;
     QWidget* m_host = nullptr;
-    ZeroEmptyState* m_loading;
+    QWidget* m_loading;
     ZeroEmptyState* m_noLoader;
     ZeroEmptyState* m_noMods;
     ZeroEmptyState* m_noInstances;

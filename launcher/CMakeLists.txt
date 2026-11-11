@@ -926,6 +926,10 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroIcons.h
     ui/zero/ZeroMotion.cpp
     ui/zero/ZeroMotion.h
+    ui/zero/ZeroReveal.cpp
+    ui/zero/ZeroReveal.h
+    ui/zero/ZeroSkeleton.cpp
+    ui/zero/ZeroSkeleton.h
     ui/zero/ZeroNavRail.cpp
     ui/zero/ZeroNavRail.h
     ui/zero/ZeroPaint.cpp

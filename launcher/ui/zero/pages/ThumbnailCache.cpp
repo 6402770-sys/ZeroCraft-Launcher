@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ThumbnailCache.h"
+#include <algorithm>
+#include "ui/zero/ZeroTokens.h"
+#include "ui/zero/ZeroMotion.h"
 
 #include <QCoreApplication>
 #include <QImage>
@@ -10,7 +13,8 @@
 
 namespace Zero {
 
-ThumbnailCache::ThumbnailCache(QObject* parent) : QObject(parent) {}
+ThumbnailCache::ThumbnailCache(QObject* parent) : QObject(parent) {
+    m_clock.start();}
 
 QString ThumbnailCache::keyFor(const QString& path, qint64 modifiedMs)
 {
@@ -25,6 +29,24 @@ QImage ThumbnailCache::load(const QString& path)
     if (source.isValid() && !source.isEmpty())
         reader.setScaledSize(source.scaled(kThumbWidth, kThumbHeight, Qt::KeepAspectRatioByExpanding));
     return reader.read();
+}
+
+qreal ThumbnailCache::fadeIn(const QString& path, qint64 modifiedMs) const
+{
+    const auto it = m_arrivedAt.constFind(keyFor(path, modifiedMs));
+    if (it == m_arrivedAt.constEnd())
+        return 1.0;
+    return std::clamp(qreal(m_clock.elapsed() - it.value()) / Tokens::durReveal, 0.0, 1.0);
+}
+
+bool ThumbnailCache::fading() const
+{
+    const qint64 now = m_clock.elapsed();
+    for (auto it = m_arrivedAt.cbegin(); it != m_arrivedAt.cend(); ++it)
+        if (now - it.value() < Tokens::durReveal)
+            return true;
+    const_cast<ThumbnailCache*>(this)->m_arrivedAt.clear();  // all settled: nothing left to track
+    return false;
 }
 
 bool ThumbnailCache::isReady(const QString& path, qint64 modifiedMs) const
@@ -67,6 +89,8 @@ void ThumbnailCache::onLoaded(const QString& key, const QString& path, const QIm
         return;
     }
     m_cache.insert(key, new QPixmap(QPixmap::fromImage(image)));
+    if (Motion::enabled())
+        m_arrivedAt.insert(key, m_clock.elapsed());
     emit thumbnailReady(path);
 }
 

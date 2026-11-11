@@ -23,6 +23,7 @@ class WorldRowModel : public QAbstractListModel {
     /// Replaces every row (model reset).
     void setEntries(const QList<Worlds::WorldEntry>& entries);
     const Worlds::WorldEntry& entry(int row) const { return m_rows.at(row); }
+    const QList<Worlds::WorldEntry>& entries() const { return m_rows; }
     int rowForKey(const QString& key) const;
 
     /// A size arrived: updates the row in place (no reordering).

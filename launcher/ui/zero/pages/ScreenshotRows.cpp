@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ScreenshotRows.h"
+#include "ui/zero/ZeroMotion.h"
 
 #include <QAbstractItemView>
 #include <QFontMetrics>
@@ -124,8 +125,23 @@ void ScreenshotDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     const QRect thumb(tile.left() + kPad, tile.top() + kPad, thumbWidth, thumbHeight);
     const QPainterPath clip = Paint::panelPath(QRectF(thumb), t.radiusMd);
     const QPixmap pixmap = m_cache ? m_cache->thumbnail(e.path, e.modifiedMs) : QPixmap();
+    const qreal fade = pixmap.isNull() ? 0.0 : m_cache->fadeIn(e.path, e.modifiedMs);
+    if (pixmap.isNull() || fade < 1.0) {
+        // placeholder (also under a thumbnail that is still fading in)
+        painter->setPen(QPen(t.border, 1));
+        painter->setBrush(t.surface);
+        painter->drawPath(Paint::panelPath(QRectF(thumb).adjusted(0.5, 0.5, -0.5, -0.5), t.radiusMd));
+        const QIcon icon = Icons::icon(QStringLiteral("image"), t.textTertiary);
+        const QRect iconRect(thumb.center().x() - kPlaceholderIcon / 2, thumb.center().y() - kPlaceholderIcon / 2, kPlaceholderIcon,
+                             kPlaceholderIcon);
+        painter->save();
+        painter->setOpacity(painter->opacity() * (1.0 - fade));
+        icon.paint(painter, iconRect);
+        painter->restore();
+    }
     if (!pixmap.isNull()) {
         painter->save();
+        painter->setOpacity(painter->opacity() * Motion::easeEnter().valueForProgress(fade));
         painter->setClipPath(clip);
         const QSizeF source = pixmap.size();
         QSizeF cropped = source;
@@ -137,14 +153,6 @@ void ScreenshotDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
         const QRectF from((source.width() - cropped.width()) / 2, (source.height() - cropped.height()) / 2, cropped.width(), cropped.height());
         painter->drawPixmap(QRectF(thumb), pixmap, from);
         painter->restore();
-    } else {
-        painter->setPen(QPen(t.border, 1));
-        painter->setBrush(t.surface);
-        painter->drawPath(Paint::panelPath(QRectF(thumb).adjusted(0.5, 0.5, -0.5, -0.5), t.radiusMd));
-        const QIcon icon = Icons::icon(QStringLiteral("image"), t.textTertiary);
-        const QRect iconRect(thumb.center().x() - kPlaceholderIcon / 2, thumb.center().y() - kPlaceholderIcon / 2, kPlaceholderIcon,
-                             kPlaceholderIcon);
-        icon.paint(painter, iconRect);
     }
 
     // caption: instance name over the relative date

@@ -20,7 +20,7 @@ namespace Motion {
 bool enabled();
 
 /// Pure resolution of the motion setting. `setting` is the ZeroMotion value: "on", "off", "system", or empty when the
-/// user never chose (then the legacy ZeroReduceMotion flag decides: true -> off, otherwise like "system").
+/// user never chose (then the legacy ZeroReduceMotion flag decides: true -> off, otherwise on: animations are the default).
 /// "system" follows `systemAnimations` (Windows "Animation effects").
 bool resolveEnabled(const QString& setting, bool legacyReduceMotion, bool systemAnimations);
 

@@ -54,6 +54,7 @@ class ServerRowModel : public QAbstractListModel {
     /// Replaces every row (model reset).
     void setServers(const QList<Servers::VaultServer>& servers);
     const Servers::VaultServer& server(int row) const { return m_rows.at(row); }
+    const QList<Servers::VaultServer>& servers() const { return m_rows; }
     int rowForAddress(const QString& address) const;
 
     /// The pinger the rows read their status from (not owned).

@@ -30,6 +30,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
+#include "ui/zero/ZeroSkeleton.h"
 #include "zero/mods/ModHealthScanner.h"
 #include "zero/mods/ModRepair.h"
 
@@ -155,7 +156,7 @@ ModHealthView::ModHealthView(QWidget* parent) : QWidget(parent)
     m_stack = new QStackedLayout;
     outer->addLayout(m_stack, 1);
 
-    m_loading = new ZeroEmptyState(QStringLiteral("package"), tr("Reading mods…"), tr("Large modpacks can take a few seconds."), {}, this);
+    m_loading = new ZeroSkeleton(ZeroSkeleton::Shape::Report, tr("Reading every mod of this instance… Large modpacks can take a few seconds."), this);
     m_stack->addWidget(m_loading);  // 0
     m_scroll = new QScrollArea(this);
     m_scroll->setWidgetResizable(true);

@@ -34,8 +34,10 @@ bool resolveEnabled(const QString& setting, bool legacyReduceMotion, bool system
         return false;
     if (setting == QLatin1String("system"))
         return systemAnimations;
-    // Never chosen (or unknown value): an old ZeroReduceMotion=true keeps meaning "off", otherwise follow the system.
-    return legacyReduceMotion ? false : systemAnimations;
+    // Never chosen (or unknown value): animations are on by default (session 6); an old ZeroReduceMotion=true keeps
+    // meaning "off". "Follow Windows" is an explicit choice.
+    Q_UNUSED(systemAnimations)
+    return !legacyReduceMotion;
 }
 
 bool systemAnimationsEnabled()

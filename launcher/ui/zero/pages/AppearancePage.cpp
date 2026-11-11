@@ -406,7 +406,7 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
     const struct {
         const char* value;
         QString label;
-    } options[] = { { "system", tr("Follow Windows") }, { "on", tr("On") }, { "off", tr("Off") } };
+    } options[] = { { "on", tr("On") }, { "system", tr("Follow Windows") }, { "off", tr("Off") } };
     for (const auto& o : options) {
         auto* b = new QPushButton(o.label, column);
         b->setCheckable(true);
@@ -532,19 +532,19 @@ void AppearancePage::syncMotion()
 {
     auto* settings = APPLICATION->settings();
     QString value = settings->get("ZeroMotion").toString();
-    if (value != QLatin1String("on") && value != QLatin1String("off"))
-        value = (value.isEmpty() && settings->get("ZeroReduceMotion").toBool()) ? QStringLiteral("off") : QStringLiteral("system");
+    if (value != QLatin1String("on") && value != QLatin1String("off") && value != QLatin1String("system"))
+        value = settings->get("ZeroReduceMotion").toBool() ? QStringLiteral("off") : QStringLiteral("on");  // never chosen: on
     for (auto* b : m_motionGroup->buttons())
         b->setChecked(b->property("zeroMotionValue").toString() == value);
 
     if (value == QLatin1String("on")) {
-        m_motionCaption->setText(tr("Animations are always on."));
+        m_motionCaption->setText(tr("Pages, cards, lists and pictures animate in. Turn this off if movement bothers you."));
     } else if (value == QLatin1String("off")) {
         m_motionCaption->setText(tr("Everything changes instantly. Activity indicators, like the launch sweep, still run."));
     } else if (Motion::systemAnimationsEnabled()) {
-        m_motionCaption->setText(tr("Windows animation effects are on, so ZERO animates."));
+        m_motionCaption->setText(tr("Same as Windows: animation effects are on there, so ZERO animates."));
     } else {
-        m_motionCaption->setText(tr("Windows animation effects are off on this PC, so ZERO stays still. Choose On to enable animations."));
+        m_motionCaption->setText(tr("Same as Windows: animation effects are off there, so ZERO stays still. Choose On to animate anyway."));
     }
 }
 

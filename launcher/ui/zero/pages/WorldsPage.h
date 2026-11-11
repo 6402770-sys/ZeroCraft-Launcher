@@ -19,6 +19,9 @@ class QTimer;
 class QAction;
 
 namespace Zero {
+namespace Motion {
+class ItemReveal;
+}
 
 namespace Backup {
 class WorldBackupJobs;
@@ -102,6 +105,7 @@ class WorldsPage : public ShellPage {
     QString m_selectedKey;
     QString m_instanceFilter;  // instance id, empty = all (kept even while that instance has no worlds)
     Worlds::SortMode m_sort = Worlds::SortMode::Recent;
+    Motion::ItemReveal* m_reveal = nullptr;
 };
 
 }  // namespace Zero

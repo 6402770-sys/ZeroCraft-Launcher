@@ -19,6 +19,9 @@ class QTimer;
 class QAction;
 
 namespace Zero {
+namespace Motion {
+class ItemReveal;
+}
 
 class ScreenshotDelegate;
 class ScreenshotModel;
@@ -102,6 +105,7 @@ class ScreenshotsPage : public ShellPage {
     bool m_stale = false;
     QString m_instanceFilter;  // instance id, empty = all (kept even while that instance has no screenshots)
     Gallery::SortMode m_sort = Gallery::SortMode::Newest;
+    Motion::ItemReveal* m_reveal = nullptr;
 };
 
 }  // namespace Zero

@@ -30,6 +30,7 @@
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
 #include "zero/backup/WorldBackupJobs.h"
+#include "ui/zero/ZeroReveal.h"
 
 namespace Zero {
 
@@ -96,6 +97,7 @@ WorldsPage::WorldsPage(QWidget* parent)
     m_list = new QListView(this);
     m_list->setModel(m_model);
     m_list->setItemDelegate(new WorldRowDelegate(m_list));
+    m_reveal = Motion::installItemReveal(m_list);
     m_list->setUniformItemSizes(true);
     m_list->setFrameShape(QFrame::NoFrame);
     m_list->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -167,11 +169,13 @@ WorldsPage::WorldsPage(QWidget* parent)
         m_instanceFilter = m_instanceCombo->itemData(i).toString();
         APPLICATION->settings()->set("ZeroWorldsInstance", m_instanceFilter);
         applyFilters();
+        m_reveal->start();
     });
     connect(m_sortCombo, &QComboBox::activated, this, [this](int i) {
         m_sort = Worlds::sortModeFromString(m_sortCombo->itemData(i).toString());
         APPLICATION->settings()->set("ZeroWorldsSort", Worlds::sortModeToString(m_sort));
         applyFilters();
+        m_reveal->start();
     });
 
     connect(m_scanner, &Worlds::WorldScanner::worldsChanged, this, &WorldsPage::onWorldsChanged);
@@ -329,10 +333,20 @@ void WorldsPage::applyFilters()
     }
     Worlds::sortWorlds(rows, m_sort);
 
+    // A rescan that found the same worlds must not reset the view (a reset paints one empty frame: the list blinks).
+    if (rows == m_model->entries()) {
+        updateState();
+        return;
+    }
+
     // The selected world comes back when the filter shows it again; while it is hidden nothing is highlighted.
     const int scroll = m_list->verticalScrollBar()->value();
+    const bool firstFill = m_model->rowCount() == 0;
     m_applying = true;
     m_model->setEntries(rows);
+    m_list->doItemsLayout();  // lay out now (no empty frame, and the scroll position below is not clamped)
+    if (firstFill && !rows.isEmpty())
+        m_reveal->start();
     const int row = m_selectedKey.isEmpty() ? -1 : m_model->rowForKey(m_selectedKey);
     if (row >= 0) {
         const QModelIndex index = m_model->index(row);

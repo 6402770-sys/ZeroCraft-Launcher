@@ -30,6 +30,7 @@
 - `launcher/ui/zero/pages/JavaDoctorView.{h,cpp}` — Tools > Java Doctor UI (automatic Java card, instances with status pills and "Use Java N", runtimes)
 - `launcher/ui/zero/PillTag.{h,cpp}` — shared bordered pill label (plain / status tones)
 - `launcher/zero/storage/` — Storage Manager core: `StorageScanner` (per-category / per-instance disk usage, old log / crash report cleanup candidates, restore leftovers, validated Recycle Bin trash, async scanner; no widgets)
+- `launcher/zero/mods/` — Mod Intelligence core: `Versions` (version compare, Fabric predicates, Maven ranges, Yes / No / Unknown), `ModMetadata` (read-only jar parser: fabric / quilt / mods.toml / neoforge.mods.toml / mcmod.info, nested jars), `ModHealth` (instance context + pure `analyze` with confidence levels), `ModHealthScanner` (async folder scan); no widgets
 - `launcher/zero/backup/` — Smart Backup: `WorldBackup` (create / verify / list / restore / retention / delete of world backups; no widgets), `WorldBackupJobs` (app-level runner: one job per world on the pool, launch lock), `AutoBackup` (automatic backups of the played worlds after a session)
 - `launcher/ui/zero/pages/` (Worlds Hub) — `WorldsPage` (toolbar, list, empty states), `WorldRows` (`WorldRowModel` + painted `WorldRowDelegate`), `WorldDetailsPanel`, `WorldBackupsSection` (Backups block of the details panel), `WorldIcon` (pixel-crisp world icon tiles)
 - `launcher/zero/history/` — session history: `SessionHistory` (one record per launch, classification, JSON store, recorder slots; no widgets)
@@ -46,6 +47,7 @@
 - `tests/WorldBackup_test.cpp` — Smart Backup: round trip, verify, zip-slip, restore + failure paths, retention (manual / safety / auto), listing, free space, job runner / launch lock
 - `tests/AutoBackup_test.cpp` — automatic backups: world selection (mtime, slack, size cap) and the service queue with real temp worlds
 - `tests/JavaDoctor_test.cpp` — Java Doctor prediction table (pinned / detected / download / override / missing path / ignore / 32-bit), recommendation ordering, requirement reader
+- `tests/ModHealth_test.cpp` (+ `ModHealthFixtures.h`) — Mod Intelligence: version compare / predicates / ranges, format parsers, every health rule with false-positive guards, real jar round trips (nested jars), async scanner
 - `tests/StorageScanner_test.cpp` — storage report math (no double counting, junctions, nested / duplicate dirs), cleanup detection, trash validation + failure paths, async scanner
 - `tests/WorldScanner_test.cpp` — world scan of real folder layouts, skipped entries, read-only guarantee, folder size (links / junctions), search / sort, scanner generations
 - `tests/SessionHistory_test.cpp` — launch classification, recorder sequences with injected clock, persistence, cap, corrupt / malformed files

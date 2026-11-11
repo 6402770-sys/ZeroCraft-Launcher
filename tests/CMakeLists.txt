@@ -45,6 +45,7 @@ set(TEST_SOURCES
     AutoBackup_test.cpp
     StorageScanner_test.cpp
     JavaDoctor_test.cpp
+    ModHealth_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

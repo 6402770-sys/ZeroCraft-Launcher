@@ -883,6 +883,14 @@ SET(LAUNCHER_SOURCES
     zero/history/SessionHistory.h
     zero/java/JavaDoctor.cpp
     zero/java/JavaDoctor.h
+    zero/mods/ModHealth.cpp
+    zero/mods/ModHealth.h
+    zero/mods/ModHealthScanner.cpp
+    zero/mods/ModHealthScanner.h
+    zero/mods/ModMetadata.cpp
+    zero/mods/ModMetadata.h
+    zero/mods/Versions.cpp
+    zero/mods/Versions.h
     zero/palette/CommandMatcher.cpp
     zero/palette/CommandMatcher.h
     zero/profiles/InstanceProfile.cpp

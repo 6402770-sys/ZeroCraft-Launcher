@@ -154,6 +154,31 @@ Core without widgets / `APPLICATION` / Prism instance classes: `launcher/zero/ja
 - `PillTag` (`ui/zero/PillTag`) is the shared bordered label (backup rows, Java Doctor status): plain look or a status tone (`Tokens::statusTint` of success / warning / danger / info).
 - Tests: `tests/JavaDoctor_test.cpp` (data-driven table over every branch, recommendation ordering, requirement reader).
 
+## Mod Intelligence (Mission 002)
+Core without widgets: `launcher/zero/mods/` (namespace `Zero::Mods`). MISSION rules: separate definite conflicts from possible ones, confidence levels, no false conflict claims. Read-only everywhere (jars are only read, nested jars are parsed from memory, nothing is extracted or written). Outdated-version checks need online metadata and are out of scope.
+- **`Versions`** (pure): `compareVersions` (numeric segments, pre-release tags below the release, `+build` ignored; `nullopt` for snapshots like `23w13a`, free text, placeholders and for qualifiers whose order differs between semver and Maven, e.g. `1.20.1-47.1.0` vs `1.20.1`), `matchesFabricPredicate` (`* = > >= < <= ~ ^`, `1.2.x`, space = AND, `||` = OR) and `matchesMavenRange` (`[a,b)`, `(a,]`, `[a]`, unions, bare `a` = at least a). Matchers return `Tri` Yes / No / Unknown; Unknown never becomes a finding stronger than Possible.
+- **`ModMetadata`**: own parser (Prism's `LocalModParseTask` drops ranges, breaks, provides and nested jars). One `ModMetadata` per jar = `mods[]` (`ModEntry` per mod and per format: Fabric, Quilt, Forge, NeoForge, LegacyForge/mcmod.info) with `depends` / `recommends` / `breaks` / `conflicts` / `provides`, `nested[]` (Fabric / Quilt `jars`, Forge / NeoForge jarjar; depth <= 3, size and count budgets), `parseError`, `unparsedFormats`. `parseJar(path)` (via `ArchiveReader`), `parseJarBytes` (libarchive on memory) and one parser per format on raw contents. NeoForge `type` maps to depends / recommends / breaks (incompatible) / conflicts (discouraged); `${file.jarVersion}` is read from the manifest, other placeholders mean "version unknown".
+- **`ModHealth`**: `InstanceContext` (mc version, loader, loader version; `readInstanceContext` reads `mmc-pack.json`) and the pure `analyze(enabledJars, context, disabledFileNames, disabledJars = {})` -> `Report` (findings sorted Confirmed, Likely, Possible, Unknown, then by mod name; counts; `modsScanned`). Text (title / detail / suggestion) is plain English via `QCoreApplication::translate("ModHealth", ...)`.
+- **`ModHealthScanner`**: `analyze(instanceId, modsDir, instanceRoot)` on `QThreadPool::globalInstance()` with a generation counter (same posting pattern as `StorageScanner`), signal `reportReady(instanceId, Report)`. Only `*.jar` (enabled) and `*.disabled` (disabled) files directly inside the mods folder; symlinks skipped. `scanModsFolder` is the synchronous core.
+- **Loaded mods**: for the instance loader the first format present in a jar wins (Fabric: Fabric; Quilt: Quilt, Fabric; Forge: Forge, LegacyForge; NeoForge: NeoForge). Environment ids `minecraft java fabricloader quilt_loader forge neoforge fml javafml lowcodefml` are always provided (`fabric` only by a jar that provides it); loader versions are known only for the instance's own loader.
+
+| Finding | Confidence |
+|---|---|
+| Missing required dependency (no enabled jar supplies the id, nested jars and `provides` included) | Confirmed; Possible when some jar could not be read (it may be the provider). Optional / recommended: no finding. A disabled file that matches turns the suggestion into "Enable ..." (exact with parsed metadata, "may" by file name) |
+| Required mod present, version outside the range | Confirmed on No; Possible on Unknown |
+| `minecraft` requirement not met by the instance version | Confirmed on No; Unknown: no finding |
+| Loader version (`fabricloader` / `quilt_loader` / `forge` / `neoforge`) not met | Confirmed on No; Unknown: no finding |
+| Wrong loader: Fabric / Quilt-only jar on Forge / NeoForge (Fabric with Connector installed: Possible); Forge / NeoForge / Quilt-only jar on Fabric / Quilt; NeoForge jar on Forge | Confirmed |
+| Forge-format jar on NeoForge | Possible for 1.20.1 - 1.20.4 or an unknown version (early NeoForge still read `mods.toml`), Confirmed after that |
+| mcmod.info-only jar on Fabric / Quilt / NeoForge | Likely |
+| Several formats in one jar: the weakest alternative decides; broken metadata of the instance's own format is Unknown, never "wrong loader" | |
+| Declared `breaks` (Fabric / Quilt) or `incompatible` (NeoForge) matched | Confirmed (also against `minecraft`) |
+| Declared `conflicts` (Fabric), `discouraged` (NeoForge), Forge / NeoForge optional dependency whose range excludes the installed version | Likely |
+| Duplicate id in two enabled top-level jars (a copy nested in another jar is ignored) | Confirmed; Likely for mcmod.info ids |
+| Jar with no recognizable metadata / parse error | Unknown ("ZERO can't read this mod's metadata; it may still work") |
+
+Never reported: `java` requirements, dependencies with `side = SERVER`, anything that depends on a version that cannot be compared. A jar that may still load (Connector case) never counts as "missing" for the ids it provides. Findings are deduplicated (A breaks B and B breaks A is one finding; a missing id is one finding listing its dependents). Tests: `tests/ModHealth_test.cpp` (versions, predicates, ranges, parsers, every rule with positive and false-positive guard cases, real zip round trips with nested jars, scanner).
+
 ## Additions in session 2 (Mission 002)
 - **Themes**: `Zero::ThemeSpec` v2; one `ITheme` per spec (`ZeroTheme` = `zero-obsidian`, `ZeroMinecraftTheme` =
   `zero-minecraft`) registered first in `ThemeManager`; stylesheet = `obsidian.qss` + optional `<id>.qss` overlay.

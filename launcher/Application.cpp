@@ -53,6 +53,7 @@
 #include "ui/ToolTipFilter.h"
 #include "ui/ViewLogWindow.h"
 
+#include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
 #include "ui/dialogs/ProgressDialog.h"
@@ -670,6 +671,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
         m_settings->registerSetting("ZeroWorldsSort", QString("recent"));  // Worlds page: "recent" | "name" | "size" | "instance"
         m_settings->registerSetting("ZeroWorldsInstance", QString());  // Worlds page: instance id filter, empty = all instances
+        m_settings->registerSetting("ZeroAutoBackupWorlds", true);  // back up the played worlds when the game closes (all instances)
 
         // Remembered state
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());
@@ -1058,6 +1060,33 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             });
             connect(this, &Application::gameStoppedUnexpectedly, history, &Zero::History::SessionHistory::onStoppedUnexpectedly);
             connect(this, &Application::launchEnded, history, &Zero::History::SessionHistory::onLaunchEnded);
+        }
+
+        // ZERO: Smart Backup. The job runner is app-level (Worlds page and automatic backups share it); AutoBackup backs up the
+        // worlds played in a session when the game ends.
+        {
+            auto* jobs = new Zero::Backup::WorldBackupJobs(
+                Zero::Backup::backupsRoot(m_dataPath),
+                [this](const QString& id) {
+                    // an instance counts as running from the moment its launch starts (Preparing) until the game ended
+                    if (launchPhase(id) != LaunchPhase::Idle)
+                        return true;
+                    auto* inst = m_instances->getInstanceById(id);
+                    return inst && inst->isRunning();
+                },
+                this);
+            auto* autoBackup = new Zero::Backup::AutoBackup(
+                jobs, [this]() { return m_settings->get("ZeroAutoBackupWorlds").toBool(); },
+                [this](const QString& id) {
+                    auto* inst = m_instances->getInstanceById(id);
+                    return inst ? Zero::Worlds::InstanceSource{ inst->id(), inst->name(), inst->worldDir() } : Zero::Worlds::InstanceSource{};
+                },
+                {}, this);
+            connect(this, &Application::launchPhaseChanged, autoBackup, [autoBackup](const QString& id, Application::LaunchPhase phase) {
+                if (phase == Application::LaunchPhase::Running)
+                    autoBackup->onGameRunning(id);
+            });
+            connect(this, &Application::launchEnded, autoBackup, &Zero::Backup::AutoBackup::onLaunchEnded);
         }
     }
 

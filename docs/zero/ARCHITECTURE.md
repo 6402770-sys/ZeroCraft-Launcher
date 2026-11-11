@@ -70,7 +70,7 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
 ## Smart Backup (worlds, Mission 002, milestone 9)
 The first ZERO feature that writes inside user worlds. Rule: never silently overwrite or lose user data. Code: `launcher/zero/backup/WorldBackup` (pure functions, no widgets, no
 `APPLICATION`; seams for tests in `Hooks`: rename, free space, trash) and `WorldBackupJobs` (runner); UI: `WorldBackupsSection` inside the Worlds details panel.
-- **Storage**: `<dataRoot>/zero/backups/<instanceId>/<worldFolder>/<yyyyMMdd-HHmmss-zzz>-<manual|safety>.zip` (UTC stamp; a taken name gets `-2`, `-3`...). It is outside the instance,
+- **Storage**: `<dataRoot>/zero/backups/<instanceId>/<worldFolder>/<yyyyMMdd-HHmmss-zzz>-<manual|safety|auto>.zip` (UTC stamp; a taken name gets `-2`, `-3`...). It is outside the instance,
   so backups survive instance deletion and never end up in instance exports. Written through Prism's `ArchiveWriter` (libarchive zip); read through `ArchiveReader` (own streaming
   `File::readBlocks`, `// ZERO`, so multi-GB region files are never held in memory).
 - **Manifest**: first entry `zero-backup.json` = `{version 1, kind, createdMs, instanceId, instanceName, worldFolder, worldName, files:[{path, size, sha256}], totalBytes}`; world files are
@@ -89,14 +89,27 @@ The first ZERO feature that writes inside user worlds. Rule: never silently over
   (f) any failure after (c) started deletes the staging folder. Folder renames retry a few times (antivirus / indexer handles on Windows) but never into an existing destination.
 - **Leftover folders**: an interrupted restore (crash, power loss) can leave `.zero-restore-*` or `.zero-replaced-*` next to the worlds. They are never auto-deleted (a `.zero-replaced-*` may be the only
   copy of a world), and `scanWorldsDir` ignores every folder starting with `.zero-`, so they do not show up as worlds. The user can delete or rename them by hand.
-- **Retention** (`applyRetention`, run by the jobs after every successful backup / restore): keep the 10 newest `manual` and the 3 newest `safety` per world, by the timestamp in the file name (a
-  `-N` suffix compares numerically). It never deletes the backup just created or the one just restored (protected list) and only touches `*-manual.zip` / `*-safety.zip` with the exact name pattern; a damaged
+- **Retention** (`applyRetention`, run by the jobs after every successful backup / restore): keep the 10 newest `manual`, the 3 newest `safety` and the 5 newest `auto` (`kKeepAuto`) per world, each kind independently (an auto backup never evicts a manual or safety one, and vice versa), by the timestamp in the file name (a
+  `-N` suffix compares numerically). It never deletes the backup just created or the one just restored (protected list) and only touches `*-manual.zip` / `*-safety.zip` / `*-auto.zip` with the exact name pattern; a damaged
   zip with such a name still counts as one of the kept ones. `deleteBackup` (Delete button) only accepts a `.zip` inside `<dataRoot>/zero/backups` and moves it to the Recycle Bin.
 - **Jobs**: `WorldBackupJobs` runs `backup / restore / remove / refreshList` on `QThreadPool::globalInstance()` (same posting pattern as `WorldScanner`: the pool never touches `this`, the QPointer is read on
-  the GUI thread). At most one job per world key; a request for a busy world is refused. A job is refused when the instance runs or is being launched (`Application::launchPhase`), checked on the GUI thread at
-  request time. **Launch lock**: while a job runs for an instance, `WorldBackupJobs::isInstanceLocked(id)` is true and `Application::launch` (one `// ZERO` block at its top) refuses with the message box "A world of
-  this instance is being backed up or restored. Try again when it finishes." Signals: `jobStarted`, `jobFinished(key, ok, message)`, `backupsChanged`, `worldRestored`, `backupsListed`.
-- Tests: `tests/WorldBackup_test.cpp` (injected rename / free-space / trash hooks simulate failures).
+  the GUI thread). It is an **app-level service**: `Application` creates it (with the running check: `launchPhase != Idle` or `isRunning()`) next to `SessionHistory` in a `// ZERO:` block and
+  `WorldBackupJobs::global()` returns it (the first created instance is global, like `SessionHistory::global()`); the Worlds page and `AutoBackup` share it. `backup(entry, Kind = Manual)` takes `Manual` or `Auto`.
+  At most one job per world key; a request for a busy world is refused. A job is refused when the instance runs or is being launched, checked on the GUI thread at request time. **Launch lock**: while a
+  job runs for an instance, `WorldBackupJobs::isInstanceLocked(id)` is true and `Application::launch` (one `// ZERO` block at its top) refuses with the message box "A world of this instance is being
+  backed up or restored. Try again when it finishes." Other services can hold the same counted lock with `lockInstance` / `unlockInstance`. Signals: `jobStarted`, `jobFinished(key, ok, message, automatic)`
+  (`automatic` = the job was requested as `Kind::Auto`; the Worlds page toasts only non-automatic results), `backupsChanged`, `worldRestored`, `backupsListed`.
+- **Automatic backups** (`launcher/zero/backup/AutoBackup`, no widgets, no `APPLICATION`; created in `Application` right after the jobs object and reachable as `AutoBackup::global()`): after a session ends
+  the worlds that were played are backed up as `Kind::Auto`. Setting `ZeroAutoBackupWorlds` (global bool, default true; checkbox "Back up automatically after playing" at the bottom of the Backups block).
+  - `onGameRunning(id)` (from `launchPhaseChanged(Running)`) remembers the session start; `onLaunchEnded(id, success, aborted, gameStarted)` does nothing unless `gameStarted` and the setting is on.
+    Played, stopped and crashed sessions are all backed up. `launchEnded` fires before the phase returns to Idle, so the work is deferred with `QTimer::singleShot(0)` (the running check passes then).
+  - Selection (pure, `selectWorlds` / `touchedSince`): a world is selected when its `level.dat` modification time is >= session start - 5 s (`kAutoSlackMs`). The scan (`scanWorldsDir`, mtime read,
+    `folderSize` of touched worlds only) runs on a pool thread and is posted back with the QPointer pattern. Touched worlds over `kAutoMaxBytes` (2 GiB) are not backed up but reported as "too large".
+  - The selected worlds are backed up **sequentially** (the next one starts on the previous `jobFinished`). A refused or failed job counts as failed and the queue goes on. **The instance stays locked**
+    (`lockInstance`) from `launchEnded` until the queue ended (scan included), so a new launch can never slip in between two queued backups and no backup is refused because of it.
+  - When the work of an instance ended it emits `finished(instanceId, instanceName, backedUp, tooLarge (world names), failed, firstError)`; nothing selected = no signal. `MainWindow` shows up to three
+    toasts per instance (Success "Backed up N world(s) of X", Error "Automatic backup failed for X: ...", Warning "... is too large for automatic backups ..."), never one per world.
+- Tests: `tests/WorldBackup_test.cpp` (injected rename / free-space / trash hooks simulate failures), `tests/AutoBackup_test.cpp` (selection rules and the service with real temp worlds).
 - Known limits: nothing prevents another program from editing a world during the copy (the verify step would then fail the backup rather than record a torn one); a restore sets file modification times
   to "now"; empty folders inside a world are not restored.
 

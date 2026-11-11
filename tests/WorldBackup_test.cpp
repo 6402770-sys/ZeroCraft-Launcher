@@ -772,6 +772,61 @@ class WorldBackupTest : public QObject {
         QCOMPARE(applyRetention(dir), 0);  // idempotent
     }
 
+    void retentionKeepsFiveAutoIndependently()
+    {
+        QTemporaryDir root;
+        const QString dir = root.filePath("b");
+        QStringList autos;
+        for (int i = 0; i < 7; ++i)
+            autos << touchBackupName(dir, QString("202601%1-101010-123-auto.zip").arg(i + 1, 2, 10, QChar('0')));
+        const QString manual = touchBackupName(dir, "20250101-101010-123-manual.zip");  // older than every auto one
+        const QString safety = touchBackupName(dir, "20250102-101010-123-safety.zip");
+
+        QCOMPARE(applyRetention(dir), 2);  // only the two oldest auto backups go
+        for (int i = 0; i < 7; ++i)
+            QCOMPARE(QFileInfo::exists(autos[i]), i >= 2);
+        QVERIFY(QFileInfo::exists(manual));
+        QVERIFY(QFileInfo::exists(safety));
+        QCOMPARE(applyRetention(dir), 0);
+
+        // the protected list is honoured for auto files too; manual / safety keep counting separately
+        QCOMPARE(applyRetention(dir, { autos[2] }, 10, 3, 1), 3);
+        QVERIFY(QFileInfo::exists(autos[2]));
+        QVERIFY(QFileInfo::exists(autos[6]));
+        for (int i : { 3, 4, 5 })
+            QVERIFY(!QFileInfo::exists(autos[i]));
+        QVERIFY(QFileInfo::exists(manual));
+        QVERIFY(QFileInfo::exists(safety));
+
+        // many manual backups never touch the auto ones
+        for (int i = 0; i < 12; ++i)
+            touchBackupName(dir, QString("202602%1-101010-123-manual.zip").arg(i + 1, 2, 10, QChar('0')));
+        applyRetention(dir);
+        QVERIFY(QFileInfo::exists(autos[2]));
+        QVERIFY(QFileInfo::exists(autos[6]));
+    }
+
+    void autoBackupKindRoundTrip()
+    {
+        QTemporaryDir root;
+        const QString world = makeWorld(root.filePath("saves"), "W", worldTree());
+        const QString dir = root.filePath("b");
+        const BackupResult r = createBackup(world, dir, Kind::Auto, metaFor("W"));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QVERIFY(r.zipPath.endsWith("-auto.zip"));
+        QVERIFY(verifyBackup(r.zipPath).ok);
+        const QList<BackupInfo> list = listBackups(dir);
+        QCOMPARE(list.size(), 1);
+        QVERIFY(list.first().valid);
+        QCOMPARE(list.first().kind, Kind::Auto);
+
+        // an auto backup restores like any other (a safety snapshot of the current world comes first)
+        const RestoreResult rr = restoreBackup(r.zipPath, world, dir, metaFor("W"), removeHooks());
+        QVERIFY2(rr.ok, qPrintable(rr.error));
+        QVERIFY(rr.safetyZip.endsWith("-safety.zip"));
+        QCOMPARE(readTree(world), worldTree());
+    }
+
     void retentionNeverDeletesProtectedOrNewest()
     {
         QTemporaryDir root;
@@ -857,6 +912,13 @@ class WorldBackupTest : public QObject {
         bool ok = false;
         QCOMPARE(kindFromString("safety", &ok), Kind::Safety);
         QVERIFY(ok);
+        QCOMPARE(kindFromString("auto", &ok), Kind::Auto);
+        QVERIFY(ok);
+        QCOMPARE(kindFromString("manual", &ok), Kind::Manual);
+        QVERIFY(ok);
+        for (const Kind k : { Kind::Manual, Kind::Safety, Kind::Auto })
+            QCOMPARE(kindFromString(kindToString(k), &ok), k);
+        QCOMPARE(kindToString(Kind::Auto), QString("auto"));
         kindFromString("bogus", &ok);
         QVERIFY(!ok);
     }

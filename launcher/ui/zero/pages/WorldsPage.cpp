@@ -44,21 +44,12 @@ QList<Worlds::InstanceSource> sourcesFromApplication()
     }
     return out;
 }
-
-// An instance counts as running from the moment its launch starts (Preparing) until the game ended.
-bool instanceBusy(const QString& id)
-{
-    if (APPLICATION->launchPhase(id) != Application::LaunchPhase::Idle)
-        return true;
-    const auto inst = APPLICATION->instances()->getInstanceById(id);
-    return inst && inst->isRunning();
-}
 }  // namespace
 
 WorldsPage::WorldsPage(QWidget* parent)
     : ShellPage(parent)
     , m_scanner(new Worlds::WorldScanner(&sourcesFromApplication, this))
-    , m_backupJobs(new Backup::WorldBackupJobs(Backup::backupsRoot(APPLICATION->dataRoot()), &instanceBusy, this))
+    , m_backupJobs(Backup::WorldBackupJobs::global())
     , m_model(new WorldRowModel(this))
 {
     // ----- toolbar row (content): search left, instance filter and sort right -----
@@ -134,10 +125,15 @@ WorldsPage::WorldsPage(QWidget* parent)
     m_details = new WorldDetailsPanel(this);
     connect(m_details, &WorldDetailsPanel::showInstanceRequested, this, &WorldsPage::showInstanceRequested);
     m_details->setBackupJobs(m_backupJobs);
-    connect(m_backupJobs, &Backup::WorldBackupJobs::jobFinished, this, [this](const QString&, bool ok, const QString& message) {
-        ZeroToast::show(window(), message, ok ? ZeroToast::Kind::Success : ZeroToast::Kind::Error);
-    });
-    connect(m_backupJobs, &Backup::WorldBackupJobs::worldRestored, this, &WorldsPage::rescan);
+    if (m_backupJobs) {
+        // automatic backups are summarised by one toast per session (MainWindow), never one per world
+        connect(m_backupJobs, &Backup::WorldBackupJobs::jobFinished, this,
+                [this](const QString&, bool ok, const QString& message, bool automatic) {
+                    if (!automatic)
+                        ZeroToast::show(window(), message, ok ? ZeroToast::Kind::Success : ZeroToast::Kind::Error);
+                });
+        connect(m_backupJobs, &Backup::WorldBackupJobs::worldRestored, this, &WorldsPage::rescan);
+    }
 
     auto* collectionRow = new QWidget(this);
     auto* row = new QHBoxLayout(collectionRow);

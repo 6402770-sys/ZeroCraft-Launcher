@@ -12,6 +12,8 @@ namespace Zero {
 namespace Backup {
 
 namespace {
+WorldBackupJobs* g_global = nullptr;
+
 QHash<QString, int>& lockedInstances()  // instance id -> number of active jobs; GUI thread only
 {
     static QHash<QString, int> locks;
@@ -36,12 +38,32 @@ bool WorldBackupJobs::isInstanceLocked(const QString& instanceId)
     return lockedInstances().value(instanceId, 0) > 0;
 }
 
+void WorldBackupJobs::lockInstance(const QString& instanceId)
+{
+    ++lockedInstances()[instanceId];
+}
+
+void WorldBackupJobs::unlockInstance(const QString& instanceId)
+{
+    unlock(instanceId);
+}
+
+WorldBackupJobs* WorldBackupJobs::global()
+{
+    return g_global;
+}
+
 WorldBackupJobs::WorldBackupJobs(QString backupsRootDir, RunningCheck isRunning, QObject* parent)
     : QObject(parent), m_root(std::move(backupsRootDir)), m_isRunning(std::move(isRunning))
-{}
+{
+    if (!g_global)
+        g_global = this;
+}
 
 WorldBackupJobs::~WorldBackupJobs()
 {
+    if (g_global == this)
+        g_global = nullptr;
     // jobs still running on the pool can no longer report back: release their launch locks
     for (auto it = m_activeInst.cbegin(); it != m_activeInst.cend(); ++it)
         unlock(it.value());
@@ -59,23 +81,25 @@ bool WorldBackupJobs::ownsBackup(const Worlds::WorldEntry& entry, const QString&
                                                                       Qt::CaseInsensitive) == 0;
 }
 
-bool WorldBackupJobs::refuse(const QString& key, const QString& reason)
+bool WorldBackupJobs::refuse(const QString& key, const QString& reason, bool automatic)
 {
-    emit jobFinished(key, false, reason);
+    emit jobFinished(key, false, reason, automatic);
     return false;
 }
 
-bool WorldBackupJobs::begin(const Worlds::WorldEntry& entry, Op op)
+bool WorldBackupJobs::begin(const Worlds::WorldEntry& entry, Op op, bool automatic)
 {
     const QString key = entry.key();
     if (entry.folderPath.isEmpty() || entry.instanceId.isEmpty() || entry.folderName.isEmpty())
-        return refuse(key, tr("This world cannot be backed up."));
+        return refuse(key, tr("This world cannot be backed up."), automatic);
     if (m_active.contains(key))
-        return refuse(key, tr("Another backup action for this world is still running."));
+        return refuse(key, tr("Another backup action for this world is still running."), automatic);
     if (m_isRunning && m_isRunning(entry.instanceId))
-        return refuse(key, tr("Close the game to back up or restore this world."));
+        return refuse(key, tr("Close the game to back up or restore this world."), automatic);
     m_active.insert(key, op);
     m_activeInst.insert(key, entry.instanceId);
+    if (automatic)
+        m_activeAuto.insert(key);
     ++lockedInstances()[entry.instanceId];
     emit jobStarted(key);
     return true;
@@ -86,16 +110,19 @@ void WorldBackupJobs::finish(const QString& key, const QString& instanceId, Op o
     if (m_active.remove(key) == 0)
         return;
     m_activeInst.remove(key);
+    const bool automatic = m_activeAuto.remove(key);
     unlock(instanceId);
-    emit jobFinished(key, ok, message);
+    emit jobFinished(key, ok, message, automatic);
     if (ok && op == Op::Restore)
         emit worldRestored(key);
     emit backupsChanged(key);
 }
 
-bool WorldBackupJobs::backup(const Worlds::WorldEntry& entry)
+bool WorldBackupJobs::backup(const Worlds::WorldEntry& entry, Kind kind)
 {
-    if (!begin(entry, Op::Backup))
+    if (kind == Kind::Safety)
+        return refuse(entry.key(), tr("This world cannot be backed up."));
+    if (!begin(entry, Op::Backup, kind == Kind::Auto))
         return false;
     const QString key = entry.key();
     const QString instanceId = entry.instanceId;
@@ -107,8 +134,8 @@ bool WorldBackupJobs::backup(const Worlds::WorldEntry& entry)
     // The pool thread never touches `this` or reads the QPointer: it posts to the application object and the pointer is checked
     // there, on the GUI thread.
     QPointer<WorldBackupJobs> self(this);
-    QThreadPool::globalInstance()->start([self, key, instanceId, dir, folder, meta, hooks]() {
-        const BackupResult r = createBackup(folder, dir, Kind::Manual, meta, hooks);
+    QThreadPool::globalInstance()->start([self, key, instanceId, dir, folder, meta, hooks, kind]() {
+        const BackupResult r = createBackup(folder, dir, kind, meta, hooks);
         if (r.ok)
             applyRetention(dir, { r.zipPath });
         auto* app = QCoreApplication::instance();

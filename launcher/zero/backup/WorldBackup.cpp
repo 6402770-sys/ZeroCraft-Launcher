@@ -274,13 +274,14 @@ struct NameParts {
 
 bool parseBackupName(const QString& fileName, NameParts* out)
 {
-    static const QRegularExpression re(QStringLiteral("^(\\d{8})-(\\d{6})-(\\d{3})(?:-(\\d+))?-(manual|safety)\\.zip$"));
+    static const QRegularExpression re(QStringLiteral("^(\\d{8})-(\\d{6})-(\\d{3})(?:-(\\d+))?-(manual|safety|auto)\\.zip$"));
     const QRegularExpressionMatch m = re.match(fileName);
     if (!m.hasMatch())
         return false;
     out->stamp = m.captured(1) + m.captured(2) + m.captured(3);
     out->seq = m.captured(4).isEmpty() ? 1 : m.captured(4).toInt();
-    out->kind = m.captured(5) == QLatin1String("safety") ? Kind::Safety : Kind::Manual;
+    bool kindOk = false;
+    out->kind = kindFromString(m.captured(5), &kindOk);
     return true;
 }
 
@@ -379,14 +380,24 @@ bool scanArchive(const QString& zipPath, Manifest* manifest, QHash<QString, Seen
 
 QString kindToString(Kind kind)
 {
-    return kind == Kind::Safety ? QStringLiteral("safety") : QStringLiteral("manual");
+    switch (kind) {
+        case Kind::Safety:
+            return QStringLiteral("safety");
+        case Kind::Auto:
+            return QStringLiteral("auto");
+        case Kind::Manual:
+            break;
+    }
+    return QStringLiteral("manual");
 }
 
 Kind kindFromString(const QString& text, bool* ok)
 {
     if (ok)
-        *ok = text == QLatin1String("manual") || text == QLatin1String("safety");
-    return text == QLatin1String("safety") ? Kind::Safety : Kind::Manual;
+        *ok = text == QLatin1String("manual") || text == QLatin1String("safety") || text == QLatin1String("auto");
+    if (text == QLatin1String("safety"))
+        return Kind::Safety;
+    return text == QLatin1String("auto") ? Kind::Auto : Kind::Manual;
 }
 
 QString backupsRoot(const QString& dataRoot)
@@ -719,20 +730,20 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
 
 // ---------------------------------------------------------------- retention / delete
 
-int applyRetention(const QString& backupDir, const QStringList& protectedZips, int keepManual, int keepSafety)
+int applyRetention(const QString& backupDir, const QStringList& protectedZips, int keepManual, int keepSafety, int keepAuto)
 {
     struct Candidate {
         QString path;
         NameParts name;
     };
-    QList<Candidate> manual, safety;
+    QList<Candidate> manual, safety, autos;
     const QFileInfoList files = QDir(backupDir).entryInfoList({ QStringLiteral("*.zip") }, QDir::Files, QDir::NoSort);
     for (const QFileInfo& fi : files) {
         Candidate c;
         if (!parseBackupName(fi.fileName(), &c.name) || fi.isSymLink())
             continue;  // not ZERO's: never touched
         c.path = fi.absoluteFilePath();
-        (c.name.kind == Kind::Safety ? safety : manual).append(c);
+        (c.name.kind == Kind::Safety ? safety : c.name.kind == Kind::Auto ? autos : manual).append(c);
     }
 
     int removed = 0;
@@ -751,6 +762,7 @@ int applyRetention(const QString& backupDir, const QStringList& protectedZips, i
     };
     prune(manual, keepManual);
     prune(safety, keepSafety);
+    prune(autos, keepAuto);
     return removed;
 }
 

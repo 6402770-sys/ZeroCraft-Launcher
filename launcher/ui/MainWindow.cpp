@@ -110,6 +110,7 @@
 #include "ui/dialogs/skins/SkinManageDialog.h"
 #include "ui/instanceview/InstanceDelegate.h"
 #include "ui/zero/ZeroToast.h"
+#include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackup.h"  // ZERO
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/ZeroFormat.h"
@@ -2049,6 +2050,24 @@ void MainWindow::setupZeroShell()
                 APPLICATION->showInstanceWindow(inst);
         });
     });
+    // Automatic world backups: one toast per category (backed up / failed / too large) when the work of an instance ended.
+    if (auto* autoBackup = Zero::Backup::AutoBackup::global()) {
+        connect(autoBackup, &Zero::Backup::AutoBackup::finished, this,
+                [this](const QString&, const QString& instanceName, int backedUp, const QStringList& tooLarge, int failed,
+                       const QString& firstError) {
+                    if (backedUp > 0)
+                        Zero::ZeroToast::show(this, tr("Backed up %n world(s) of %1", nullptr, backedUp).arg(instanceName),
+                                              Zero::ZeroToast::Kind::Success);
+                    if (failed > 0)
+                        Zero::ZeroToast::show(this, tr("Automatic backup failed for %1: %2").arg(instanceName, firstError),
+                                              Zero::ZeroToast::Kind::Error);
+                    if (!tooLarge.isEmpty())
+                        Zero::ZeroToast::show(this,
+                                              tr("%1 is too large for automatic backups. Back it up manually from Worlds.")
+                                                  .arg(tooLarge.join(QStringLiteral(", "))),
+                                              Zero::ZeroToast::Kind::Warning);
+                });
+    }
     // Crash hook: the game ended abnormally (crash / non-zero exit, not a user kill) -> offer a diagnosis.
     connect(APPLICATION, &Application::gameStoppedUnexpectedly, this, [this](const QString& id, int exitCode) {
         auto* inst = APPLICATION->instances()->getInstanceById(id);
@@ -2669,7 +2688,7 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         view->selectionModel()->setCurrentIndex(proxymodel->index(0, 0), QItemSelectionModel::ClearAndSelect);
 
     // Dev aid: ZERO_SCREENSHOT_BACKUP=<instanceId>/<folder> creates (synchronously, before the Worlds page is grabbed) two manual
-    // backups and one safety backup of that world in the normal backups folder, so the Backups block has something to show.
+    // backups, one safety and one auto backup of that world in the normal backups folder, so the Backups block has something to show.
     if (const QString spec = qEnvironmentVariable("ZERO_SCREENSHOT_BACKUP"); !spec.isEmpty()) {
         const int slash = spec.indexOf(QLatin1Char('/'));
         auto* inst = slash > 0 ? APPLICATION->instances()->getInstanceById(spec.left(slash)) : nullptr;
@@ -2677,7 +2696,7 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
             const QString folder = spec.mid(slash + 1);
             const QString dir = Zero::Backup::backupDirFor(APPLICATION->dataRoot(), inst->id(), folder);
             const Zero::Backup::BackupMeta meta{ inst->id(), inst->name(), folder, folder };
-            for (const auto kind : { Zero::Backup::Kind::Manual, Zero::Backup::Kind::Safety, Zero::Backup::Kind::Manual }) {
+            for (const auto kind : { Zero::Backup::Kind::Manual, Zero::Backup::Kind::Safety, Zero::Backup::Kind::Auto, Zero::Backup::Kind::Manual }) {
                 const auto r = Zero::Backup::createBackup(QDir(inst->worldDir()).filePath(folder), dir, kind, meta);
                 qInfo() << "ZERO_SCREENSHOT_BACKUP:" << (r.ok ? r.zipPath : r.error);
             }

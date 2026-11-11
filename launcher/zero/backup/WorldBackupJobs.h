@@ -3,11 +3,13 @@
 // world, and never while the instance of the world runs. While a job is active its instance is "locked": Application::launch
 // refuses to start it (see isInstanceLocked), so the game can never open a world that is being copied or swapped. All state lives
 // on the GUI thread; pool jobs only post their result back to the application object.
+// The object is an app-level service created by Application (see global()); the Worlds page and the AutoBackup service share it.
 #pragma once
 
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <functional>
 #include "WorldBackup.h"
@@ -21,8 +23,15 @@ class WorldBackupJobs : public QObject {
    public:
     enum class Op { None, Backup, Restore, Remove };
 
-    /// True while this instance has a job anywhere (GUI thread only). Checked by Application::launch.
+    /// True while this instance has a job anywhere (or an explicit lock, see lockInstance) (GUI thread only). Checked by Application::launch.
     static bool isInstanceLocked(const QString& instanceId);
+    /// Counted launch locks held by other services (AutoBackup keeps an instance locked while its queue is pending). Every
+    /// lockInstance() needs one unlockInstance(); GUI thread only.
+    static void lockInstance(const QString& instanceId);
+    static void unlockInstance(const QString& instanceId);
+
+    /// The process-wide instance created by the application (nullptr before that). The first created instance is global.
+    static WorldBackupJobs* global();
 
     /// Called on the GUI thread at request time: true when the instance runs (or is being launched).
     using RunningCheck = std::function<bool(const QString& instanceId)>;
@@ -39,8 +48,9 @@ class WorldBackupJobs : public QObject {
     Op operation(const QString& key) const { return m_active.value(key, Op::None); }
 
     /// Each request returns true when a job started. A refusal (instance running, world already busy, bad path) emits
-    /// jobFinished(key, false, reason) right away and returns false: nothing was done.
-    bool backup(const Worlds::WorldEntry& entry);
+    /// jobFinished(key, false, reason, automatic) right away and returns false: nothing was done.
+    /// `kind` is Manual (the user's button) or Auto (AutoBackup); Safety backups are only made by restore().
+    bool backup(const Worlds::WorldEntry& entry, Kind kind = Kind::Manual);
     bool restore(const Worlds::WorldEntry& entry, const QString& zipPath);
     bool remove(const Worlds::WorldEntry& entry, const QString& zipPath);
 
@@ -50,7 +60,8 @@ class WorldBackupJobs : public QObject {
    signals:
     void jobStarted(const QString& key);
     /// `message` is the user-facing result: "Backup created" / "World restored" / "Backup deleted", or the error.
-    void jobFinished(const QString& key, bool ok, const QString& message);
+    /// `automatic` is true for jobs requested with Kind::Auto (their results are summarised by AutoBackup, not toasted per world).
+    void jobFinished(const QString& key, bool ok, const QString& message, bool automatic = false);
     /// The set of backups of this world may have changed (always follows jobFinished of a started job).
     void backupsChanged(const QString& key);
     /// A restore succeeded: the world folder was replaced, rescan it.
@@ -58,8 +69,8 @@ class WorldBackupJobs : public QObject {
     void backupsListed(const QString& key, const QList<Zero::Backup::BackupInfo>& backups);
 
    private:
-    bool refuse(const QString& key, const QString& reason);
-    bool begin(const Worlds::WorldEntry& entry, Op op);
+    bool refuse(const QString& key, const QString& reason, bool automatic = false);
+    bool begin(const Worlds::WorldEntry& entry, Op op, bool automatic = false);
     void finish(const QString& key, const QString& instanceId, Op op, bool ok, const QString& message);
     bool ownsBackup(const Worlds::WorldEntry& entry, const QString& zipPath) const;
 
@@ -68,6 +79,7 @@ class WorldBackupJobs : public QObject {
     Hooks m_hooks;
     QHash<QString, Op> m_active;           // key -> running op
     QHash<QString, QString> m_activeInst;  // key -> instance id (for the launch lock)
+    QSet<QString> m_activeAuto;            // keys whose running job was requested as Kind::Auto
     QHash<QString, quint64> m_listGen;
     quint64 m_nextGen = 0;
 };

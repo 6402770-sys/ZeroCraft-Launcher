@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "WorldBackupsSection.h"
 
+#include <QCheckBox>
 #include <QDateTime>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -12,12 +13,14 @@
 #include <QScrollArea>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include "Application.h"
 #include "ElidedLabel.h"
 #include "ui/zero/ZeroFormat.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "settings/SettingsObject.h"
 #include "ui/zero/ZeroToast.h"
 #include "zero/backup/WorldBackupJobs.h"
 
@@ -95,6 +98,8 @@ class BackupRowWidget : public QWidget {
             row->addWidget(new PillTag(QObject::tr("Damaged"), true, this));
         else if (info.kind == Backup::Kind::Safety)
             row->addWidget(new PillTag(QObject::tr("Safety"), false, this));
+        else if (info.kind == Backup::Kind::Auto)
+            row->addWidget(new PillTag(QObject::tr("Auto"), false, this));
         row->addSpacing(Tokens::spaceXs);
 
         restore = makeButton(QObject::tr("Restore this backup"));
@@ -178,6 +183,15 @@ WorldBackupsSection::WorldBackupsSection(QWidget* parent) : QWidget(parent)
     m_scroll->setStyleSheet(QStringLiteral("QScrollArea { background: transparent; border: none; }"));
     m_scroll->hide();
     lay->addWidget(m_scroll);
+
+    // global setting (all instances): see Zero::Backup::AutoBackup
+    auto* autoBackup = new QCheckBox(tr("Back up automatically after playing"), this);
+    autoBackup->setToolTip(tr("Applies to all instances. Backs up the worlds you played when the game closes and keeps the 5 newest "
+                              "automatic backups per world. Worlds over 2 GB are skipped."));
+    autoBackup->setChecked(APPLICATION->settings()->get("ZeroAutoBackupWorlds").toBool());
+    connect(autoBackup, &QCheckBox::toggled, this,
+            [](bool on) { APPLICATION->settings()->set("ZeroAutoBackupWorlds", on); });
+    lay->addWidget(autoBackup);
 
     connect(&Theme::instance(), &Theme::changed, this, [this]() {
         refreshIcons();

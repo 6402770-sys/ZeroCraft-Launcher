@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // ZERO Launcher - Worlds hub: every singleplayer world of every instance in one searchable list, with a details panel. The page
 // itself only reads worlds (through Zero::Worlds::WorldScanner); the only things that ever write inside a world are the Smart
-// Backup jobs (Zero::Backup::WorldBackupJobs, owned by the page), started from the details panel.
+// Backup jobs (the application-wide Zero::Backup::WorldBackupJobs), started from the details panel.
 #pragma once
 
 #include <QElapsedTimer>

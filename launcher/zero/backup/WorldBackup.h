@@ -17,14 +17,15 @@
 namespace Zero {
 namespace Backup {
 
-enum class Kind { Manual, Safety };
+enum class Kind { Manual, Safety, Auto };
 
-QString kindToString(Kind kind);  ///< "manual" | "safety"
+QString kindToString(Kind kind);  ///< "manual" | "safety" | "auto"
 Kind kindFromString(const QString& text, bool* ok = nullptr);
 
 constexpr int kManifestVersion = 1;
 constexpr int kKeepManual = 10;
 constexpr int kKeepSafety = 3;
+constexpr int kKeepAuto = 5;
 inline constexpr char kManifestName[] = "zero-backup.json";
 inline constexpr char kWorldPrefix[] = "world/";
 
@@ -98,10 +99,11 @@ VerifyResult verifyBackup(const QString& zipPath);
 RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPath, const QString& backupDir, const BackupMeta& meta,
                             const Hooks& hooks = {});
 
-/// Keeps the `keepManual` newest `*-manual.zip` and `keepSafety` newest `*-safety.zip` (by the timestamp in the name) and removes
-/// the older ones. Never removes a path in `protectedZips`, never touches files whose name does not match ZERO's pattern.
+/// Keeps the `keepManual` newest `*-manual.zip`, `keepSafety` newest `*-safety.zip` and `keepAuto` newest `*-auto.zip` (by the
+/// timestamp in the name; each kind independently) and removes the older ones. Never removes a path in `protectedZips`, never touches files whose name does not match ZERO's pattern.
 /// Returns how many files were removed.
-int applyRetention(const QString& backupDir, const QStringList& protectedZips = {}, int keepManual = kKeepManual, int keepSafety = kKeepSafety);
+int applyRetention(const QString& backupDir, const QStringList& protectedZips = {}, int keepManual = kKeepManual, int keepSafety = kKeepSafety,
+                   int keepAuto = kKeepAuto);
 
 /// Moves one backup to the Recycle Bin (fallback: removes it). Refuses anything that is not a `.zip` file inside `backupsRootDir`.
 bool deleteBackup(const QString& zipPath, const QString& backupsRootDir, QString* error = nullptr, const Hooks& hooks = {});

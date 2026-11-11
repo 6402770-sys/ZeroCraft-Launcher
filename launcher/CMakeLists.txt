@@ -868,6 +868,8 @@ SET(LAUNCHER_SOURCES
     ui/themes/CatPainter.h
 
     # ZERO services (non-UI)
+    zero/backup/AutoBackup.cpp
+    zero/backup/AutoBackup.h
     zero/backup/WorldBackup.cpp
     zero/backup/WorldBackup.h
     zero/backup/WorldBackupJobs.cpp

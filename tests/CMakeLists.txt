@@ -50,6 +50,7 @@ set(TEST_SOURCES
     ModRepair_test.cpp
     ServerVault_test.cpp
     FavoriteStore_test.cpp
+    TechnicMeta_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

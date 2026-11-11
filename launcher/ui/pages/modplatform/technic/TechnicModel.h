@@ -35,10 +35,18 @@
 
 #pragma once
 
+#include <QHash>
 #include <QModelIndex>
+
+#include <optional>
 
 #include "TechnicData.h"
 #include "net/NetJob.h"
+#include "zero/content/TechnicMeta.h"
+
+namespace Zero::Content {
+class TechnicDetailsStore;
+}
 
 namespace Technic {
 
@@ -61,6 +69,24 @@ class ListModel : public QAbstractListModel {
     bool hasActiveSearchJob() const { return jobPtr && jobPtr->isRunning(); }
     Task::Ptr activeSearchJob() { return hasActiveSearchJob() ? jobPtr : nullptr; }
 
+    // Pack details (ZERO): cached per slug for the lifetime of the model, written back into matching rows when they load.
+    // A request answers with detailsReady()/detailsFailed() for that slug; callers ignore slugs they no longer show.
+
+    /// Cached details for `slug`, if loaded.
+    std::optional<Zero::Content::TechnicPackDetails> cachedDetails(const QString& slug) const;
+    /// Starts (or joins) loading the details of `slug`. Returns true when they are already cached (no signal follows).
+    bool requestDetails(const QString& slug);
+    /// Cached Solder versions for `slug`, if loaded.
+    std::optional<Zero::Content::TechnicSolderVersions> cachedVersions(const QString& slug) const;
+    /// Starts (or joins) loading the Solder build list of `slug`. Returns true when it is already cached.
+    bool requestVersions(const QString& slug, const QString& solderBase);
+
+   signals:
+    void detailsReady(const QString& slug);
+    void detailsFailed(const QString& slug, const QString& reason);
+    void versionsReady(const QString& slug);
+    void versionsFailed(const QString& slug, const QString& reason);
+
    private slots:
     void searchRequestFinished(QByteArray* responsePtr);
     void searchRequestFailed();
@@ -71,6 +97,9 @@ class ListModel : public QAbstractListModel {
    private:
     void performSearch();
     void requestLogo(QString logo, QString url);
+    void fetchJson(const QString& name, const QUrl& url, std::function<void(Result<QByteArray>)> reply);
+    void applyDetailsToRows(const QString& slug);
+    static void fillFromDetails(Modpack& pack, const Zero::Content::TechnicPackDetails& details);
 
    private:
     QList<Modpack> modpacks;
@@ -86,6 +115,10 @@ class ListModel : public QAbstractListModel {
         Single,
     } searchMode = List;
     NetJob::Ptr jobPtr;
+
+    Zero::Content::TechnicDetailsStore* m_details = nullptr;
+    /// Details / Solder requests in flight, kept alive until they finish (the store coalesces them per slug).
+    QHash<NetJob*, NetJob::Ptr> m_detailJobs;
 };
 
 }  // namespace Technic

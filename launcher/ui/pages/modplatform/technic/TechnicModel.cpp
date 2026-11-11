@@ -41,12 +41,33 @@
 
 #include "net/ApiRequest.h"
 #include "ui/widgets/ProjectItem.h"
+#include "zero/content/TechnicDetailsStore.h"
 
 #include <QFileInfo>
 #include <QIcon>
 #include <QUrl>
 
-Technic::ListModel::ListModel(QObject* parent) : QAbstractListModel(parent) {}
+Technic::ListModel::ListModel(QObject* parent) : QAbstractListModel(parent)
+{
+    using Zero::Content::TechnicDetailsStore;
+    auto fetchDetails = [this](const QString& slug, TechnicDetailsStore::Reply reply) {
+        const QString url = QString("%1modpack/%2?build=%3")
+                                .arg(BuildConfig.TECHNIC_API_BASE_URL, QString::fromLatin1(QUrl::toPercentEncoding(slug)),
+                                     BuildConfig.TECHNIC_API_BUILD);
+        fetchJson(QString("Technic::PackMeta(%1)").arg(slug), QUrl(url), std::move(reply));
+    };
+    auto fetchVersions = [this](const QString& slug, const QString& solderBase, TechnicDetailsStore::Reply reply) {
+        fetchJson(QString("Technic::SolderMeta(%1)").arg(slug), QUrl(Zero::Content::solderPackUrl(solderBase, slug)), std::move(reply));
+    };
+    m_details = new TechnicDetailsStore(fetchDetails, fetchVersions, this);
+    connect(m_details, &TechnicDetailsStore::detailsReady, this, [this](const QString& slug) {
+        applyDetailsToRows(slug);
+        emit detailsReady(slug);
+    });
+    connect(m_details, &TechnicDetailsStore::detailsFailed, this, &ListModel::detailsFailed);
+    connect(m_details, &TechnicDetailsStore::versionsReady, this, &ListModel::versionsReady);
+    connect(m_details, &TechnicDetailsStore::versionsFailed, this, &ListModel::versionsFailed);
+}
 
 Technic::ListModel::~ListModel() {}
 
@@ -59,15 +80,9 @@ QVariant Technic::ListModel::data(const QModelIndex& index, int role) const
 
     Modpack pack = modpacks.at(pos);
     switch (role) {
-        case Qt::ToolTipRole: {
-            if (pack.description.length() > 100) {
-                // some magic to prevent to long tooltips and replace html linebreaks
-                QString edit = pack.description.left(97);
-                edit = edit.left(edit.lastIndexOf("<br>")).left(edit.lastIndexOf(" ")).append("...");
-                return edit;
-            }
-            return pack.description;
-        }
+        case Qt::ToolTipRole:
+            // The description is HTML from the Technic API: show a short plain-text summary.
+            return Zero::Content::plainTextSummary(pack.description, 100);
         case Qt::DecorationRole: {
             if (m_logoMap.contains(pack.logoName)) {
                 return (m_logoMap.value(pack.logoName));
@@ -89,7 +104,7 @@ QVariant Technic::ListModel::data(const QModelIndex& index, int role) const
         case UserDataTypes::TITLE:
             return pack.name;
         case UserDataTypes::DESCRIPTION:
-            return pack.description;
+            return Zero::Content::plainText(pack.description);
         case UserDataTypes::INSTALLED:
             return false;
         default:
@@ -171,78 +186,66 @@ void Technic::ListModel::searchRequestFinished(QByteArray* responsePtr)
     QByteArray response = std::move(*responsePtr);
     jobPtr.reset();
 
-    auto doc = Json::requireObject(response);
-    if (!doc) {
-        qWarning() << "Error while parsing JSON response from Technic:" << doc.error();
-        qWarning() << response;
-        return;
-    }
-
-    const auto& root = doc.value();
     QList<Modpack> newList;
-    auto parse = [&root, this, &newList]() -> Result<> {
-        switch (searchMode) {
-            case List: {
-                TRY_INTO(const auto& objs, Json::requireArray(root, "modpacks"))
-                for (auto technicPack : objs) {
-                    Modpack pack;
-                    TRY_INTO(const auto& technicPackObject, Json::requireObject(technicPack))
-                    TRY_INTO(pack.name, Json::requireString(technicPackObject, "name"))
-                    TRY_INTO(pack.slug, Json::requireString(technicPackObject, "slug"))
-                    if (pack.slug == "vanilla") {
-                        continue;
-                    }
-
-                    auto rawURL = technicPackObject["iconUrl"].toString("null");
-                    if (rawURL == "null") {
-                        pack.logoUrl = "null";
-                        pack.logoName = "null";
-                    } else {
-                        pack.logoUrl = rawURL;
-                        pack.logoName = pack.slug + "." + QFileInfo(QUrl(rawURL).fileName()).suffix();
-                    }
-                    pack.broken = false;
-                    newList.append(pack);
-                }
-                break;
+    switch (searchMode) {
+        case List: {
+            auto packs = Zero::Content::parseSearchResponse(response);
+            if (!packs) {
+                qCritical() << "Couldn't parse technic search results:" << packs.error();
+                return;
             }
-            case Single: {
-                if (root.contains("error")) {
-                    // Invalid API url
-                    break;
-                }
-
+            for (const auto& summary : *packs) {
                 Modpack pack;
-                TRY_INTO(pack.name, Json::requireString(root, "displayName"))
-                TRY_INTO(pack.slug, Json::requireString(root, "name"))
-
-                if (root.contains("icon")) {
-                    TRY_INTO(const auto& iconUrl,
-                             Json::requireObject(root, "icon").and_then([](const auto& v) { return Json::requireString(v, "url"); }))
-
-                    pack.logoUrl = iconUrl;
-                    pack.logoName = pack.slug + "." + QFileInfo(QUrl(iconUrl).fileName()).suffix();
-                } else {
+                pack.name = summary.name;
+                pack.slug = summary.slug;
+                if (summary.iconUrl.isEmpty()) {
                     pack.logoUrl = "null";
                     pack.logoName = "null";
+                } else {
+                    pack.logoUrl = summary.iconUrl;
+                    pack.logoName = pack.slug + "." + QFileInfo(QUrl(summary.iconUrl).fileName()).suffix();
                 }
-
                 pack.broken = false;
                 newList.append(pack);
+            }
+            break;
+        }
+        case Single: {
+            auto details = Zero::Content::parsePackDetails(response);
+            if (!details) {
+                // Invalid API url or unknown pack: no results
+                qWarning() << "Technic search by slug found nothing:" << details.error();
                 break;
             }
+            Modpack pack;
+            pack.name = Zero::Content::previewTitle(&*details, {}, details->slug);
+            pack.slug = details->slug;
+            if (details->iconUrl.isEmpty()) {
+                pack.logoUrl = "null";
+                pack.logoName = "null";
+            } else {
+                pack.logoUrl = details->iconUrl;
+                pack.logoName = pack.slug + "." + QFileInfo(QUrl(details->iconUrl).fileName()).suffix();
+            }
+            pack.broken = false;
+            newList.append(pack);
+            // The response already holds the full details: cache them so selecting the result does not fetch again.
+            m_details->insertDetails(*details);
+            break;
         }
-        return {};
-    };
-    if (auto res = parse(); !res) {
-        qCritical() << "Couldn't parse technic search results:" << res.error();
-        return;
     }
     searchState = Finished;
 
     // When you have a Qt build with assertions turned on, proceeding here will abort the application
     if (newList.size() == 0) {
         return;
+    }
+
+    // Rows of packs whose details were loaded before (earlier search, or the response above) show them right away.
+    for (auto& pack : newList) {
+        if (const auto details = m_details->details(pack.slug)) {
+            fillFromDetails(pack, *details);
+        }
     }
 
     beginInsertRows(QModelIndex(), modpacks.size(), modpacks.size() + newList.size() - 1);
@@ -317,4 +320,84 @@ void Technic::ListModel::requestLogo(QString logo, QString url)
     job->start();
 
     m_loadingLogos.append(logo);
+}
+
+std::optional<Zero::Content::TechnicPackDetails> Technic::ListModel::cachedDetails(const QString& slug) const
+{
+    return m_details->details(slug);
+}
+
+bool Technic::ListModel::requestDetails(const QString& slug)
+{
+    return m_details->requestDetails(slug);
+}
+
+std::optional<Zero::Content::TechnicSolderVersions> Technic::ListModel::cachedVersions(const QString& slug) const
+{
+    return m_details->versions(slug);
+}
+
+bool Technic::ListModel::requestVersions(const QString& slug, const QString& solderBase)
+{
+    return m_details->requestVersions(slug, solderBase);
+}
+
+void Technic::ListModel::fetchJson(const QString& name, const QUrl& url, std::function<void(Result<QByteArray>)> reply)
+{
+    auto job = makeShared<NetJob>(name, APPLICATION->network());
+    // Background preview requests: failures go to the caller, never into a retry dialog.
+    job->setAskRetry(false);
+    auto [action, response] = Net::ApiRequest::makeByteArray(url);
+    job->addNetAction(action);
+
+    // Exactly one answer per request, whichever way the job ends.
+    auto answered = std::make_shared<bool>(false);
+    auto answer = [this, job = job.get(), answered, reply](Result<QByteArray> result) {
+        if (*answered) {
+            return;
+        }
+        *answered = true;
+        m_detailJobs.remove(job);  // releases the job with deleteLater(): safe inside its own signal
+        reply(std::move(result));
+    };
+    connect(job.get(), &NetJob::succeeded, this, [answer, response] {
+        // NOTE(TheKodeToad): moving the response out to avoid it from being destroyed with the job
+        answer(QByteArray(std::move(*response)));
+    });
+    connect(job.get(), &NetJob::failed, this, [answer](const QString& reason) { answer(std::unexpected(reason)); });
+    connect(job.get(), &NetJob::aborted, this, [answer] { answer(std::unexpected(tr("The request was cancelled."))); });
+
+    m_detailJobs.insert(job.get(), job);
+    job->start();
+}
+
+void Technic::ListModel::fillFromDetails(Modpack& pack, const Zero::Content::TechnicPackDetails& details)
+{
+    pack.metadataLoaded = true;
+    if (pack.name.trimmed().isEmpty()) {
+        pack.name = Zero::Content::previewTitle(&details, pack.name, pack.slug);
+    }
+    pack.author = details.author;
+    pack.description = details.description;
+    pack.minecraftVersion = details.minecraftVersion;
+    pack.currentVersion = details.version;
+    pack.websiteUrl = details.platformUrl;
+    pack.isSolder = details.isSolder();
+    pack.url = details.installUrl();
+}
+
+void Technic::ListModel::applyDetailsToRows(const QString& slug)
+{
+    const auto details = m_details->details(slug);
+    if (!details) {
+        return;
+    }
+    for (int i = 0; i < modpacks.size(); i++) {
+        if (modpacks[i].slug != slug) {
+            continue;
+        }
+        fillFromDetails(modpacks[i], *details);
+        emit dataChanged(index(i, 0), index(i, 0),
+                         { Qt::DisplayRole, Qt::ToolTipRole, Qt::UserRole, UserDataTypes::TITLE, UserDataTypes::DESCRIPTION });
+    }
 }

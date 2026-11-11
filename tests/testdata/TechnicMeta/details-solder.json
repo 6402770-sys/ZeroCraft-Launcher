@@ -1,0 +1,80 @@
+{
+ "id": 735902,
+ "name": "tekkit-legends",
+ "displayName": "Tekkit Legends",
+ "user": "CanVox",
+ "url": null,
+ "platformUrl": "https://www.technicpack.net/modpack/tekkit-legends.735902",
+ "minecraft": "1.4.7",
+ "ratings": 0,
+ "installs": 4862862,
+ "runs": 22738777,
+ "description": "Tekkit returns in this legendary pack!",
+ "tags": null,
+ "isServer": false,
+ "isOfficial": true,
+ "version": "1.1.1",
+ "feed": [
+  {
+   "user": "CanVox",
+   "date": 1450491810,
+   "content": "Updated to version 1.1.1",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902/changelog/222279"
+  },
+  {
+   "user": "CanVox",
+   "date": 1449091164,
+   "content": "Updated to version 1.1.0",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902/changelog/214937"
+  },
+  {
+   "user": "CanVox",
+   "date": 1445099887,
+   "content": "Updated to version 1.0.10",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902/changelog/193622"
+  },
+  {
+   "user": "CanVox",
+   "date": 1444645145,
+   "content": "Updated to version 1.0.9",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902/changelog/191332"
+  },
+  {
+   "user": "CanVox",
+   "date": 1444563982,
+   "content": "Updated to version 1.0.8",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902/changelog/190687"
+  },
+  {
+   "user": "CanVox",
+   "date": 1443911356,
+   "content": "Updated to version 1.0.7",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902/changelog/186933"
+  },
+  {
+   "user": "CanVox",
+   "date": 1443243745,
+   "content": "Updated to version 1.0.6",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902/changelog/182775"
+  }
+ ],
+ "icon": {
+  "url": "https://cdn.technicpack.net/platform2/pack-icons/735902.png?1765910032"
+ },
+ "logo": {
+  "url": "https://cdn.technicpack.net/platform2/pack-logos/735902.png?1765910032"
+ },
+ "background": {
+  "url": "https://cdn.technicpack.net/platform2/pack-backgrounds/735902.jpg?1765910032"
+ },
+ "solder": "https://solder.technicpack.net/api/",
+ "discordServerId": "42463947818795009",
+ "serverPackUrl": "https://servers.technicpack.net/Technic/servers/tekkit-legends/Tekkit_Legends_Server_v1.1.1.zip"
+}

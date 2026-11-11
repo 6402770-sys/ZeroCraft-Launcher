@@ -874,6 +874,10 @@ SET(LAUNCHER_SOURCES
     zero/backup/WorldBackup.h
     zero/backup/WorldBackupJobs.cpp
     zero/backup/WorldBackupJobs.h
+    zero/content/TechnicDetailsStore.cpp
+    zero/content/TechnicDetailsStore.h
+    zero/content/TechnicMeta.cpp
+    zero/content/TechnicMeta.h
     zero/diagnostics/CrashDetective.cpp
     zero/diagnostics/CrashDetective.h
     zero/diagnostics/CrashReportCollector.cpp

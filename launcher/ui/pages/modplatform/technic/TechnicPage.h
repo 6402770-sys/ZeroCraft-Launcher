@@ -42,6 +42,7 @@
 #include "net/NetJob.h"
 #include "ui/pages/modplatform/ModpackProviderBasePage.h"
 #include "ui/widgets/ProgressWidget.h"
+#include "zero/content/TechnicMeta.h"
 
 namespace Ui {
 class TechnicPage;
@@ -75,13 +76,17 @@ class TechnicPage : public QWidget, public ModpackProviderBasePage {
 
    private:
     void suggestCurrent();
-    void metadataLoaded();
+    void applyDetails(const Zero::Content::TechnicPackDetails& details);
+    void fillVersions();
     void selectVersion();
 
    private slots:
     void triggerSearch();
     void onSelectionChanged(QModelIndex first, QModelIndex second);
-    void onSolderLoaded(QByteArray* responsePtr);
+    void onDetailsReady(const QString& slug);
+    void onDetailsFailed(const QString& slug, const QString& reason);
+    void onVersionsReady(const QString& slug);
+    void onVersionsFailed(const QString& slug, const QString& reason);
     void onVersionSelectionChanged(const QString& version);
 
    private:
@@ -89,10 +94,15 @@ class TechnicPage : public QWidget, public ModpackProviderBasePage {
     NewInstanceDialog* dialog = nullptr;
     Technic::ListModel* model = nullptr;
 
+    /// The selected pack: its list row, completed by applyDetails() once its details are shown.
     Technic::Modpack current;
+    /// The slug whose answers this page still wants; details and Solder answers for any other slug are stale.
+    Zero::Content::TechnicSelection m_selection;
+    /// The details of `current` are shown and can build its install task.
+    bool m_detailsApplied = false;
+    /// The Solder build list of `current` is in the version box.
+    bool m_versionsApplied = false;
     QString selectedVersion;
-
-    NetJob::Ptr jobPtr;
 
     ProgressWidget m_fetch_progress;
 

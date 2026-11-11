@@ -34,7 +34,6 @@
  */
 
 #include "TechnicPage.h"
-#include "ui/dialogs/CustomMessageBox.h"
 #include "ui/widgets/ProjectItem.h"
 #include "ui_TechnicPage.h"
 
@@ -42,17 +41,12 @@
 
 #include "ui/dialogs/NewInstanceDialog.h"
 
-#include "BuildConfig.h"
-#include "Json.h"
 #include "StringUtils.h"
 #include "TechnicModel.h"
 #include "modplatform/technic/SingleZipPackInstallTask.h"
 #include "modplatform/technic/SolderPackInstallTask.h"
 
 #include "Application.h"
-#include "modplatform/technic/SolderPackManifest.h"
-
-#include "net/ApiRequest.h"
 
 TechnicPage::TechnicPage(NewInstanceDialog* dialog, QWidget* parent)
     : QWidget(parent), ui(new Ui::TechnicPage), dialog(dialog), model(new Technic::ListModel(this)), m_fetch_progress(this, false)
@@ -83,6 +77,10 @@ TechnicPage::TechnicPage(NewInstanceDialog* dialog, QWidget* parent)
 
     connect(ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &TechnicPage::onSelectionChanged);
     connect(ui->versionSelectionBox, &QComboBox::currentTextChanged, this, &TechnicPage::onVersionSelectionChanged);
+    connect(model, &Technic::ListModel::detailsReady, this, &TechnicPage::onDetailsReady);
+    connect(model, &Technic::ListModel::detailsFailed, this, &TechnicPage::onDetailsFailed);
+    connect(model, &Technic::ListModel::versionsReady, this, &TechnicPage::onVersionsReady);
+    connect(model, &Technic::ListModel::versionsFailed, this, &TechnicPage::onVersionsFailed);
 
     ui->packView->setItemDelegate(new ProjectItemDelegate(this));
 }
@@ -117,8 +115,13 @@ void TechnicPage::triggerSearch()
 void TechnicPage::onSelectionChanged(QModelIndex first, [[maybe_unused]] QModelIndex second)
 {
     ui->versionSelectionBox->clear();
+    m_detailsApplied = false;
+    m_versionsApplied = false;
 
     if (!first.isValid()) {
+        current = {};
+        m_selection.clear();
+        ui->packDescription->clear();
         if (isOpened) {
             dialog->setSuggestedPack();
         }
@@ -128,6 +131,7 @@ void TechnicPage::onSelectionChanged(QModelIndex first, [[maybe_unused]] QModelI
     QVariant raw = model->data(first, Qt::UserRole);
     Q_ASSERT(raw.canConvert<Technic::Modpack>());
     current = raw.value<Technic::Modpack>();
+    m_selection.select(current.slug);
     suggestCurrent();
 }
 
@@ -141,130 +145,69 @@ void TechnicPage::suggestCurrent()
         return;
     }
 
+    // Reset the dialog to this pack right away: its own name and no install task (OK disabled) until its details are
+    // shown, so nothing of the previously selected pack stays behind. This also resets the icon; the pack's logo follows.
+    const QString title = Zero::Content::previewTitle(nullptr, current.name, current.slug);
+    dialog->setSuggestedPack(title);
+
     QString editedLogoName = "technic_" + current.logoName;
     model->getLogo(current.logoName, current.logoUrl,
                    [this, editedLogoName](const QString& logo) { dialog->setSuggestedIconFromFile(logo, editedLogoName); });
 
-    if (current.metadataLoaded) {
-        metadataLoaded();
+    if (m_detailsApplied) {
+        // Page opened again with the details already shown: only the install task is missing.
+        selectVersion();
         return;
     }
-
-    auto netJob = makeShared<NetJob>(QString("Technic::PackMeta(%1)").arg(current.name), APPLICATION->network());
-    QString slug = current.slug;
-    auto [action, responsePtr] = Net::ApiRequest::makeByteArray(
-        QString("%1modpack/%2?build=%3").arg(BuildConfig.TECHNIC_API_BASE_URL, slug, BuildConfig.TECHNIC_API_BUILD));
-    netJob->addNetAction(action);
-    connect(netJob.get(), &NetJob::succeeded, this, [this, responsePtr, slug] {
-        // NOTE(TheKodeToad): moving the response out to avoid it from being destroyed by jobPtr.reset()
-        QByteArray response = std::move(*responsePtr);
-        jobPtr.reset();
-
-        if (current.slug != slug) {
-            return;
-        }
-
-        auto doc = Json::requireDocument(response);
-        if (!doc) {
-            qWarning() << "Error while parsing JSON response from Technic" << doc.error();
-            qWarning() << response;
-            return;
-        }
-        auto obj = doc->object();
-        if (!obj.contains("url")) {
-            qWarning() << "Json doesn't contain an url key";
-            return;
-        }
-        QJsonValueRef url = obj["url"];
-        if (url.isString()) {
-            current.url = url.toString();
-        } else {
-            if (!obj.contains("solder")) {
-                qWarning() << "Json doesn't contain a valid url or solder key";
-                return;
-            }
-            QJsonValueRef solderUrl = obj["solder"];
-            if (solderUrl.isString()) {
-                current.url = solderUrl.toString();
-                current.isSolder = true;
-            } else {
-                qWarning() << "Json doesn't contain a valid url or solder key";
-                return;
-            }
-        }
-
-        current.minecraftVersion = obj["minecraft"].toString();
-        current.websiteUrl = obj["platformUrl"].toString();
-        current.author = obj["user"].toString();
-        current.description = obj["description"].toString();
-        current.currentVersion = obj["version"].toString();
-        current.metadataLoaded = true;
-
-        metadataLoaded();
-    });
-    connect(netJob.get(), &NetJob::failed, this,
-            [this](const QString& reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->exec(); });
-
-    jobPtr = netJob;
-    jobPtr->start();
+    if (const auto details = model->cachedDetails(current.slug)) {
+        applyDetails(*details);
+        return;
+    }
+    ui->packDescription->setHtml(Zero::Content::previewLoadingHtml(title));
+    model->requestDetails(current.slug);
 }
 
-// expects current.metadataLoaded to be true
-void TechnicPage::metadataLoaded()
+void TechnicPage::applyDetails(const Zero::Content::TechnicPackDetails& details)
 {
-    QString text = "";
-    QString name = current.name;
+    current.name = Zero::Content::previewTitle(&details, current.name, current.slug);
+    current.author = details.author;
+    current.description = details.description;
+    current.minecraftVersion = details.minecraftVersion;
+    current.currentVersion = details.version;
+    current.websiteUrl = details.platformUrl;
+    // A zip URL wins over Solder; a Solder base comes without trailing slashes.
+    current.isSolder = details.isSolder();
+    current.url = details.installUrl();
+    current.metadataLoaded = true;
+    m_detailsApplied = true;
 
-    if (current.websiteUrl.isEmpty()) {
-        text = name.toHtmlEscaped();
-    } else {
-        text = "<a href=\"" + current.websiteUrl.toHtmlEscaped() + "\">" + name.toHtmlEscaped() + "</a>";
-    }
+    ui->packDescription->setHtml(StringUtils::htmlListPatch(Zero::Content::previewHtml(details, current.name)));
 
-    if (!current.author.isEmpty()) {
-        text += "<br>" + tr(" by ") + current.author.toHtmlEscaped();
-    }
+    fillVersions();
+    selectVersion();
+}
 
-    text += "<br><br>";
+void TechnicPage::fillVersions()
+{
+    ui->versionSelectionBox->clear();
 
-    ui->packDescription->setHtml(StringUtils::htmlListPatch(text + current.description));
-
-    // Strip trailing forward-slashes from Solder URL's
-    if (current.isSolder) {
-        while (current.url.endsWith('/')) {
-            current.url.chop(1);
-        }
-    }
-
-    // Display versions from Solder
     if (!current.isSolder) {
         // If the pack isn't a Solder pack, it only has the single version
         ui->versionSelectionBox->addItem(current.currentVersion);
-    } else if (current.versionsLoaded) {
-        // reverse foreach, so that the newest versions are first
-        for (auto i = current.versions.size(); (i--) != 0;) {
-            ui->versionSelectionBox->addItem(current.versions.at(i));
-        }
-        ui->versionSelectionBox->setCurrentText(current.recommended);
-    } else {
-        // For now, until the versions are pulled from the Solder instance, display the current
-        // version so we can display something quicker
-        ui->versionSelectionBox->addItem(current.currentVersion);
-
-        auto netJob = makeShared<NetJob>(QString("Technic::SolderMeta(%1)").arg(current.name), APPLICATION->network());
-        auto url = QString("%1/modpack/%2").arg(current.url, current.slug);
-        auto [action, response] = Net::ApiRequest::makeByteArray(QUrl(url));
-        netJob->addNetAction(action);
-
-        connect(netJob.get(), &NetJob::succeeded, this, [this, response] { onSolderLoaded(response); });
-        connect(netJob.get(), &NetJob::failed, this,
-                [this](const QString& reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->exec(); });
-
-        jobPtr = netJob;
-        jobPtr->start();
+        return;
     }
-
-    selectVersion();
+    if (const auto versions = model->cachedVersions(current.slug)) {
+        m_versionsApplied = true;
+        // reverse foreach, so that the newest versions are first
+        for (auto i = versions->builds.size(); (i--) != 0;) {
+            ui->versionSelectionBox->addItem(versions->builds.at(i));
+        }
+        ui->versionSelectionBox->setCurrentText(versions->recommended);
+        return;
+    }
+    // Until the versions are pulled from the Solder instance, display the current version so we can display something quicker
+    ui->versionSelectionBox->addItem(current.currentVersion);
+    model->requestVersions(current.slug, current.url);
 }
 
 void TechnicPage::selectVersion()
@@ -274,6 +217,10 @@ void TechnicPage::selectVersion()
     }
     if (current.broken) {
         dialog->setSuggestedPack();
+        return;
+    }
+    if (!m_detailsApplied || current.url.isEmpty()) {
+        // Details still loading, failed, or the pack has no download: the dialog keeps this pack's name without a task.
         return;
     }
 
@@ -287,40 +234,43 @@ void TechnicPage::selectVersion()
     }
 }
 
-void TechnicPage::onSolderLoaded(QByteArray* responsePtr)
+void TechnicPage::onDetailsReady(const QString& slug)
 {
-    // NOTE(TheKodeToad): moving the response out to avoid it from being destroyed by jobPtr.reset()
-    QByteArray response = std::move(*responsePtr);
-    jobPtr.reset();
+    if (!m_selection.isCurrent(slug) || m_detailsApplied) {
+        return;  // another pack's answer, or already shown
+    }
+    if (const auto details = model->cachedDetails(slug)) {
+        applyDetails(*details);
+    }
+}
 
-    auto fallback = [this]() {
-        current.versionsLoaded = true;
-
-        current.versions.clear();
-        current.versions.append(current.currentVersion);
-    };
-
-    current.versions.clear();
-
-    TechnicSolder::Pack pack;
-    auto doc = Json::requireDocument(response).and_then([&pack](const auto& v) {
-        auto obj = v.object();
-        return TechnicSolder::loadPack(pack, obj);
-    });
-    if (!doc) {
-        qWarning() << "Error while parsing JSON response from Solder:" << doc.error();
-        qWarning() << response;
-        fallback();
+void TechnicPage::onDetailsFailed(const QString& slug, const QString& reason)
+{
+    if (!m_selection.isCurrent(slug) || m_detailsApplied) {
         return;
     }
+    qWarning() << "Couldn't load the Technic details of" << slug << ":" << reason;
+    // Inline, not a popup: the dialog keeps the pack's name without an install task. Selecting the pack again retries.
+    const QString title = Zero::Content::previewTitle(nullptr, current.name, current.slug);
+    ui->packDescription->setHtml(Zero::Content::previewFailedHtml(title, reason));
+}
 
-    current.versionsLoaded = true;
-    current.recommended = pack.recommended;
-    current.versions.append(pack.builds);
+void TechnicPage::onVersionsReady(const QString& slug)
+{
+    if (!m_selection.isCurrent(slug) || !m_detailsApplied || !current.isSolder || m_versionsApplied) {
+        return;
+    }
+    fillVersions();
+    selectVersion();
+}
 
-    // Finally, let's reload :)
-    ui->versionSelectionBox->clear();
-    metadataLoaded();
+void TechnicPage::onVersionsFailed(const QString& slug, const QString& reason)
+{
+    if (!m_selection.isCurrent(slug)) {
+        return;
+    }
+    // The version box keeps the pack's current version, which installs fine.
+    qWarning() << "Couldn't load the Solder versions of" << slug << ":" << reason;
 }
 
 void TechnicPage::onVersionSelectionChanged(const QString& version)

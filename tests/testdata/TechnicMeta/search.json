@@ -1,0 +1,32 @@
+{
+ "modpacks": [
+  {
+   "id": "735902",
+   "name": "Tekkit Legends",
+   "slug": "tekkit-legends",
+   "url": "https://www.technicpack.net/modpack/tekkit-legends.735902",
+   "iconUrl": "https://cdn.technicpack.net/platform2/pack-icons/735902.png?1765910032"
+  },
+  {
+   "id": "552547",
+   "name": "Tekkit",
+   "slug": "tekkitmain",
+   "url": "https://www.technicpack.net/modpack/tekkitmain.552547",
+   "iconUrl": "https://cdn.technicpack.net/platform2/pack-icons/552547.png?1759513210"
+  },
+  {
+   "id": "552560",
+   "name": "Tekkit Classic",
+   "slug": "tekkit",
+   "url": "https://www.technicpack.net/modpack/tekkit.552560",
+   "iconUrl": "https://cdn.technicpack.net/platform2/pack-icons/552560.png?1774914004"
+  },
+  {
+   "id": "552675",
+   "name": "Tekkit Lite",
+   "slug": "tekkitlite",
+   "url": "https://www.technicpack.net/modpack/tekkitlite.552675",
+   "iconUrl": "https://cdn.technicpack.net/platform2/pack-icons/552675.png?1631992514"
+  }
+ ]
+}

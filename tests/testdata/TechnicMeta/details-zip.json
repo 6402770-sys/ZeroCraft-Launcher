@@ -1,0 +1,80 @@
+{
+ "id": 1530385,
+ "name": "shivaxi-rlcraft",
+ "displayName": "RLCraft",
+ "user": "Shivaxi",
+ "url": "https://bhrepo.com/packs/rlcraft/modpack.zip",
+ "platformUrl": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385",
+ "minecraft": "1.12.2",
+ "ratings": 1989,
+ "installs": 1109128,
+ "runs": 4418602,
+ "description": "A modpack specially designed to bring an incredibly hardcore and semi-realism challenge revolving around survival, RPG elements, and adventure-like exploration.",
+ "tags": "rlcraft,adventure,dragons,hardcore,difficult,medievial,exploration,hostile,mobs,shivaxi",
+ "isServer": false,
+ "isOfficial": false,
+ "version": "2.9.3",
+ "feed": [
+  {
+   "user": "Shivaxi",
+   "date": 1687990914,
+   "content": "Updated to version 2.9.3",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385/changelog/2218979"
+  },
+  {
+   "user": "Shivaxi",
+   "date": 1681338946,
+   "content": "Updated to version 2.9.2d",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385/changelog/2197970"
+  },
+  {
+   "user": "Shivaxi",
+   "date": 1646328849,
+   "content": "Updated to version 2.9.1c",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385/changelog/2057809"
+  },
+  {
+   "user": "Shivaxi",
+   "date": 1641246425,
+   "content": "Updated to version 2.9",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385/changelog/2031354"
+  },
+  {
+   "user": "Shivaxi",
+   "date": 1587385993,
+   "content": "Updated to version 2.8.2",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385/changelog/1535078"
+  },
+  {
+   "user": "Shivaxi",
+   "date": 1575482395,
+   "content": "Updated to version 2.8.1",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385/changelog/1384737"
+  },
+  {
+   "user": "Shivaxi",
+   "date": 1574826958,
+   "content": "Updated to version 2.8",
+   "avatar": "",
+   "url": "https://www.technicpack.net/modpack/shivaxi-rlcraft.1530385/changelog/1378728"
+  }
+ ],
+ "icon": {
+  "url": "https://cdn.technicpack.net/platform2/pack-icons/1530385.png?1682601494"
+ },
+ "logo": {
+  "url": "https://cdn.technicpack.net/platform2/pack-logos/1530385.png?1682601494"
+ },
+ "background": {
+  "url": "https://cdn.technicpack.net/platform2/pack-backgrounds/1530385.jpg?1682601494"
+ },
+ "solder": null,
+ "discordServerId": "199155955206717440",
+ "serverPackUrl": null
+}

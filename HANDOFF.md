@@ -24,10 +24,12 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   (= Prism notes), per-instance artwork, filter chips, "Most played" sort, favorite star on cards, artwork covers, details
   panel editing, Home favorites strip + artwork hero, palette favorites. Design/data notes: `docs/zero/SHELL.md` (Library,
   Home) and `docs/zero/ARCHITECTURE.md` (Instance profiles).
+  Then **Session History** (`launcher/zero/history/SessionHistory`, wired in `Application`; data
+  `<data>/zero/session-history.json`) and the Home **Recent activity** section (6 rows, Diagnose on crashed/failed).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
-- Result at end of session 3: **35/35 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
+- Result at end of session 3: **36/36 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
 - `FileSystem` investigation: 12 of its 19 functions pass and now run in `build.sh test`. The 7 `test_link*` symlink
   cases are not run: on Windows without Developer Mode, symlinks need privileges, so `FS::create_link` launches
   `zerolauncher_filelink.exe` elevated (UAC prompt); the elevated process doesn't inherit the MSYS2 PATH (missing-DLL
@@ -58,6 +60,7 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | Shell v2 | ✅ `ZeroTopBar` (title/subtitle/breadcrumb, page actions, account chip, search pill), `ShellPage` chrome API, 60 px sidebar header (logo + wordmark), Appearance/More/Settings bottom group, Alt+1..4 | `ZeroShell` test, screenshots `build/zero-v2-m4-*.png` |
 | Command palette | ✅ Ctrl+K / top-bar pill: instances (↵ Play, Ctrl+↵ show in Library), navigation, real QActions, settings pages, themes, motion; fuzzy ranking in `launcher/zero/palette/CommandMatcher`; shortcut sheet Ctrl+/ (also in More menu). Kill moved to **Ctrl+Shift+K**; Settings = **Ctrl+,** | `CommandMatcher`, `ZeroCommandPalette` tests, screenshots `build/zero-v2-m5-*.png` |
 | **Instance Profiles / Library 2.0** | ✅ `launcher/zero/profiles/` (`InstanceProfile`, `LibraryFilter`), data in `instance.cfg` (`ZeroFavorite`, `ZeroTags`, `ZeroArtwork`) + `<instance>/.zero/artwork.png` written with `QSaveFile`; `FilterChipBar`, `ArtworkCache`, `FlowLayout`; chips filter through `InstanceProxyModel::setPredicate` (groups kept) | `InstanceProfile`, `LibraryFilter`, `ZeroLibrary` tests, screenshots `build/zero-v2-m6-*.png`; **not tried with real input** |
+| **Session History** | ✅ one record per launch (played / stopped / crashed + exit code / failed) from `launchPhaseChanged` + `gameStoppedUnexpectedly` + `launchEnded`; JSON written with `QSaveFile`, cap 500, corrupt file moved to `.corrupt`; Home "Recent activity" | `SessionHistory` test, screenshots `build/zero-v2-m7-home-*.png` (hand-written history); **no real launch recorded yet** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
 
 ## Manual QA checklist (owner, real input needed)
@@ -77,6 +80,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 - [ ] Library 2.0: star on card hover toggles favorite without selecting; chips (Favorites / Running / loader / #tag) filter
       grid and list, clicking the active chip returns to All; add/remove tags (Enter, Esc, Backspace), description survives
       switching instance and restart; Set artwork… (png/jpg/webp) shows on card, details and Home hero; Remove artwork
+- [ ] Session History: launch, play, quit → Home "Recent activity" shows "Played for …"; Stop from the launcher → "Stopped
+      after …"; a crash → red row with exit code + Diagnose opens Crash Detective; row click opens the instance in Library
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
 
 ## Known limitations / open issues
@@ -94,7 +99,7 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 ## Next tasks (priority order)
 1. ~~Instance Profiles + Library 2.0~~ done in session 3. Left out: bulk actions (multi-select tag/favorite/move),
    "recently added" sort, favorite column in the list view; Home hero still = most recently played.
-2. **Session History** (launch date/duration/exit status from `launchEnded` + playtime) → Home "Recent activity".
+2. ~~Session History~~ done in session 3 (Home "Recent activity"). Not done: per-instance history view, stats.
 3. **Worlds Hub** (read-only discovery: level.dat via the bundled NBT lib, icon.png, size, dates, instance) then
    **Smart Backup** (`launcher/zero/backup/`: zip snapshots with manifest + hash verification, retention, restore with a
    safety snapshot first, pre-update hook).
@@ -103,4 +108,4 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 
 **Recommended start for session 4:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
-`/savvy-flow` task 2 (Session History → Home "Recent activity").
+`/savvy-flow` task 3 (Worlds Hub, read-only discovery).

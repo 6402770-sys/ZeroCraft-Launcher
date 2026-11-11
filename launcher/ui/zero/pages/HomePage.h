@@ -4,6 +4,7 @@
 
 #include <QList>
 #include <QWidget>
+#include <optional>
 #include "ui/zero/shell/ShellPage.h"
 
 class MinecraftInstance;
@@ -11,6 +12,7 @@ class QGridLayout;
 class QLabel;
 class QPushButton;
 class QStackedLayout;
+class QVBoxLayout;
 class QTimer;
 
 namespace Zero {
@@ -35,6 +37,8 @@ class HomePage : public ShellPage {
     void folderRequested(const QString& instanceId);
     /// A recently played card was clicked: select the instance in the Library and show it.
     void openInLibraryRequested(const QString& instanceId);
+    /// "Diagnose" on a crashed / failed session row: open Crash Detective for the instance and analyze now.
+    void diagnoseRequested(const QString& instanceId, std::optional<int> exitCode);
     void viewLibraryRequested();
     void newInstanceRequested();
     void importRequested();
@@ -50,6 +54,7 @@ class HomePage : public ShellPage {
     void refreshHero(MinecraftInstance* hero);
     void rebuildCards(QWidget* section, QGridLayout* grid, QStringList& signature, const QList<MinecraftInstance*>& instances);
     void refreshIcons();
+    void rebuildActivity();
 
     QStackedLayout* m_stack;  // 0 = empty library, 1 = content
 
@@ -73,6 +78,12 @@ class HomePage : public ShellPage {
     QWidget* m_recentSection;
     QGridLayout* m_recentGrid;
     QStringList m_recentSignature;
+
+    // recent activity (session history; hidden when there is nothing to show)
+    QWidget* m_activitySection;
+    ZeroCard* m_activityCard;
+    QVBoxLayout* m_activityRows;
+    QStringList m_activitySignature;
 
     QTimer* m_refreshTimer;
 };

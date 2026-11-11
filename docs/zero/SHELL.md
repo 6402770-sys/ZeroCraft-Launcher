@@ -72,7 +72,12 @@ Top bar: title "Home", no subtitle, no actions. Content max width 1280, page pad
 3. **Recently played** (heading + "View library" ghost link at right): up to 6 small instance cards, sorted by last launch,
    only instances launched at least once. Section hidden if none. Card click selects it in Library and switches page;
    card Play button launches.
-4. **Shortcuts** grid (4 tiles, `ZeroCard` clickable, icon + label + caption): New instance (`plus`), Import (`package`),
+4. **Recent activity** (heading; hidden when there is nothing to show): one `ZeroCard` with up to 6 rows from the session history, newest first,
+   skipping instances that no longer exist. Row (48 px, clickable, `surfaceHover` on hover, 1 px `border` divider between rows): instance icon
+   20 px, 6 px status dot (`success` played, `textTertiary` stopped, `danger` crashed / failed), name + outcome caption ("Played for 1 h",
+   "Stopped after 12 min", "Crashed after 3 min · exit code -1" and "Launch failed" in `danger`), relative end time at right, and for crashed /
+   failed sessions a ghost "Diagnose" button (`stethoscope`) that opens Crash Detective and analyzes. Row click selects the instance in Library.
+5. **Shortcuts** grid (4 tiles, `ZeroCard` clickable, icon + label + caption): New instance (`plus`), Import (`package`),
    Accounts (`user`), Instances folder (`folder-open`).
 - Empty library → whole page is a `ZeroEmptyState`: icon `library-big`, "Your library is empty",
   "Create an instance, install a modpack or import one you already have.", primary "New instance", secondary "Import".

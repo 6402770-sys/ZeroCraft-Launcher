@@ -2002,6 +2002,10 @@ void MainWindow::setupZeroShell()
         if (view->currentIndex().isValid())
             view->scrollTo(view->currentIndex());
     });
+    connect(m_home, &Zero::HomePage::diagnoseRequested, this, [this](const QString& id, std::optional<int> exitCode) {
+        m_tools->openCrashDetective(id, true, exitCode);
+        m_shell->setCurrentPage(QStringLiteral("tools"));
+    });
     connect(m_home, &Zero::HomePage::viewLibraryRequested, this, [this]() { m_shell->setCurrentPage(QStringLiteral("library")); });
     connect(m_home, &Zero::HomePage::newInstanceRequested, this, &MainWindow::on_actionAddInstance_triggered);
     connect(m_home, &Zero::HomePage::importRequested, this, [this]() { addInstance(QString(), {}, QStringLiteral("import")); });

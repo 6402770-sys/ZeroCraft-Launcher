@@ -41,6 +41,18 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
 - **Filtering** runs in `InstanceProxyModel` (text filter + `setPredicate` hook), so the grid, the list and Prism groups (categories = groups) agree.
 - Out of scope for now: bulk actions (multi-select tag / favorite / move), sorting by "recently added", a favorite column in the list view.
 
+## Session history (Mission 002, milestone 7)
+- **Data**: `<data root>/zero/session-history.json`, `{ "version": 1, "sessions": [...] }`, newest first, capped at 500 (oldest dropped). Entry keys:
+  `instanceId`, `instanceName`, `started` / `ended` (ms since epoch), `outcome` (`played` / `stopped` / `crashed` / `failed`), `exitCode` (only
+  when known). Loaded lazily, saved with `QSaveFile` after every new session. A missing file is an empty history; an unreadable file is renamed to
+  `session-history.json.corrupt` (replacing an older one) and never overwritten; malformed entries are skipped.
+- **Classification** (`History::classify`, pure): game started + success = Played; started + aborted = Stopped; started + not success = Crashed
+  (exit code from `gameStoppedUnexpectedly` when seen); not started + not success and not aborted = Failed; cancelled during preparation records
+  nothing. `started` = the `Running` phase (game process up), for Failed the `Preparing` time; `ended` = `launchEnded`.
+- **Wiring**: `launcher/zero/history/SessionHistory` is created in `Application` right after the instances load (marked `// ZERO:`) and connected to
+  `launchPhaseChanged`, `gameStoppedUnexpectedly` and `launchEnded`, so CLI launches without a main window are recorded too. The core takes an
+  injectable clock and name lookup and does not depend on `Application` (own `Phase` enum). Home's "Recent activity" reads `SessionHistory::global()`.
+
 ## Additions in session 2 (Mission 002)
 - **Themes**: `Zero::ThemeSpec` v2; one `ITheme` per spec (`ZeroTheme` = `zero-obsidian`, `ZeroMinecraftTheme` =
   `zero-minecraft`) registered first in `ThemeManager`; stylesheet = `obsidian.qss` + optional `<id>.qss` overlay.

@@ -24,6 +24,7 @@
 - `launcher/ui/zero/pages/` — `HomePage`, `LibraryPage`, `InstanceDetailsPanel`, `ZeroInstanceDelegate` (grid cards), `InstanceTableModel` (list view), `InstanceInfo` (version/loader read-only), `IconTile`, `ElidedLabel`
 - `launcher/zero/` — non-UI ZERO services (diagnostics/Crash Detective, …)
 - `launcher/zero/profiles/` — instance profiles: `InstanceProfile` (favorite, tags, description = `notes`, artwork file, mod count, `Notifier`) and `LibraryFilter` (filter chips + search, pure logic)
+- `launcher/zero/history/` — session history: `SessionHistory` (one record per launch, classification, JSON store, recorder slots; no widgets)
 - `launcher/ui/zero/pages/` (Library 2.0) — `FilterChipBar` (scrollable single-select chips), `ArtworkCache` (`Artwork::cover`, `ArtworkView`), `FlowLayout` (wrapping layout for tags)
 - `launcher/zero/palette/CommandMatcher.*` — pure ranking logic of the palette (fuzzy score, aliases, recency, tie-breaks, highlight positions)
 - `launcher/resources/zero/` — `obsidian.qss` (base, token placeholders), `minecraft.qss` (per-theme overlay appended to the base), `zero.qrc`, `icons/` (Lucide SVGs + LICENSE)
@@ -34,5 +35,6 @@
 - `tests/ZeroMotion_test.cpp` — motion system: setting resolution + legacy migration, overlays (self-deleting, replaceable, nothing with motion off), ripple, toasts
 - `tests/ZeroShell_test.cpp` — shell/top bar chrome swap, breadcrumb, Alt+N shortcuts
 - `tests/InstanceProfile_test.cpp`, `tests/LibraryFilter_test.cpp`, `tests/ZeroLibrary_test.cpp` — profile data (tags, artwork atomic write, mod count), filter chips, chip bar / flow layout / artwork crop / card star click
+- `tests/SessionHistory_test.cpp` — launch classification, recorder sequences with injected clock, persistence, cap, corrupt / malformed files
 - `tests/CommandMatcher_test.cpp`, `tests/ZeroCommandPalette_test.cpp` — palette ranking; palette/sheet open, close, navigation, callbacks, focus
 - `tests/Zero*_test.cpp`, `tests/CrashDetective_test.cpp` — ZERO unit tests (in `LauncherTests`, listed in `tests/CMakeLists.txt`)

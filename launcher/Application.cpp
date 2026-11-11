@@ -53,6 +53,7 @@
 #include "ui/ToolTipFilter.h"
 #include "ui/ViewLogWindow.h"
 
+#include "zero/history/SessionHistory.h"  // ZERO
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/instanceview/AccessibleInstanceView.h"
 
@@ -1036,6 +1037,25 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "Loading Instances...";
         m_instances->loadList();
         qInfo() << "<> Instances loaded.";
+
+        // ZERO: session history (one record per launch); lives here so launches without the main window are recorded too
+        {
+            using Zero::History::Phase;
+            auto* history = new Zero::History::SessionHistory(
+                FS::PathCombine(m_dataPath, "zero", "session-history.json"), {},
+                [this](const QString& id) {
+                    auto* inst = m_instances->getInstanceById(id);
+                    return inst ? inst->name() : QString();
+                },
+                this);
+            connect(this, &Application::launchPhaseChanged, history, [history](const QString& id, Application::LaunchPhase phase) {
+                history->onPhaseChanged(id, phase == Application::LaunchPhase::Running     ? Phase::Running
+                                            : phase == Application::LaunchPhase::Preparing ? Phase::Preparing
+                                                                                           : Phase::Idle);
+            });
+            connect(this, &Application::gameStoppedUnexpectedly, history, &Zero::History::SessionHistory::onStoppedUnexpectedly);
+            connect(this, &Application::launchEnded, history, &Zero::History::SessionHistory::onLaunchEnded);
+        }
     }
 
     // and accounts

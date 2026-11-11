@@ -873,6 +873,8 @@ SET(LAUNCHER_SOURCES
     zero/diagnostics/CrashReportCollector.cpp
     zero/diagnostics/CrashReportCollector.h
     zero/diagnostics/DiagnosticsTypes.h
+    zero/history/SessionHistory.cpp
+    zero/history/SessionHistory.h
     zero/palette/CommandMatcher.cpp
     zero/palette/CommandMatcher.h
     zero/profiles/InstanceProfile.cpp

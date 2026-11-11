@@ -37,6 +37,7 @@ set(TEST_SOURCES
     CommandMatcher_test.cpp
     ZeroCommandPalette_test.cpp
     InstanceProfile_test.cpp
+    SessionHistory_test.cpp
     LibraryFilter_test.cpp
     ZeroLibrary_test.cpp
 )

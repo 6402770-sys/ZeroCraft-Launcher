@@ -887,6 +887,8 @@ SET(LAUNCHER_SOURCES
     zero/profiles/InstanceProfile.h
     zero/profiles/LibraryFilter.cpp
     zero/profiles/LibraryFilter.h
+    zero/storage/StorageScanner.cpp
+    zero/storage/StorageScanner.h
     zero/worlds/WorldScanner.cpp
     zero/worlds/WorldScanner.h
 

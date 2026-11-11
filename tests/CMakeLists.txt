@@ -43,6 +43,7 @@ set(TEST_SOURCES
     WorldScanner_test.cpp
     WorldBackup_test.cpp
     AutoBackup_test.cpp
+    StorageScanner_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

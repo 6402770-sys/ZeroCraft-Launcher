@@ -113,6 +113,29 @@ The first ZERO feature that writes inside user worlds. Rule: never silently over
 - Known limits: nothing prevents another program from editing a world during the copy (the verify step would then fail the backup rather than record a torn one); a restore sets file modification times
   to "now"; empty folders inside a world are not restored.
 
+## Storage Manager (Mission 002)
+Core only (no widgets, no `APPLICATION`, no Prism instance classes): `launcher/zero/storage/StorageScanner` (namespace `Zero::Storage`). The UI fills plain `InstanceSource` / `LauncherSource` structs from the
+instance list (like `sourcesFromApplication()` in `WorldsPage`). Rule: measure everything, never delete without clear consent, never auto-delete user content.
+- **Categories** (`Category`, `categoryId()`): per instance Worlds (`worldsDir`), Mods (`modsDir`), Packs (all `packDirs`), Screenshots (`gameRoot/screenshots`), Logs (`gameRoot/logs` + `gameRoot/crash-reports`),
+  OtherInstance (the rest of `instanceRoot`); launcher Backups (`<dataRoot>/zero/backups`), Libraries (`libraries` + `assets`), Java (`java`), Cache (`cache` + `meta` + the `metacache` file), OtherLauncher (everything
+  else under `dataRoot`: rest of `zero/`, `logs/`, icons, themes, config files; the instances dir is excluded, it is reported per instance). Paths are compared normalized and case-insensitively.
+- **Every byte once**: the same path configured twice counts once (first category wins); a configured dir nested in another is subtracted from its parent; missing dirs are 0. The "other" buckets are measured by walking
+  the root and skipping the configured dirs (`sizeExcluding`, built on `Worlds::folderSize`, so symlinks and junctions are never followed or counted), not by `total - parts`, so the big trees are walked once and a link
+  can never make a bucket negative. Stray files directly in the instances dir (e.g. `instgroups.json`) belong to no category.
+- **`buildReport(instances, launcher, nowMs)`** does all disk work synchronously (pool thread): `StorageReport` = totals per category, per-instance rows (`InstanceRow`, biggest first), cleanup groups (always both kinds),
+  restore leftovers, free / total bytes of the data root volume (`QStorageInfo`, -1 when unknown).
+- **Cleanup candidates** (the only things ever offered): regular files, links / junctions / shortcuts excluded, directly (non-recursive) in `gameRoot/logs` (`*.log`, `*.log.gz`, never `latest.log` / `debug.log`) or
+  `gameRoot/crash-reports` (`*.txt`), last modified more than `kCleanupAgeDays` (30) before `nowMs`. A `logs` / `crash-reports` folder that is itself a link is not scanned. A running instance (`running`, set by the
+  provider) yields nothing. Worlds, mods, screenshots, packs and backups are measured only. `.zero-restore-*` / `.zero-replaced-*` folders in a worlds dir are reported as `RestoreLeftover` (info only, never deletable
+  through ZERO; they can be the only copy of a world). A leftover seen while a restore job runs is that job's staging folder: the UI can use `WorldBackupJobs::isInstanceLocked`.
+- **`trashCandidates`** is the only writer. For each file it re-validates NOW with the same predicates as detection (`isCleanupCandidate`, `cleanupDir`, `matchesCleanupName`, `isOlderThanCleanupAge`): regular non-link
+  file, parent is exactly the logs / crash-reports folder of a known instance (path tricks like `logs/../mods` fail), no owner of that folder is running, name still matches the kind, still older than 30 days. Refusals are
+  counted as skipped with a reason. Valid files go through `TrashHooks::trashPath` (default `FS::trash` = Recycle Bin). **A failed move leaves the file in place; there is no permanent-delete fallback and no delete hook.**
+- **`StorageScanner`** (QObject): provider (instances + launcher) called on the GUI thread by `rescan()` and by `trash()` (fresh `running` flags); one pool job per scan; generations drop older results; jobs only hold a
+  `QPointer` and post to the application object (same pattern as `WorldScanner`). Signals `scanStarted`, `reportReady(StorageReport)`, `trashFinished(TrashResult)`; one trash job at a time, a second request gets a
+  `trashFinished` whose `error` is set. The UI rescans after a trash.
+- Tests: `tests/StorageScanner_test.cpp` (temp trees, junction cases, injected trash hook).
+
 ## Additions in session 2 (Mission 002)
 - **Themes**: `Zero::ThemeSpec` v2; one `ITheme` per spec (`ZeroTheme` = `zero-obsidian`, `ZeroMinecraftTheme` =
   `zero-minecraft`) registered first in `ThemeManager`; stylesheet = `obsidian.qss` + optional `<id>.qss` overlay.

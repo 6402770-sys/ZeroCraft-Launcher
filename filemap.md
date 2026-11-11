@@ -25,6 +25,7 @@
 - `launcher/zero/` — non-UI ZERO services (diagnostics/Crash Detective, …)
 - `launcher/zero/profiles/` — instance profiles: `InstanceProfile` (favorite, tags, description = `notes`, artwork file, mod count, `Notifier`) and `LibraryFilter` (filter chips + search, pure logic)
 - `launcher/zero/worlds/` — Worlds Hub scanner: `WorldScanner` (read-only `scanWorldsDir`, `folderSize`, sort / search, async scanner with generations; no widgets)
+- `launcher/zero/storage/` — Storage Manager core: `StorageScanner` (per-category / per-instance disk usage, old log / crash report cleanup candidates, restore leftovers, validated Recycle Bin trash, async scanner; no widgets)
 - `launcher/zero/backup/` — Smart Backup: `WorldBackup` (create / verify / list / restore / retention / delete of world backups; no widgets), `WorldBackupJobs` (app-level runner: one job per world on the pool, launch lock), `AutoBackup` (automatic backups of the played worlds after a session)
 - `launcher/ui/zero/pages/` (Worlds Hub) — `WorldsPage` (toolbar, list, empty states), `WorldRows` (`WorldRowModel` + painted `WorldRowDelegate`), `WorldDetailsPanel`, `WorldBackupsSection` (Backups block of the details panel), `WorldIcon` (pixel-crisp world icon tiles)
 - `launcher/zero/history/` — session history: `SessionHistory` (one record per launch, classification, JSON store, recorder slots; no widgets)
@@ -40,6 +41,7 @@
 - `tests/InstanceProfile_test.cpp`, `tests/LibraryFilter_test.cpp`, `tests/ZeroLibrary_test.cpp` — profile data (tags, artwork atomic write, mod count), filter chips, chip bar / flow layout / artwork crop / card star click
 - `tests/WorldBackup_test.cpp` — Smart Backup: round trip, verify, zip-slip, restore + failure paths, retention (manual / safety / auto), listing, free space, job runner / launch lock
 - `tests/AutoBackup_test.cpp` — automatic backups: world selection (mtime, slack, size cap) and the service queue with real temp worlds
+- `tests/StorageScanner_test.cpp` — storage report math (no double counting, junctions, nested / duplicate dirs), cleanup detection, trash validation + failure paths, async scanner
 - `tests/WorldScanner_test.cpp` — world scan of real folder layouts, skipped entries, read-only guarantee, folder size (links / junctions), search / sort, scanner generations
 - `tests/SessionHistory_test.cpp` — launch classification, recorder sequences with injected clock, persistence, cap, corrupt / malformed files
 - `tests/CommandMatcher_test.cpp`, `tests/ZeroCommandPalette_test.cpp` — palette ranking; palette/sheet open, close, navigation, callbacks, focus

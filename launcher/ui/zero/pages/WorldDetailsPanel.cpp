@@ -17,6 +17,7 @@
 #include <QVBoxLayout>
 #include "DesktopServices.h"
 #include "ElidedLabel.h"
+#include "WorldBackupsSection.h"
 #include "WorldIcon.h"
 #include "ui/zero/ZeroEmptyState.h"
 #include "ui/zero/ZeroFormat.h"
@@ -24,6 +25,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
+#include "zero/backup/WorldBackupJobs.h"
 
 namespace Zero {
 
@@ -148,13 +150,26 @@ WorldDetailsPanel::WorldDetailsPanel(QWidget* parent) : ZeroCard(parent)
     lay->addLayout(stats);
     lay->addSpacing(Tokens::spaceLg);
 
-    // read-only actions
+    // backups
+    m_backups = new WorldBackupsSection(content);
+    lay->addWidget(m_backups);
+    lay->addSpacing(Tokens::spaceLg);
+
+    // actions
     m_openFolder = makeAction(tr("Open folder"), content);
     connect(m_openFolder, &QPushButton::clicked, this, [this]() {
         if (hasWorld())
             DesktopServices::openPath(QFileInfo(m_entry.folderPath));
     });
     lay->addWidget(m_openFolder);
+    m_openBackups = makeAction(tr("Open backups folder"), content);
+    m_openBackups->setVisible(false);  // only while the folder exists
+    connect(m_openBackups, &QPushButton::clicked, this, [this]() {
+        if (hasWorld() && m_jobs)
+            DesktopServices::openPath(QFileInfo(m_jobs->backupDir(m_entry)));
+    });
+    connect(m_backups, &WorldBackupsSection::folderStateChanged, m_openBackups, &QWidget::setVisible);
+    lay->addWidget(m_openBackups);
     m_showInstance = makeAction(tr("Show instance in Library"), content);
     connect(m_showInstance, &QPushButton::clicked, this, [this]() {
         if (hasWorld())
@@ -172,19 +187,37 @@ void WorldDetailsPanel::refreshIcons()
 {
     const auto& t = Theme::current();
     m_openFolder->setIcon(Icons::icon(QStringLiteral("folder-open"), t.textSecondary));
+    m_openBackups->setIcon(Icons::icon(QStringLiteral("folder-open"), t.textSecondary));
     m_showInstance->setIcon(Icons::icon(QStringLiteral("library-big"), t.textSecondary));
     m_copySeed->setIcon(Icons::icon(QStringLiteral("copy"), t.textSecondary));
+}
+
+void WorldDetailsPanel::setBackupJobs(Backup::WorldBackupJobs* jobs)
+{
+    m_jobs = jobs;
+    m_backups->setJobs(jobs);
+}
+
+void WorldDetailsPanel::setInstanceRunning(bool running)
+{
+    m_backups->setInstanceRunning(running);
 }
 
 void WorldDetailsPanel::clear()
 {
     m_entry = {};
+    m_backups->clear();
+    m_openBackups->setVisible(false);
     m_stack->setCurrentIndex(0);
 }
 
 void WorldDetailsPanel::setWorld(const Worlds::WorldEntry& entry)
 {
+    const bool otherWorld = entry.key() != m_entry.key();
     m_entry = entry;
+    if (otherWorld)
+        m_openBackups->setVisible(false);  // until the listing of this world says its folder exists
+    m_backups->setWorld(entry);
     m_icon->setIconPath(entry.iconPath);
     m_name->setFullText(entry.name);
     m_folder->setFullText(entry.folderName);

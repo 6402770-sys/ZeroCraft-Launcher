@@ -110,6 +110,7 @@
 #include "ui/dialogs/skins/SkinManageDialog.h"
 #include "ui/instanceview/InstanceDelegate.h"
 #include "ui/zero/ZeroToast.h"
+#include "zero/backup/WorldBackup.h"  // ZERO
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/ZeroFormat.h"
 #include "ui/zero/palette/ZeroCommandPalette.h"
@@ -2666,6 +2667,24 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         m_library->setSearchText(search);
     if (library && !view->currentIndex().isValid() && proxymodel->rowCount() > 0)
         view->selectionModel()->setCurrentIndex(proxymodel->index(0, 0), QItemSelectionModel::ClearAndSelect);
+
+    // Dev aid: ZERO_SCREENSHOT_BACKUP=<instanceId>/<folder> creates (synchronously, before the Worlds page is grabbed) two manual
+    // backups and one safety backup of that world in the normal backups folder, so the Backups block has something to show.
+    if (const QString spec = qEnvironmentVariable("ZERO_SCREENSHOT_BACKUP"); !spec.isEmpty()) {
+        const int slash = spec.indexOf(QLatin1Char('/'));
+        auto* inst = slash > 0 ? APPLICATION->instances()->getInstanceById(spec.left(slash)) : nullptr;
+        if (inst) {
+            const QString folder = spec.mid(slash + 1);
+            const QString dir = Zero::Backup::backupDirFor(APPLICATION->dataRoot(), inst->id(), folder);
+            const Zero::Backup::BackupMeta meta{ inst->id(), inst->name(), folder, folder };
+            for (const auto kind : { Zero::Backup::Kind::Manual, Zero::Backup::Kind::Safety, Zero::Backup::Kind::Manual }) {
+                const auto r = Zero::Backup::createBackup(QDir(inst->worldDir()).filePath(folder), dir, kind, meta);
+                qInfo() << "ZERO_SCREENSHOT_BACKUP:" << (r.ok ? r.zipPath : r.error);
+            }
+        } else {
+            qWarning() << "ZERO_SCREENSHOT_BACKUP: expected <instanceId>/<folder> of a known instance, got" << spec;
+        }
+    }
 
     // Dev aid: ZERO_SCREENSHOT_WORLD=<instanceId>/<folder> selects that world on the Worlds page; ZERO_SCREENSHOT_WORLD_SEARCH=<text>
     // types into its search field.

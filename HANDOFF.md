@@ -27,10 +27,11 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   Then **Session History** (`launcher/zero/history/SessionHistory`, wired in `Application`; data
   `<data>/zero/session-history.json`) and the Home **Recent activity** section (6 rows, Diagnose on crashed/failed).
   Then the **Worlds Hub** page (rail item after Library: Alt+3 Worlds, Alt+4 Tools, Alt+5 Appearance), read-only.
+  Then **Smart Backup** (manual world backups + verified restore with a safety snapshot, in the Worlds details panel).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
-- Result at end of session 3: **37/37 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
+- Result at end of session 3: **38/38 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
 - `FileSystem` investigation: 12 of its 19 functions pass and now run in `build.sh test`. The 7 `test_link*` symlink
   cases are not run: on Windows without Developer Mode, symlinks need privileges, so `FS::create_link` launches
   `zerolauncher_filelink.exe` elevated (UAC prompt); the elevated process doesn't inherit the MSYS2 PATH (missing-DLL
@@ -63,6 +64,7 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | **Instance Profiles / Library 2.0** | ✅ `launcher/zero/profiles/` (`InstanceProfile`, `LibraryFilter`), data in `instance.cfg` (`ZeroFavorite`, `ZeroTags`, `ZeroArtwork`) + `<instance>/.zero/artwork.png` written with `QSaveFile`; `FilterChipBar`, `ArtworkCache`, `FlowLayout`; chips filter through `InstanceProxyModel::setPredicate` (groups kept) | `InstanceProfile`, `LibraryFilter`, `ZeroLibrary` tests, screenshots `build/zero-v2-m6-*.png`; **not tried with real input** |
 | **Session History** | ✅ one record per launch (played / stopped / crashed + exit code / failed) from `launchPhaseChanged` + `gameStoppedUnexpectedly` + `launchEnded`; JSON written with `QSaveFile`, cap 500, corrupt file moved to `.corrupt`; Home "Recent activity" | `SessionHistory` test, screenshots `build/zero-v2-m7-home-*.png` (hand-written history); **no real launch recorded yet** |
 | **Worlds Hub** | ✅ read-only page: every world of every instance (`launcher/zero/worlds/WorldScanner`: level.dat via Prism `World` + `versionName()`/`isHardcore()`, async sizes on QThreadPool with generations, no link/junction following), search, instance filter, sort, details panel (seed copy, open folder, show instance) | `WorldScanner` test (symlink sub-case skipped: needs privileges; junction case runs), screenshots `build/zero-v2-m8-worlds-*.png`, fake worlds' files hashed unchanged after runs; **not tried with real input** |
+| **Smart Backup** (worlds) | ✅ `launcher/zero/backup/` (`WorldBackup` pure functions, `WorldBackupJobs` runner): zips in `<data>/zero/backups/<instance>/<world>/` with a SHA-256 manifest, written as `.part` and verified before rename; restore = verify → safety snapshot → extract to `saves/.zero-restore-*` + verify → rename swap with rollback → old world to Recycle Bin; zip-slip rejected; retention 10 manual + 3 safety; refused while the instance runs and launch blocked during a job | `WorldBackup` test (66 rows incl. corruption, zip-slip, failed swap rollback, retention, free space), screenshots `build/zero-v2-m9-backups-*.png`; **restore/delete dialogs, toasts, Recycle Bin and the launch block never clicked through in the app** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
 
 ## Manual QA checklist (owner, real input needed)
@@ -86,6 +88,9 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
       after …"; a crash → red row with exit code + Diagnose opens Crash Detective; row click opens the instance in Library
 - [ ] Worlds: Alt+3 opens it; worlds of real instances listed with icon/version/size; search, instance filter, sort
       persist; Ctrl+F / Esc; Seed copy toast; Open folder; Show instance in Library; Refresh; nothing inside saves changes
+- [ ] Smart Backup (use a throwaway world first!): Back up now → toast + row; Restore → confirm → world replaced, a
+      Safety row appears, the game opens the restored world; Delete → Recycle Bin; buttons disabled while the game runs;
+      Play blocked with a message while a backup runs (large world); leftover `saves/.zero-*` folders only after a crash
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
 
 ## Known limitations / open issues
@@ -104,11 +109,12 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 1. ~~Instance Profiles + Library 2.0~~ done in session 3. Left out: bulk actions (multi-select tag/favorite/move),
    "recently added" sort, favorite column in the list view; Home hero still = most recently played.
 2. ~~Session History~~ done in session 3 (Home "Recent activity"). Not done: per-instance history view, stats.
-3. ~~Worlds Hub~~ done in session 3 (read-only). Next: **Smart Backup** (`launcher/zero/backup/`: zip snapshots with manifest + hash verification, retention, restore with a
-   safety snapshot first, pre-update hook).
+3. ~~Worlds Hub~~ and ~~Smart Backup (manual + restore)~~ done in session 3. Smart Backup left: automatic backups
+   (after playing / scheduled), instance backup/restore, pre-update snapshots, restore preview, import/export of worlds;
+   backup rows show only relative time (several "Just now" look alike; full date in the tooltip). Empty folders are not stored.
 4. Downloads/Update center, Storage Manager, Java Doctor, Mod Intelligence, Repair Center, Discover, Server Vault,
    Screenshot Gallery (Phases C–E in MISSION.md).
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 
 **Recommended start for session 4:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
-`/savvy-flow` task 3: Smart Backup (zip snapshots + restore; add Backup/Restore to the Worlds details panel).
+`/savvy-flow`: automatic world backups (after playing, using `launchEnded`) or task 4 (Downloads/Update center).

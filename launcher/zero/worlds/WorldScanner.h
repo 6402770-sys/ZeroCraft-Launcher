@@ -39,8 +39,9 @@ struct InstanceSource {
     QString savesDir;
 };
 
-/// Every subfolder of `savesDir` that has a level.dat which parses (zip files, loose files and invalid folders are skipped; a
-/// missing `savesDir` gives an empty list). Sizes are NOT computed (sizeBytes stays -1). Sorted by folder name. Pure.
+/// Every subfolder of `savesDir` that has a level.dat which parses (zip files, loose files and invalid folders are skipped, and so
+/// are folders whose name starts with `.zero-`: leftovers of an interrupted Smart Backup restore; a missing `savesDir` gives an
+/// empty list). Sizes are NOT computed (sizeBytes stays -1). Sorted by folder name. Pure.
 QList<WorldEntry> scanWorldsDir(const QString& instanceId, const QString& instanceName, const QString& savesDir);
 
 /// Total size in bytes of the regular files under `path`. Symbolic links and junctions are neither followed nor counted, so a

@@ -24,6 +24,10 @@ QList<WorldEntry> scanWorldsDir(const QString& instanceId, const QString& instan
 
     const QFileInfoList folders = saves.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
     for (const QFileInfo& folder : folders) {
+        // Smart Backup leaves `.zero-restore-*` / `.zero-replaced-*` folders behind when a restore is interrupted; they are
+        // ZERO's own staging copies, never worlds (see docs/zero/ARCHITECTURE.md, "Smart Backup").
+        if (folder.fileName().startsWith(QLatin1String(".zero-")))
+            continue;
         World world(folder);
         if (!world.isValid())  // no level.dat
             continue;

@@ -28,6 +28,8 @@
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/ZeroToast.h"
+#include "zero/backup/WorldBackupJobs.h"
 
 namespace Zero {
 
@@ -42,10 +44,22 @@ QList<Worlds::InstanceSource> sourcesFromApplication()
     }
     return out;
 }
+
+// An instance counts as running from the moment its launch starts (Preparing) until the game ended.
+bool instanceBusy(const QString& id)
+{
+    if (APPLICATION->launchPhase(id) != Application::LaunchPhase::Idle)
+        return true;
+    const auto inst = APPLICATION->instances()->getInstanceById(id);
+    return inst && inst->isRunning();
+}
 }  // namespace
 
 WorldsPage::WorldsPage(QWidget* parent)
-    : ShellPage(parent), m_scanner(new Worlds::WorldScanner(&sourcesFromApplication, this)), m_model(new WorldRowModel(this))
+    : ShellPage(parent)
+    , m_scanner(new Worlds::WorldScanner(&sourcesFromApplication, this))
+    , m_backupJobs(new Backup::WorldBackupJobs(Backup::backupsRoot(APPLICATION->dataRoot()), &instanceBusy, this))
+    , m_model(new WorldRowModel(this))
 {
     // ----- toolbar row (content): search left, instance filter and sort right -----
     m_search = new QLineEdit(this);
@@ -119,6 +133,11 @@ WorldsPage::WorldsPage(QWidget* parent)
 
     m_details = new WorldDetailsPanel(this);
     connect(m_details, &WorldDetailsPanel::showInstanceRequested, this, &WorldsPage::showInstanceRequested);
+    m_details->setBackupJobs(m_backupJobs);
+    connect(m_backupJobs, &Backup::WorldBackupJobs::jobFinished, this, [this](const QString&, bool ok, const QString& message) {
+        ZeroToast::show(window(), message, ok ? ZeroToast::Kind::Success : ZeroToast::Kind::Error);
+    });
+    connect(m_backupJobs, &Backup::WorldBackupJobs::worldRestored, this, &WorldsPage::rescan);
 
     auto* collectionRow = new QWidget(this);
     auto* row = new QHBoxLayout(collectionRow);
@@ -333,10 +352,13 @@ void WorldsPage::applyFilters()
 void WorldsPage::syncDetails()
 {
     const int row = m_selectedKey.isEmpty() ? -1 : m_model->rowForKey(m_selectedKey);
-    if (row >= 0)
-        m_details->setWorld(m_model->entry(row));
-    else
+    if (row >= 0) {
+        const Worlds::WorldEntry entry = m_model->entry(row);
+        m_details->setInstanceRunning(m_model->isRunning(entry.instanceId));
+        m_details->setWorld(entry);
+    } else {
         m_details->clear();
+    }
 }
 
 void WorldsPage::updateState()
@@ -387,6 +409,11 @@ void WorldsPage::syncRunning()
             renamed = true;
     }
     m_model->setRunning(running);
+    {
+        const int row = m_selectedKey.isEmpty() ? -1 : m_model->rowForKey(m_selectedKey);
+        if (row >= 0)
+            m_details->setInstanceRunning(running.contains(m_model->entry(row).instanceId));
+    }
     if (renamed)
         scheduleRescan();
 }

@@ -54,9 +54,9 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
   injectable clock and name lookup and does not depend on `Application` (own `Phase` enum). Home's "Recent activity" reads `SessionHistory::global()`.
 
 ## Worlds Hub (Mission 002, milestone 8)
-- **Read-only rule**: the hub never writes, renames, moves or deletes anything inside an instance or a world. It does not use `World::rename / destroy / resetIcon / install`
-  or touch level.dat; `tests/WorldScanner_test.cpp` hashes a world tree (contents and mtimes) around a scan to keep that true. Backup / restore / import / export are a later task
-  and get their own services.
+- **Read-only rule**: the scanner and the page never write, rename, move or delete anything inside an instance or a world. They do not use `World::rename / destroy / resetIcon / install`
+  or touch level.dat; `tests/WorldScanner_test.cpp` hashes a world tree (contents and mtimes) around a scan to keep that true. The only writers are the Smart Backup service and its
+  jobs (below); import / export are a later task. The scanner skips folders named `.zero-*` (see "Smart Backup").
 - **Scanner** (`launcher/zero/worlds/WorldScanner`, no widgets, no `APPLICATION`): `scanWorldsDir(instanceId, instanceName, savesDir)` reads `<savesDir>/<folder>/level.dat` through
   Prism's `World` (+ ZERO `// ZERO` additions: `versionName()` = `Data.Version.Name`, `isHardcore()` = `Data.hardcore`) and skips zips, loose files, folders without a parsing level.dat;
   `folderSize` is an own traversal that skips symbolic links and junctions (Qt's recursive listing follows junctions). `WorldScanner` takes a source provider (id, name, saves dir), called
@@ -66,6 +66,39 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
   only hold a `QPointer` to the scanner and post the result with `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`; they never touch `this`, so a scanner that dies while jobs run is safe.
 - **UI**: `WorldsPage` (filter / sort / selection by key), `WorldRowModel` + `WorldRowDelegate` (painted rows, no per-row widgets), `WorldDetailsPanel`, `WorldIcon` (nearest-neighbour icon tiles).
   Sorting and search are pure functions in `WorldScanner.h` (`sortWorlds`, `matchesSearch`). Settings: `ZeroWorldsSort`, `ZeroWorldsInstance`.
+
+## Smart Backup (worlds, Mission 002, milestone 9)
+The first ZERO feature that writes inside user worlds. Rule: never silently overwrite or lose user data. Code: `launcher/zero/backup/WorldBackup` (pure functions, no widgets, no
+`APPLICATION`; seams for tests in `Hooks`: rename, free space, trash) and `WorldBackupJobs` (runner); UI: `WorldBackupsSection` inside the Worlds details panel.
+- **Storage**: `<dataRoot>/zero/backups/<instanceId>/<worldFolder>/<yyyyMMdd-HHmmss-zzz>-<manual|safety>.zip` (UTC stamp; a taken name gets `-2`, `-3`...). It is outside the instance,
+  so backups survive instance deletion and never end up in instance exports. Written through Prism's `ArchiveWriter` (libarchive zip); read through `ArchiveReader` (own streaming
+  `File::readBlocks`, `// ZERO`, so multi-GB region files are never held in memory).
+- **Manifest**: first entry `zero-backup.json` = `{version 1, kind, createdMs, instanceId, instanceName, worldFolder, worldName, files:[{path, size, sha256}], totalBytes}`; world files are
+  stored as `world/<relative path>`. Links (symbolic or junction, same traversal as `folderSize`) are skipped and `session.lock` of the world root is not stored; empty folders are not
+  stored. Files are hashed in 1 MiB chunks before they are added.
+- **Verify before rename**: the zip is written as `<name>.zip.part`, then reopened and checked (`verifyBackup`: manifest present and well formed, every manifest file present with the same size and
+  SHA-256, no duplicate and no unknown entry); only then it is renamed to `.zip`. On any failure the `.part` is deleted, so a partial file never looks like a backup. `createBackup` refuses
+  when the target volume has less than world size x 1.1 + 50 MB free ("Not enough free disk space for a backup (needs about X)").
+- **Path safety (zip-slip)**: every archive and manifest path must pass `isSafeRelativePath`: relative, '/'-separated, no empty / `.` / `..` segment, no backslash, no `:` (drive letters, NTFS streams),
+  no control or `<>"|?*` characters, no Windows device name (CON, NUL, COM1...), no trailing dot or space; duplicates (case-insensitive) are rejected. It runs in `verifyBackup`, again before every file
+  is created during extraction (plus a resolved-path-below-staging check), and for the files of the world being backed up. `MMCZip::extractDir` is not used for restores.
+- **Restore order** (`restoreBackup`, stops at the first failure with the original world untouched): (a) `verifyBackup`; (b) if the world exists, a verified `safety` backup of it; (c) extract into
+  the sibling `<saves>/.zero-restore-<folder>-<ts>` (same volume, so renames are cheap) and re-hash the staged files from disk against the manifest; (d) rename the world to
+  `<saves>/.zero-replaced-<folder>-<ts>`, rename staging to `<folder>`; if the second rename fails the first is rolled back (and if that fails too the error names the `.zero-replaced-*` folder);
+  (e) only after success trash the replaced folder (Recycle Bin, fallback delete): a failure there is logged and the restore still succeeds, the old world is also in the safety backup;
+  (f) any failure after (c) started deletes the staging folder. Folder renames retry a few times (antivirus / indexer handles on Windows) but never into an existing destination.
+- **Leftover folders**: an interrupted restore (crash, power loss) can leave `.zero-restore-*` or `.zero-replaced-*` next to the worlds. They are never auto-deleted (a `.zero-replaced-*` may be the only
+  copy of a world), and `scanWorldsDir` ignores every folder starting with `.zero-`, so they do not show up as worlds. The user can delete or rename them by hand.
+- **Retention** (`applyRetention`, run by the jobs after every successful backup / restore): keep the 10 newest `manual` and the 3 newest `safety` per world, by the timestamp in the file name (a
+  `-N` suffix compares numerically). It never deletes the backup just created or the one just restored (protected list) and only touches `*-manual.zip` / `*-safety.zip` with the exact name pattern; a damaged
+  zip with such a name still counts as one of the kept ones. `deleteBackup` (Delete button) only accepts a `.zip` inside `<dataRoot>/zero/backups` and moves it to the Recycle Bin.
+- **Jobs**: `WorldBackupJobs` runs `backup / restore / remove / refreshList` on `QThreadPool::globalInstance()` (same posting pattern as `WorldScanner`: the pool never touches `this`, the QPointer is read on
+  the GUI thread). At most one job per world key; a request for a busy world is refused. A job is refused when the instance runs or is being launched (`Application::launchPhase`), checked on the GUI thread at
+  request time. **Launch lock**: while a job runs for an instance, `WorldBackupJobs::isInstanceLocked(id)` is true and `Application::launch` (one `// ZERO` block at its top) refuses with the message box "A world of
+  this instance is being backed up or restored. Try again when it finishes." Signals: `jobStarted`, `jobFinished(key, ok, message)`, `backupsChanged`, `worldRestored`, `backupsListed`.
+- Tests: `tests/WorldBackup_test.cpp` (injected rename / free-space / trash hooks simulate failures).
+- Known limits: nothing prevents another program from editing a world during the copy (the verify step would then fail the backup rather than record a torn one); a restore sets file modification times
+  to "now"; empty folders inside a world are not restored.
 
 ## Additions in session 2 (Mission 002)
 - **Themes**: `Zero::ThemeSpec` v2; one `ITheme` per spec (`ZeroTheme` = `zero-obsidian`, `ZeroMinecraftTheme` =

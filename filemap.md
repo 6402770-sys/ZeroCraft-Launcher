@@ -25,7 +25,8 @@
 - `launcher/zero/` — non-UI ZERO services (diagnostics/Crash Detective, …)
 - `launcher/zero/profiles/` — instance profiles: `InstanceProfile` (favorite, tags, description = `notes`, artwork file, mod count, `Notifier`) and `LibraryFilter` (filter chips + search, pure logic)
 - `launcher/zero/worlds/` — Worlds Hub scanner: `WorldScanner` (read-only `scanWorldsDir`, `folderSize`, sort / search, async scanner with generations; no widgets)
-- `launcher/ui/zero/pages/` (Worlds Hub) — `WorldsPage` (toolbar, list, empty states), `WorldRows` (`WorldRowModel` + painted `WorldRowDelegate`), `WorldDetailsPanel`, `WorldIcon` (pixel-crisp world icon tiles)
+- `launcher/zero/backup/` — Smart Backup: `WorldBackup` (create / verify / list / restore / retention / delete of world backups; no widgets), `WorldBackupJobs` (one job per world on the pool, launch lock)
+- `launcher/ui/zero/pages/` (Worlds Hub) — `WorldsPage` (toolbar, list, empty states), `WorldRows` (`WorldRowModel` + painted `WorldRowDelegate`), `WorldDetailsPanel`, `WorldBackupsSection` (Backups block of the details panel), `WorldIcon` (pixel-crisp world icon tiles)
 - `launcher/zero/history/` — session history: `SessionHistory` (one record per launch, classification, JSON store, recorder slots; no widgets)
 - `launcher/ui/zero/pages/` (Library 2.0) — `FilterChipBar` (scrollable single-select chips), `ArtworkCache` (`Artwork::cover`, `ArtworkView`), `FlowLayout` (wrapping layout for tags)
 - `launcher/zero/palette/CommandMatcher.*` — pure ranking logic of the palette (fuzzy score, aliases, recency, tie-breaks, highlight positions)
@@ -37,6 +38,7 @@
 - `tests/ZeroMotion_test.cpp` — motion system: setting resolution + legacy migration, overlays (self-deleting, replaceable, nothing with motion off), ripple, toasts
 - `tests/ZeroShell_test.cpp` — shell/top bar chrome swap, breadcrumb, Alt+N shortcuts
 - `tests/InstanceProfile_test.cpp`, `tests/LibraryFilter_test.cpp`, `tests/ZeroLibrary_test.cpp` — profile data (tags, artwork atomic write, mod count), filter chips, chip bar / flow layout / artwork crop / card star click
+- `tests/WorldBackup_test.cpp` — Smart Backup: round trip, verify, zip-slip, restore + failure paths, retention, listing, free space, job runner / launch lock
 - `tests/WorldScanner_test.cpp` — world scan of real folder layouts, skipped entries, read-only guarantee, folder size (links / junctions), search / sort, scanner generations
 - `tests/SessionHistory_test.cpp` — launch classification, recorder sequences with injected clock, persistence, cap, corrupt / malformed files
 - `tests/CommandMatcher_test.cpp`, `tests/ZeroCommandPalette_test.cpp` — palette ranking; palette/sheet open, close, navigation, callbacks, focus

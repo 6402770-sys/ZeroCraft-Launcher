@@ -1,0 +1,778 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "WorldBackup.h"
+
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDateTime>
+#include <QDebug>
+#include <QDir>
+#include <QDirListing>
+#include <QFile>
+#include <QFileInfo>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocale>
+#include <QRegularExpression>
+#include <QSet>
+#include <QStorageInfo>
+#include <QThread>
+#include <QTimeZone>
+#include <algorithm>
+
+#include "FileSystem.h"
+#include "archive/ArchiveReader.h"
+#include "archive/ArchiveWriter.h"
+
+namespace Zero {
+namespace Backup {
+
+namespace {
+
+constexpr qint64 kSlackBytes = 50LL * 1024 * 1024;  // free space beyond the data itself
+constexpr qint64 kMaxManifestBytes = 64LL * 1024 * 1024;
+constexpr qsizetype kChunk = 1024 * 1024;
+
+QString tr(const char* text)
+{
+    return QCoreApplication::translate("Zero::Backup", text);
+}
+
+// ---------------------------------------------------------------- hooks
+
+bool defaultRename(const QString& from, const QString& to)
+{
+    // Folder renames on Windows fail while an indexer / antivirus still holds a handle on a file inside: retry a few times.
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (QDir().rename(from, to))
+            return true;
+        if (QFileInfo::exists(to))  // never retry into an existing destination
+            return false;
+        QThread::msleep(150);
+    }
+    return false;
+}
+
+qint64 defaultFreeBytes(const QString& path)
+{
+    const QStorageInfo info(path);
+    return info.isValid() && info.isReady() ? info.bytesAvailable() : -1;
+}
+
+bool defaultTrash(const QString& path)
+{
+    return FS::trash(path) || FS::deletePath(path);
+}
+
+Hooks resolve(const Hooks& in)
+{
+    Hooks h = in;
+    if (!h.rename)
+        h.rename = defaultRename;
+    if (!h.freeBytes)
+        h.freeBytes = defaultFreeBytes;
+    if (!h.trashPath)
+        h.trashPath = defaultTrash;
+    return h;
+}
+
+QString sizeText(qint64 bytes)
+{
+    return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeTraditionalFormat);
+}
+
+// ---------------------------------------------------------------- manifest
+
+struct ManifestFile {
+    QString path;
+    qint64 size = 0;
+    QString sha256;
+};
+
+struct Manifest {
+    Kind kind = Kind::Manual;
+    qint64 createdMs = 0;
+    BackupMeta meta;
+    QList<ManifestFile> files;
+    qint64 totalBytes = 0;
+};
+
+QByteArray manifestToJson(const Manifest& m)
+{
+    QJsonArray files;
+    for (const ManifestFile& f : m.files)
+        files.append(QJsonObject{ { "path", f.path }, { "size", double(f.size) }, { "sha256", f.sha256 } });
+    const QJsonObject root{ { "version", kManifestVersion },
+                            { "kind", kindToString(m.kind) },
+                            { "createdMs", double(m.createdMs) },
+                            { "instanceId", m.meta.instanceId },
+                            { "instanceName", m.meta.instanceName },
+                            { "worldFolder", m.meta.worldFolder },
+                            { "worldName", m.meta.worldName },
+                            { "files", files },
+                            { "totalBytes", double(m.totalBytes) } };
+    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+
+bool isHex64(const QString& s)
+{
+    if (s.size() != 64)
+        return false;
+    for (QChar c : s) {
+        const char16_t u = c.unicode();
+        if (!((u >= '0' && u <= '9') || (u >= 'a' && u <= 'f') || (u >= 'A' && u <= 'F')))
+            return false;
+    }
+    return true;
+}
+
+bool parseManifest(const QByteArray& json, Manifest* out, QString* error)
+{
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(json, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        *error = tr("The backup manifest is unreadable.");
+        return false;
+    }
+    const QJsonObject root = doc.object();
+    if (root.value("version").toInt(-1) != kManifestVersion) {
+        *error = tr("The backup was made by an unsupported version.");
+        return false;
+    }
+    bool kindOk = false;
+    Manifest m;
+    m.kind = kindFromString(root.value("kind").toString(), &kindOk);
+    if (!kindOk || !root.value("files").isArray()) {
+        *error = tr("The backup manifest is incomplete.");
+        return false;
+    }
+    m.createdMs = qint64(root.value("createdMs").toDouble());
+    m.meta.instanceId = root.value("instanceId").toString();
+    m.meta.instanceName = root.value("instanceName").toString();
+    m.meta.worldFolder = root.value("worldFolder").toString();
+    m.meta.worldName = root.value("worldName").toString();
+    m.totalBytes = qint64(root.value("totalBytes").toDouble(-1));
+
+    QSet<QString> seen;
+    qint64 sum = 0;
+    for (const QJsonValue& v : root.value("files").toArray()) {
+        const QJsonObject o = v.toObject();
+        ManifestFile f;
+        f.path = o.value("path").toString();
+        const double size = o.value("size").toDouble(-1);
+        f.sha256 = o.value("sha256").toString().toLower();
+        if (!isSafeRelativePath(f.path)) {
+            *error = tr("The backup contains an unsafe file path and was rejected: %1").arg(f.path);
+            return false;
+        }
+        if (size < 0 || !isHex64(f.sha256)) {
+            *error = tr("The backup manifest is incomplete.");
+            return false;
+        }
+        f.size = qint64(size);
+        // case-insensitive: two paths that differ by case would overwrite each other on Windows
+        if (seen.contains(f.path.toLower())) {
+            *error = tr("The backup lists the same file twice: %1").arg(f.path);
+            return false;
+        }
+        seen.insert(f.path.toLower());
+        sum += f.size;
+        m.files.append(f);
+    }
+    if (m.totalBytes != sum) {
+        *error = tr("The backup manifest does not add up.");
+        return false;
+    }
+    *out = m;
+    return true;
+}
+
+bool readManifest(const QString& zipPath, Manifest* out, QString* error)
+{
+    MMCZip::ArchiveReader reader(zipPath);
+    const auto data = reader.readFile(QString::fromLatin1(kManifestName));
+    if (!data) {
+        *error = data.error() == QLatin1String("File not found") ? tr("This is not a ZERO backup (no manifest).")
+                                                                 : tr("The backup cannot be read: %1").arg(data.error());
+        return false;
+    }
+    return parseManifest(*data, out, error);
+}
+
+// ---------------------------------------------------------------- hashing / traversal
+
+struct FileItem {
+    QString rel;
+    QString abs;
+    qint64 size = 0;
+    QString sha256;
+};
+
+bool hashFile(const QString& path, QString* sha, qint64* size, QString* error)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        *error = tr("Could not read %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
+        return false;
+    }
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    QByteArray buffer(kChunk, Qt::Uninitialized);
+    qint64 total = 0;
+    for (;;) {
+        const qint64 n = file.read(buffer.data(), buffer.size());
+        if (n < 0) {
+            *error = tr("Could not read %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
+            return false;
+        }
+        if (n == 0)
+            break;
+        hash.addData(QByteArrayView(buffer.constData(), n));
+        total += n;
+    }
+    *sha = QString::fromLatin1(hash.result().toHex());
+    *size = total;
+    return true;
+}
+
+/// Regular files below `root`, links (symbolic or junction) neither followed nor listed, `session.lock` of the world root excluded.
+/// Same traversal rules as Worlds::folderSize.
+QList<FileItem> collectFiles(const QString& root)
+{
+    QList<FileItem> out;
+    const QString base = QDir(root).absolutePath();
+    QStringList pending{ base };
+    while (!pending.isEmpty()) {
+        const QString dir = pending.takeLast();
+        for (const auto& entry : QDirListing(dir, QDirListing::IteratorFlag::IncludeHidden)) {
+            if (entry.isSymLink() || entry.fileInfo().isJunction())
+                continue;
+            if (entry.isDir()) {
+                pending.append(entry.filePath());
+            } else if (entry.isFile()) {
+                FileItem item;
+                item.abs = entry.filePath();
+                item.rel = item.abs.mid(base.size() + 1);
+                if (item.rel == QLatin1String("session.lock"))
+                    continue;
+                item.size = entry.size();
+                out.append(item);
+            }
+        }
+    }
+    std::sort(out.begin(), out.end(), [](const FileItem& a, const FileItem& b) { return a.rel < b.rel; });
+    return out;
+}
+
+// ---------------------------------------------------------------- names
+
+struct NameParts {
+    QString stamp;  // yyyyMMddHHmmsszzz (UTC), fixed width: compares like the time
+    int seq = 1;
+    Kind kind = Kind::Manual;
+};
+
+bool parseBackupName(const QString& fileName, NameParts* out)
+{
+    static const QRegularExpression re(QStringLiteral("^(\\d{8})-(\\d{6})-(\\d{3})(?:-(\\d+))?-(manual|safety)\\.zip$"));
+    const QRegularExpressionMatch m = re.match(fileName);
+    if (!m.hasMatch())
+        return false;
+    out->stamp = m.captured(1) + m.captured(2) + m.captured(3);
+    out->seq = m.captured(4).isEmpty() ? 1 : m.captured(4).toInt();
+    out->kind = m.captured(5) == QLatin1String("safety") ? Kind::Safety : Kind::Manual;
+    return true;
+}
+
+bool newerName(const NameParts& a, const NameParts& b)
+{
+    return a.stamp != b.stamp ? a.stamp > b.stamp : a.seq > b.seq;
+}
+
+QString uniqueZipPath(const QString& backupDir, Kind kind)
+{
+    const QString stamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz"));
+    for (int n = 1;; ++n) {
+        const QString suffix = n == 1 ? QString() : QStringLiteral("-%1").arg(n);
+        const QString path = QDir(backupDir).filePath(stamp + suffix + QLatin1Char('-') + kindToString(kind) + QStringLiteral(".zip"));
+        if (!QFileInfo::exists(path) && !QFileInfo::exists(path + QStringLiteral(".part")))
+            return path;
+    }
+}
+
+bool samePath(const QString& a, const QString& b)
+{
+    return QDir::cleanPath(QFileInfo(a).absoluteFilePath()).compare(QDir::cleanPath(QFileInfo(b).absoluteFilePath()),
+#ifdef Q_OS_WIN
+                                                                    Qt::CaseInsensitive
+#else
+                                                                    Qt::CaseSensitive
+#endif
+                                                                    ) == 0;
+}
+
+// ---------------------------------------------------------------- archive reading
+
+/// Streams every entry of `zipPath`, checks its path and records size + hash. On success `manifest` holds the parsed manifest and
+/// `seen` maps each world file (as stored) to its measured size + sha256.
+struct Seen {
+    qint64 size = 0;
+    QString sha256;
+};
+
+bool scanArchive(const QString& zipPath, Manifest* manifest, QHash<QString, Seen>* seen, QString* error)
+{
+    QByteArray manifestBytes;
+    bool haveManifest = false;
+    QSet<QString> lowered;
+
+    MMCZip::ArchiveReader reader(zipPath);
+    const std::function<Result<>(MMCZip::ArchiveReader::File*)> visit = [&](MMCZip::ArchiveReader::File* f) -> Result<> {
+        const QString name = f->filename();
+        if (!f->isFile())
+            return std::unexpected{ tr("The backup contains an unexpected entry: %1").arg(name) };
+        if (name == QLatin1String(kManifestName)) {
+            if (haveManifest)
+                return std::unexpected{ tr("The backup contains two manifests.") };
+            haveManifest = true;
+            TRY(f->readBlocks([&](const char* data, qint64 len) {
+                manifestBytes.append(data, len);
+                return manifestBytes.size() <= kMaxManifestBytes;
+            }));
+            return {};
+        }
+        if (!name.startsWith(QLatin1String(kWorldPrefix)))
+            return std::unexpected{ tr("The backup contains an unexpected entry: %1").arg(name) };
+        const QString rel = name.mid(int(sizeof(kWorldPrefix)) - 1);
+        if (!isSafeRelativePath(rel))
+            return std::unexpected{ tr("The backup contains an unsafe file path and was rejected: %1").arg(name) };
+        if (lowered.contains(rel.toLower()))
+            return std::unexpected{ tr("The backup contains the same file twice: %1").arg(rel) };
+        lowered.insert(rel.toLower());
+
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        Seen s;
+        TRY(f->readBlocks([&](const char* data, qint64 len) {
+            hash.addData(QByteArrayView(data, len));
+            s.size += len;
+            return true;
+        }));
+        s.sha256 = QString::fromLatin1(hash.result().toHex());
+        seen->insert(rel, s);
+        return {};
+    };
+    const auto parsed = reader.parse(visit);
+    if (!parsed) {
+        *error = parsed.error();
+        return false;
+    }
+    if (!haveManifest) {
+        *error = tr("This is not a ZERO backup (no manifest).");
+        return false;
+    }
+    return parseManifest(manifestBytes, manifest, error);
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------- public: names, paths
+
+QString kindToString(Kind kind)
+{
+    return kind == Kind::Safety ? QStringLiteral("safety") : QStringLiteral("manual");
+}
+
+Kind kindFromString(const QString& text, bool* ok)
+{
+    if (ok)
+        *ok = text == QLatin1String("manual") || text == QLatin1String("safety");
+    return text == QLatin1String("safety") ? Kind::Safety : Kind::Manual;
+}
+
+QString backupsRoot(const QString& dataRoot)
+{
+    return QDir(dataRoot).filePath(QStringLiteral("zero/backups"));
+}
+
+QString backupDirFor(const QString& dataRoot, const QString& instanceId, const QString& worldFolder)
+{
+    return QDir(backupsRoot(dataRoot)).filePath(instanceId + QLatin1Char('/') + worldFolder);
+}
+
+bool isSafeRelativePath(const QString& path)
+{
+    if (path.isEmpty() || path.startsWith(QLatin1Char('/')) || path.endsWith(QLatin1Char('/')))
+        return false;
+    static const QSet<QString> reserved = { "con",  "prn",  "aux",  "nul",  "com1", "com2", "com3", "com4", "com5", "com6", "com7",
+                                            "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9" };
+    for (const QString& segment : path.split(QLatin1Char('/'))) {
+        if (segment.isEmpty() || segment == QLatin1String(".") || segment == QLatin1String(".."))
+            return false;
+        if (segment.endsWith(QLatin1Char('.')) || segment.endsWith(QLatin1Char(' ')))
+            return false;
+        if (reserved.contains(segment.section(QLatin1Char('.'), 0, 0).trimmed().toLower()))
+            return false;
+        for (QChar c : segment) {
+            if (c.unicode() < 0x20 || c == QLatin1Char('\\') || c == QLatin1Char(':') || c == QLatin1Char('<') || c == QLatin1Char('>') ||
+                c == QLatin1Char('"') || c == QLatin1Char('|') || c == QLatin1Char('?') || c == QLatin1Char('*'))
+                return false;
+        }
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------- createBackup
+
+BackupResult createBackup(const QString& worldFolderPath, const QString& backupDir, Kind kind, const BackupMeta& meta, const Hooks& hooksIn)
+{
+    BackupResult result;
+    const Hooks hooks = resolve(hooksIn);
+    auto fail = [&](const QString& message) {
+        result.ok = false;
+        result.error = message;
+        result.zipPath.clear();
+        return result;
+    };
+
+    if (!QFileInfo(worldFolderPath).isDir())
+        return fail(tr("The world folder does not exist."));
+    if (!QDir().mkpath(backupDir))
+        return fail(tr("Could not create the backup folder."));
+
+    QList<FileItem> files = collectFiles(worldFolderPath);
+    qint64 total = 0;
+    for (const FileItem& f : std::as_const(files)) {
+        if (!isSafeRelativePath(f.rel))
+            return fail(tr("This world contains a file name that cannot be backed up safely: %1").arg(f.rel));
+        total += f.size;
+    }
+
+    const qint64 needed = qint64(double(total) * 1.1) + kSlackBytes;
+    const qint64 available = hooks.freeBytes(backupDir);
+    if (available >= 0 && available < needed)
+        return fail(tr("Not enough free disk space for a backup (needs about %1).").arg(sizeText(needed)));
+
+    // hash first (streamed), so the manifest can be the first entry of the archive
+    Manifest manifest;
+    manifest.kind = kind;
+    manifest.createdMs = QDateTime::currentMSecsSinceEpoch();
+    manifest.meta = meta;
+    QString error;
+    for (FileItem& f : files) {
+        if (!hashFile(f.abs, &f.sha256, &f.size, &error))
+            return fail(error);
+        manifest.files.append({ f.rel, f.size, f.sha256 });
+        manifest.totalBytes += f.size;
+    }
+
+    const QString finalPath = uniqueZipPath(backupDir, kind);
+    const QString partPath = finalPath + QStringLiteral(".part");
+    auto discardPart = [&]() { QFile::remove(partPath); };
+
+    {
+        MMCZip::ArchiveWriter writer(partPath);
+        if (auto r = writer.open(); !r) {
+            discardPart();
+            return fail(tr("Could not write the backup: %1").arg(r.error()));
+        }
+        if (auto r = writer.addFile(QString::fromLatin1(kManifestName), manifestToJson(manifest)); !r) {
+            writer.close();
+            discardPart();
+            return fail(tr("Could not write the backup: %1").arg(r.error()));
+        }
+        for (const FileItem& f : std::as_const(files)) {
+            if (auto r = writer.addFile(f.abs, QString::fromLatin1(kWorldPrefix) + f.rel); !r) {
+                writer.close();
+                discardPart();
+                return fail(tr("Could not write the backup: %1").arg(r.error()));
+            }
+        }
+        if (auto r = writer.close(); !r) {
+            discardPart();
+            return fail(tr("Could not write the backup: %1").arg(r.error()));
+        }
+    }
+
+    // verify before the backup may look valid: every entry against the manifest
+    const VerifyResult verified = verifyBackup(partPath);
+    if (!verified.ok) {
+        discardPart();
+        return fail(tr("The backup could not be verified and was discarded: %1").arg(verified.error));
+    }
+    if (!QFile::rename(partPath, finalPath)) {
+        discardPart();
+        return fail(tr("Could not finish the backup file."));
+    }
+    result.ok = true;
+    result.zipPath = finalPath;
+    return result;
+}
+
+// ---------------------------------------------------------------- listBackups / verifyBackup
+
+QList<BackupInfo> listBackups(const QString& backupDir)
+{
+    QList<BackupInfo> out;
+    const QFileInfoList zips = QDir(backupDir).entryInfoList({ QStringLiteral("*.zip") }, QDir::Files, QDir::NoSort);
+    for (const QFileInfo& zip : zips) {
+        BackupInfo info;
+        info.zipPath = zip.absoluteFilePath();
+        info.fileSize = zip.size();
+        NameParts name;
+        const bool named = parseBackupName(zip.fileName(), &name);
+        info.kind = named ? name.kind : Kind::Manual;
+        info.createdMs = zip.lastModified().toMSecsSinceEpoch();
+        Manifest manifest;
+        QString error;
+        if (readManifest(info.zipPath, &manifest, &error)) {
+            info.valid = true;
+            info.kind = manifest.kind;
+            info.createdMs = manifest.createdMs;
+            info.worldName = manifest.meta.worldName;
+            info.totalBytes = manifest.totalBytes;
+        }
+        out.append(info);
+    }
+    std::sort(out.begin(), out.end(), [](const BackupInfo& a, const BackupInfo& b) {
+        return a.createdMs != b.createdMs ? a.createdMs > b.createdMs : a.zipPath > b.zipPath;
+    });
+    return out;
+}
+
+VerifyResult verifyBackup(const QString& zipPath)
+{
+    VerifyResult result;
+    Manifest manifest;
+    QHash<QString, Seen> seen;
+    QString error;
+    if (!scanArchive(zipPath, &manifest, &seen, &error)) {
+        result.error = error;
+        return result;
+    }
+    for (const ManifestFile& f : std::as_const(manifest.files)) {
+        const auto it = seen.constFind(f.path);
+        if (it == seen.constEnd()) {
+            result.error = tr("The backup is missing a file: %1").arg(f.path);
+            return result;
+        }
+        if (it->size != f.size || it->sha256 != f.sha256) {
+            result.error = tr("The backup is damaged (checksum mismatch): %1").arg(f.path);
+            return result;
+        }
+    }
+    if (seen.size() != manifest.files.size()) {
+        result.error = tr("The backup contains files that its manifest does not list.");
+        return result;
+    }
+    result.ok = true;
+    return result;
+}
+
+// ---------------------------------------------------------------- restoreBackup
+
+namespace {
+
+/// Writes every world entry below `staging` (paths validated again, only files listed in the manifest) and then re-reads the staged
+/// files from disk and compares size + sha256 with the manifest.
+bool extractAndVerify(const QString& zipPath, const Manifest& manifest, const QString& staging, QString* error)
+{
+    QHash<QString, const ManifestFile*> wanted;
+    for (const ManifestFile& f : manifest.files)
+        wanted.insert(f.path, &f);
+    const QString stagingClean = QDir::cleanPath(QDir(staging).absolutePath());
+    QSet<QString> written;
+
+    MMCZip::ArchiveReader reader(zipPath);
+    const std::function<Result<>(MMCZip::ArchiveReader::File*)> visit = [&](MMCZip::ArchiveReader::File* f) -> Result<> {
+        const QString name = f->filename();
+        if (name == QLatin1String(kManifestName))
+            return f->skip();
+        if (!f->isFile() || !name.startsWith(QLatin1String(kWorldPrefix)))
+            return std::unexpected{ tr("The backup contains an unexpected entry: %1").arg(name) };
+        const QString rel = name.mid(int(sizeof(kWorldPrefix)) - 1);
+        if (!isSafeRelativePath(rel) || !wanted.contains(rel) || written.contains(rel))
+            return std::unexpected{ tr("The backup contains an unsafe or unexpected file path and was rejected: %1").arg(name) };
+        const QString target = QDir::cleanPath(stagingClean + QLatin1Char('/') + rel);
+        if (!target.startsWith(stagingClean + QLatin1Char('/')))  // belt and braces after isSafeRelativePath
+            return std::unexpected{ tr("The backup contains an unsafe file path and was rejected: %1").arg(name) };
+        if (!QDir().mkpath(QFileInfo(target).absolutePath()))
+            return std::unexpected{ tr("Could not create a folder for %1").arg(rel) };
+        QFile out(target);
+        if (!out.open(QIODevice::WriteOnly))
+            return std::unexpected{ tr("Could not write %1: %2").arg(rel, out.errorString()) };
+        bool writeOk = true;
+        TRY(f->readBlocks([&](const char* data, qint64 len) {
+            writeOk = out.write(data, len) == len;
+            return writeOk;
+        }));
+        if (!out.flush() || !writeOk) {
+            return std::unexpected{ tr("Could not write %1: %2").arg(rel, out.errorString()) };
+        }
+        out.close();
+        written.insert(rel);
+        return {};
+    };
+    const auto extracted = reader.parse(visit);
+    if (!extracted) {
+        *error = extracted.error() == QLatin1String("Aborted") ? tr("Could not write the restored files (disk full?).") : extracted.error();
+        return false;
+    }
+
+    for (const ManifestFile& f : std::as_const(manifest.files)) {
+        const QString path = stagingClean + QLatin1Char('/') + f.path;
+        QString sha;
+        qint64 size = 0;
+        if (!QFileInfo(path).isFile() || !hashFile(path, &sha, &size, error)) {
+            if (error->isEmpty())
+                *error = tr("The restored files are incomplete: %1").arg(f.path);
+            return false;
+        }
+        if (size != f.size || sha != f.sha256) {
+            *error = tr("The restored files do not match the backup: %1").arg(f.path);
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPath, const QString& backupDir, const BackupMeta& meta,
+                            const Hooks& hooksIn)
+{
+    RestoreResult result;
+    const Hooks hooks = resolve(hooksIn);
+    auto fail = [&](const QString& message) {
+        result.ok = false;
+        result.error = message;
+        return result;
+    };
+
+    // a. verify the backup before anything else happens
+    const VerifyResult verified = verifyBackup(zipPath);
+    if (!verified.ok)
+        return fail(tr("This backup is damaged and was not restored: %1").arg(verified.error));
+    Manifest manifest;
+    QString error;
+    if (!readManifest(zipPath, &manifest, &error))
+        return fail(error);
+
+    const QFileInfo world(worldFolderPath);
+    const QString saves = world.absolutePath();
+    const QString folder = world.fileName();
+    if (folder.isEmpty() || folder.startsWith(QStringLiteral(".zero-")))
+        return fail(tr("Invalid world folder."));
+    if (!QDir().mkpath(saves))
+        return fail(tr("Could not open the saves folder."));
+
+    const QString stamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddHHmmsszzz"));
+    const QString staging = QDir(saves).filePath(QStringLiteral(".zero-restore-%1-%2").arg(folder, stamp));
+    const QString replaced = QDir(saves).filePath(QStringLiteral(".zero-replaced-%1-%2").arg(folder, stamp));
+    if (QFileInfo::exists(staging) || QFileInfo::exists(replaced))
+        return fail(tr("A restore is already in progress for this world."));
+
+    const qint64 needed = qint64(double(manifest.totalBytes) * 1.1) + kSlackBytes;
+    const qint64 available = hooks.freeBytes(saves);
+    if (available >= 0 && available < needed)
+        return fail(tr("Not enough free disk space to restore (needs about %1).").arg(sizeText(needed)));
+
+    // b. the current world is saved first, verified like any other backup
+    const bool hadWorld = world.exists();
+    if (hadWorld) {
+        const BackupResult safety = createBackup(worldFolderPath, backupDir, Kind::Safety, meta, hooks);
+        if (!safety.ok)
+            return fail(tr("The current world could not be saved first, so nothing was changed: %1").arg(safety.error));
+        result.safetyZip = safety.zipPath;
+    }
+
+    // c. extract into a sibling staging folder and verify what landed on disk
+    auto dropStaging = [&]() { QDir(staging).removeRecursively(); };
+    if (!QDir().mkpath(staging))
+        return fail(tr("Could not create a temporary folder next to the world."));
+    if (!extractAndVerify(zipPath, manifest, staging, &error)) {
+        dropStaging();
+        return fail(error);
+    }
+
+    // d. swap with renames; the old world stays on disk until the new one is in place
+    if (hadWorld && !hooks.rename(worldFolderPath, replaced)) {
+        dropStaging();
+        return fail(tr("The current world could not be replaced. Is it open in another program?"));
+    }
+    if (!hooks.rename(staging, worldFolderPath)) {
+        QString message = tr("The restored world could not be moved into place.");
+        if (hadWorld && !hooks.rename(replaced, worldFolderPath)) {
+            message += QLatin1Char(' ') + tr("Your original world is in %1").arg(QDir::toNativeSeparators(replaced));
+            qWarning() << "ZERO restore: rollback failed, original world is in" << replaced;
+        }
+        dropStaging();
+        return fail(message);
+    }
+
+    // e. the old world is also in the safety backup: a failure here must not fail the restore
+    if (hadWorld && !hooks.trashPath(replaced))
+        qWarning() << "ZERO restore: could not remove the replaced world folder" << replaced << "(left in place, safe to delete)";
+
+    result.ok = true;
+    return result;
+}
+
+// ---------------------------------------------------------------- retention / delete
+
+int applyRetention(const QString& backupDir, const QStringList& protectedZips, int keepManual, int keepSafety)
+{
+    struct Candidate {
+        QString path;
+        NameParts name;
+    };
+    QList<Candidate> manual, safety;
+    const QFileInfoList files = QDir(backupDir).entryInfoList({ QStringLiteral("*.zip") }, QDir::Files, QDir::NoSort);
+    for (const QFileInfo& fi : files) {
+        Candidate c;
+        if (!parseBackupName(fi.fileName(), &c.name) || fi.isSymLink())
+            continue;  // not ZERO's: never touched
+        c.path = fi.absoluteFilePath();
+        (c.name.kind == Kind::Safety ? safety : manual).append(c);
+    }
+
+    int removed = 0;
+    auto prune = [&](QList<Candidate>& list, int keep) {
+        std::sort(list.begin(), list.end(), [](const Candidate& a, const Candidate& b) { return newerName(a.name, b.name); });
+        for (int i = std::max(0, keep); i < list.size(); ++i) {
+            const bool isProtected = std::any_of(protectedZips.begin(), protectedZips.end(),
+                                                 [&](const QString& p) { return !p.isEmpty() && samePath(p, list.at(i).path); });
+            if (isProtected)
+                continue;
+            if (QFile::remove(list.at(i).path))
+                ++removed;
+            else
+                qWarning() << "ZERO backup retention: could not remove" << list.at(i).path;
+        }
+    };
+    prune(manual, keepManual);
+    prune(safety, keepSafety);
+    return removed;
+}
+
+bool deleteBackup(const QString& zipPath, const QString& backupsRootDir, QString* error, const Hooks& hooksIn)
+{
+    const Hooks hooks = resolve(hooksIn);
+    auto fail = [&](const QString& message) {
+        if (error)
+            *error = message;
+        return false;
+    };
+    const QString root = QDir::cleanPath(QFileInfo(backupsRootDir).absoluteFilePath());
+    const QFileInfo info(zipPath);
+    const QString path = QDir::cleanPath(info.absoluteFilePath());
+    if (!path.startsWith(root + QLatin1Char('/'), Qt::CaseInsensitive) || info.suffix().compare(QLatin1String("zip"), Qt::CaseInsensitive) != 0)
+        return fail(tr("This file is not a ZERO backup."));
+    if (!info.isFile() || info.isSymLink())
+        return fail(tr("The backup no longer exists."));
+    if (!hooks.trashPath(path))
+        return fail(tr("The backup could not be deleted."));
+    return true;
+}
+
+}  // namespace Backup
+}  // namespace Zero

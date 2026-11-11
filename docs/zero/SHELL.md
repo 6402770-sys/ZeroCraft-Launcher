@@ -149,8 +149,19 @@ READ-ONLY hub: it lists every singleplayer world of every instance and never wri
   96 px are dropped). Rest rows are transparent, hover `surfaceHover`, selected `elevated` + 1 px `accent` border (radius md). Arrow keys / Home / End work.
 - **Details panel** ("Select a world" empty state when nothing is selected): 96 px icon tile, name (title, elided), folder name caption, stats rows Instance, Game mode
   (+ " · Hardcore"), Version, Seed (monospace + a ghost `copy` button: clipboard + success toast "Seed copied"; "Unknown" when level.dat has no seed), Size ("Calculating…"
-  until measured), Last played (tooltip = absolute date). Ghost actions: **Open folder** (`folder-open`, `DesktopServices::openPath`) and **Show instance in Library**
-  (`library-big`, `MainWindow::showInLibrary`). Nothing else.
+  until measured), Last played (tooltip = absolute date). Below the stats the **Backups** block (`WorldBackupsSection`, Smart Backup, see ARCHITECTURE.md), then the ghost
+  actions: **Open folder** (`folder-open`, `DesktopServices::openPath`), **Open backups folder** (`folder-open`, only while `<dataRoot>/zero/backups/<instance>/<folder>` exists)
+  and **Show instance in Library** (`library-big`, `MainWindow::showInLibrary`).
+- **Backups block**: overline "BACKUPS" with a right-aligned caption (`textTertiary`): "No backups yet" / "1 backup" / "N backups" (empty until the first listing arrived).
+  Full-width secondary button **Back up now** (`archive`); it reads "Backing up…" / "Restoring…" / "Deleting…" and is disabled while a job runs for this world, and
+  disabled with tooltip "Close the game to back up this world" while the instance runs. The list (hidden when empty; 40 px rows, 5 rows visible, then it scrolls; hairline
+  `border` between rows) shows the date as `Format::relativeTime` (tooltip: full local date and time) over `Format::bytes(zip size)`, a "Safety" pill (same pill as the world
+  row badges) for safety snapshots or a `danger` "Damaged" pill for a zip whose manifest cannot be read, and two 28 px ghost icon buttons: **Restore** (`refresh-cw`, tooltip
+  "Restore this backup", hidden for damaged ones) and **Delete** (`trash-2`, tooltip "Delete this backup"); both disabled while the instance runs or a job runs for the world.
+  Restore asks "Restore world?" ("Replace “<world>” with the backup from <date>? The current world is saved as a safety backup first." Restore / Cancel, Cancel is the
+  default); Delete asks "Delete this backup? It is moved to the Recycle Bin." (Delete / Cancel, Cancel default). Results are toasts: "Backup created" / "World restored" /
+  "Backup deleted" (success) or the error text (error); a restore also rescans the page. The list is requested on a pool thread whenever another world is selected and after every
+  job for the shown world.
 - Selection is kept by the world key (`<instanceId>/<folderName>`) across rescans, filters and sorting; a world that vanished clears it. A selected world that a filter hides
   comes back when the filter shows it again.
 - Empty states: no worlds at all -> `earth` "No worlds yet" / "Worlds appear here after you play singleplayer in any instance." (no button; the toolbar is hidden);
@@ -253,6 +264,8 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
 - `ZERO_SCREENSHOT_LAUNCH_PHASE=<instance id>:<preparing|running>` emits `Application::launchPhaseChanged` for that instance 300 ms after start (the signal the Play
   buttons listen to), `ZERO_SCREENSHOT_SELECT_THEME=<theme id>` selects a card on the Appearance page (nothing applied), `ZERO_SCREENSHOT_TOAST=1` shows one toast of each kind.
 - Worlds: `ZERO_SCREENSHOT_WORLD=<instanceId>/<folder>` selects that world (the key is `<instance id>/<world folder name>`), `ZERO_SCREENSHOT_WORLD_SEARCH=<text>` types into the Worlds search. With `--zero-page worlds` the grab waits until the scan (sizes included) finished, 3 s at most. Fake worlds: `<instance>/minecraft/saves/<folder>/level.dat` (gzipped NBT; `icon.png` optional).
+  `ZERO_SCREENSHOT_BACKUP=<instanceId>/<folder>` creates (synchronously, before the page is grabbed) two manual backups and one safety backup of that world in the normal backups
+  folder of the data dir, so the Backups block has rows to show (run it once; every run adds three).
 - Library filter: `ZERO_SCREENSHOT_CHIP=<favorites|running|loader:<Name>|tag:<name>>` selects that chip (nothing = All). Profile data for fake instances: `ZeroFavorite=true`,
   `ZeroTags="[\"pvp\", \"tech\"]"` (a value with commas must be quoted in the INI format), `ZeroArtwork=.zero/artwork.png` + the PNG, `notes=...`.
 - Palette: `ZERO_SCREENSHOT_PALETTE=<query>` opens the command palette with that query (`empty` = no query), `ZERO_SCREENSHOT_SHORTCUTS=1` opens the shortcut sheet.
@@ -268,5 +281,6 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
 - Tests: `tests/InstanceProfile_test.cpp` (tag normalization, JSON round trip, favorite / notes, artwork scaling + atomic replace + clear, mod count),
   `tests/LibraryFilter_test.cpp` (every chip kind, text search, AND combination, chip building, vanished-chip fallback), `tests/ZeroLibrary_test.cpp`
   (`FilterChipBar`, `FlowLayout`, `Artwork::cover`, the card star click).
+- Tests: `tests/WorldBackup_test.cpp` (Smart Backup: round trip, verification, zip-slip, restore and its failure paths, retention, listing, free-space refusal, job runner and launch lock).
 - Tests: `tests/WorldScanner_test.cpp` (scan of real folder layouts, skipped entries, read-only guarantee, folder size without following links, search / sort, scanner generations, destruction while jobs run).
 - Tests: `tests/ZeroShell_test.cpp` (top bar chrome per page, swap on page change, `chromeChanged`, breadcrumb click, Alt+N, chip anchor).

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// ZERO Launcher - Worlds hub: every singleplayer world of every instance in one searchable list, with a details panel. READ-ONLY:
-// the page only reads worlds (through Zero::Worlds::WorldScanner); it never writes, renames, moves or deletes anything.
+// ZERO Launcher - Worlds hub: every singleplayer world of every instance in one searchable list, with a details panel. The page
+// itself only reads worlds (through Zero::Worlds::WorldScanner); the only things that ever write inside a world are the Smart
+// Backup jobs (Zero::Backup::WorldBackupJobs, owned by the page), started from the details panel.
 #pragma once
 
 #include <QElapsedTimer>
@@ -18,6 +19,10 @@ class QTimer;
 class QAction;
 
 namespace Zero {
+
+namespace Backup {
+class WorldBackupJobs;
+}
 
 class WorldDetailsPanel;
 class WorldRowModel;
@@ -46,6 +51,7 @@ class WorldsPage : public ShellPage {
     void callWhenIdle(const std::function<void()>& done, int maxMs);
 
     Worlds::WorldScanner* scanner() const { return m_scanner; }
+    Backup::WorldBackupJobs* backupJobs() const { return m_backupJobs; }
     WorldDetailsPanel* detailsPanel() const { return m_details; }
     QListView* listView() const { return m_list; }
     WorldRowModel* rowModel() const { return m_model; }
@@ -71,6 +77,7 @@ class WorldsPage : public ShellPage {
     void scheduleRescan();
 
     Worlds::WorldScanner* m_scanner;
+    Backup::WorldBackupJobs* m_backupJobs;
     WorldRowModel* m_model;
     QString m_subtitle;
 

@@ -79,6 +79,25 @@ Result<QByteArray> ArchiveReader::File::readAll()
     return data;
 }
 
+// ZERO: streaming read used by Smart Backup (worlds can hold multi-GB region files).
+Result<> ArchiveReader::File::readBlocks(const std::function<bool(const char*, qint64)>& sink)
+{
+    const void* buff = nullptr;
+    size_t size = 0;
+    la_int64_t offset = 0;
+
+    int status = 0;
+    while ((status = archive_read_data_block(m_archive.get(), &buff, &size, &offset)) == ARCHIVE_OK) {
+        if (!sink(static_cast<const char*>(buff), static_cast<qint64>(size))) {
+            return std::unexpected{ QString("Aborted") };
+        }
+    }
+    if (status != ARCHIVE_EOF) {
+        return std::unexpected{ QString("Could not read data block: %1").arg(error()) };
+    }
+    return {};
+}
+
 QDateTime ArchiveReader::File::dateTime()
 {
     auto mtime = archive_entry_mtime(m_entry);

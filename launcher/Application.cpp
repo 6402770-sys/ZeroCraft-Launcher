@@ -53,6 +53,7 @@
 #include "ui/ToolTipFilter.h"
 #include "ui/ViewLogWindow.h"
 
+#include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/instanceview/AccessibleInstanceView.h"
@@ -1619,6 +1620,11 @@ bool Application::launch(MinecraftInstance* instance,
                          MinecraftAccountPtr accountToUse,
                          const QString& offlineName)
 {
+    if (Zero::Backup::WorldBackupJobs::isInstanceLocked(instance->id())) {  // ZERO: Smart Backup is copying / swapping a world
+        QMessageBox::information(m_mainWindow, tr("Backup in progress"),
+                                 tr("A world of this instance is being backed up or restored. Try again when it finishes."));
+        return false;
+    }
     if (m_updateRunning) {
         qDebug() << "Cannot launch instances while an update is running. Please try again when updates are completed.";
     } else if (instance->canLaunch()) {

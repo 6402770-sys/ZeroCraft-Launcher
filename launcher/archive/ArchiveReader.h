@@ -21,6 +21,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QStringList>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -57,6 +58,8 @@ class ArchiveReader {
         const char* error();
 
         Result<QByteArray> readAll();
+        /// ZERO: streams the entry data to `sink` in blocks (no full copy in memory). `sink` returns false to abort (error "Aborted").
+        Result<> readBlocks(const std::function<bool(const char*, qint64)>& sink);
         Result<> skip();
         Result<> writeFile(archive* out, const QString& targetFileName = "", bool notBlock = false);
         Result<> writeFile(archive* out, const QString& targetFileName, std::optional<QDir> root, bool notBlock = false);

@@ -868,6 +868,10 @@ SET(LAUNCHER_SOURCES
     ui/themes/CatPainter.h
 
     # ZERO services (non-UI)
+    zero/backup/WorldBackup.cpp
+    zero/backup/WorldBackup.h
+    zero/backup/WorldBackupJobs.cpp
+    zero/backup/WorldBackupJobs.h
     zero/diagnostics/CrashDetective.cpp
     zero/diagnostics/CrashDetective.h
     zero/diagnostics/CrashReportCollector.cpp
@@ -944,6 +948,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/InstanceTableModel.h
     ui/zero/pages/LibraryPage.cpp
     ui/zero/pages/LibraryPage.h
+    ui/zero/pages/WorldBackupsSection.cpp
+    ui/zero/pages/WorldBackupsSection.h
     ui/zero/pages/WorldDetailsPanel.cpp
     ui/zero/pages/WorldDetailsPanel.h
     ui/zero/pages/WorldIcon.cpp

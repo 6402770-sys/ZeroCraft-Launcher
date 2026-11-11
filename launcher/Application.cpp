@@ -332,7 +332,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" },
           { "zero-screenshot", "Dev aid: show the main window, save a screenshot to the given PNG file and quit (use with -d)", "file" },
-          { "zero-page", "Page for --zero-screenshot: home, library, tools or appearance (default: home)", "page" } });
+          { "zero-page", "Page for --zero-screenshot: home, library, worlds, tools or appearance (default: home)", "page" } });
     // Has to be positional for some OS to handle that properly
     parser.addPositionalArgument("URL", "Import the resource(s) at the given URL(s) (same as -I / --import)", "[URL...]");
 
@@ -667,6 +667,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // legacy ZeroReduceMotion=true keeps meaning "off" (Zero::Motion::resolveEnabled).
         m_settings->registerSetting("ZeroMotion", QString());
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
+        m_settings->registerSetting("ZeroWorldsSort", QString("recent"));  // Worlds page: "recent" | "name" | "size" | "instance"
+        m_settings->registerSetting("ZeroWorldsInstance", QString());  // Worlds page: instance id filter, empty = all instances
 
         // Remembered state
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());

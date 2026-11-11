@@ -881,6 +881,8 @@ SET(LAUNCHER_SOURCES
     zero/profiles/InstanceProfile.h
     zero/profiles/LibraryFilter.cpp
     zero/profiles/LibraryFilter.h
+    zero/worlds/WorldScanner.cpp
+    zero/worlds/WorldScanner.h
 
     # ZERO design system
     ui/zero/ZeroCard.cpp
@@ -942,6 +944,14 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/InstanceTableModel.h
     ui/zero/pages/LibraryPage.cpp
     ui/zero/pages/LibraryPage.h
+    ui/zero/pages/WorldDetailsPanel.cpp
+    ui/zero/pages/WorldDetailsPanel.h
+    ui/zero/pages/WorldIcon.cpp
+    ui/zero/pages/WorldIcon.h
+    ui/zero/pages/WorldRows.cpp
+    ui/zero/pages/WorldRows.h
+    ui/zero/pages/WorldsPage.cpp
+    ui/zero/pages/WorldsPage.h
     ui/zero/pages/ToolsPage.cpp
     ui/zero/pages/ToolsPage.h
     ui/zero/pages/ZeroInstanceDelegate.cpp

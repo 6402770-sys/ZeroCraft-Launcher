@@ -53,6 +53,20 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
   `launchPhaseChanged`, `gameStoppedUnexpectedly` and `launchEnded`, so CLI launches without a main window are recorded too. The core takes an
   injectable clock and name lookup and does not depend on `Application` (own `Phase` enum). Home's "Recent activity" reads `SessionHistory::global()`.
 
+## Worlds Hub (Mission 002, milestone 8)
+- **Read-only rule**: the hub never writes, renames, moves or deletes anything inside an instance or a world. It does not use `World::rename / destroy / resetIcon / install`
+  or touch level.dat; `tests/WorldScanner_test.cpp` hashes a world tree (contents and mtimes) around a scan to keep that true. Backup / restore / import / export are a later task
+  and get their own services.
+- **Scanner** (`launcher/zero/worlds/WorldScanner`, no widgets, no `APPLICATION`): `scanWorldsDir(instanceId, instanceName, savesDir)` reads `<savesDir>/<folder>/level.dat` through
+  Prism's `World` (+ ZERO `// ZERO` additions: `versionName()` = `Data.Version.Name`, `isHardcore()` = `Data.hardcore`) and skips zips, loose files, folders without a parsing level.dat;
+  `folderSize` is an own traversal that skips symbolic links and junctions (Qt's recursive listing follows junctions). `WorldScanner` takes a source provider (id, name, saves dir), called
+  on the GUI thread by `rescan()`; the page injects the instance list. Phase 1 (pool thread) scans the metadata and emits `worldsChanged()` (sizes -1, or the previously known size so
+  a refresh does not flicker); phase 2 computes one size per pool job and emits `sizeReady(key, bytes)`. `isScanning()` is true until the last size arrived.
+- **Generations**: every `rescan()` increments a counter that the jobs carry back; results of an older generation are dropped, so two quick rescans deliver only the second one. Pool jobs
+  only hold a `QPointer` to the scanner and post the result with `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`; they never touch `this`, so a scanner that dies while jobs run is safe.
+- **UI**: `WorldsPage` (filter / sort / selection by key), `WorldRowModel` + `WorldRowDelegate` (painted rows, no per-row widgets), `WorldDetailsPanel`, `WorldIcon` (nearest-neighbour icon tiles).
+  Sorting and search are pure functions in `WorldScanner.h` (`sortWorlds`, `matchesSearch`). Settings: `ZeroWorldsSort`, `ZeroWorldsInstance`.
+
 ## Additions in session 2 (Mission 002)
 - **Themes**: `Zero::ThemeSpec` v2; one `ITheme` per spec (`ZeroTheme` = `zero-obsidian`, `ZeroMinecraftTheme` =
   `zero-minecraft`) registered first in `ThemeManager`; stylesheet = `obsidian.qss` + optional `<id>.qss` overlay.

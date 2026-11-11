@@ -72,6 +72,30 @@ class ZeroFormatTest : public QObject {
         QFETCH(QString, expected);
         QCOMPARE(Zero::Format::playtime(seconds), expected);
     }
+
+    void bytes_data()
+    {
+        QTest::addColumn<qint64>("size");
+        QTest::addColumn<QString>("expected");
+
+        QTest::newRow("negative") << qint64(-5) << "0 B";
+        QTest::newRow("zero") << qint64(0) << "0 B";
+        QTest::newRow("bytes") << qint64(512) << "512 B";
+        QTest::newRow("one kb") << qint64(1024) << "1 KB";
+        QTest::newRow("kb") << qint64(812 * 1024) << "812 KB";
+        QTest::newRow("kb rounds up to mb") << qint64(1024 * 1024 - 100) << "1.0 MB";
+        QTest::newRow("mb") << qint64(1024 * 1024 + 1024 * 1024 / 5) << "1.2 MB";
+        QTest::newRow("ten mb") << qint64(12) * 1024 * 1024 + 300 * 1024 << "12.3 MB";
+        QTest::newRow("gb") << qint64(1.2 * 1024 * 1024 * 1024) << "1.2 GB";
+        QTest::newRow("tb") << qint64(3) * 1024 * 1024 * 1024 * 1024 << "3.0 TB";
+    }
+
+    void bytes()
+    {
+        QFETCH(qint64, size);
+        QFETCH(QString, expected);
+        QCOMPARE(Zero::Format::bytes(size), expected);
+    }
 };
 
 QTEST_GUILESS_MAIN(ZeroFormatTest)

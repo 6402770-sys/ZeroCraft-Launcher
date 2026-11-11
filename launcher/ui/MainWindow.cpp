@@ -119,6 +119,7 @@
 #include "ui/zero/shell/ZeroTopBar.h"
 #include "ui/zero/pages/HomePage.h"
 #include "ui/zero/pages/LibraryPage.h"
+#include "ui/zero/pages/WorldsPage.h"  // ZERO
 #include "zero/profiles/InstanceProfile.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
 #include "ui/zero/pages/AppearancePage.h"
@@ -1931,6 +1932,8 @@ void MainWindow::setupZeroShell()
     m_library = new Zero::LibraryPage(view, proxymodel, m_shell);
     m_shell->addPage(QStringLiteral("home"), QStringLiteral("house"), tr("Home"), m_home);
     m_shell->addPage(QStringLiteral("library"), QStringLiteral("library-big"), tr("Library"), m_library);
+    m_worlds = new Zero::WorldsPage(m_shell);
+    m_shell->addPage(QStringLiteral("worlds"), QStringLiteral("earth"), tr("Worlds"), m_worlds);
     m_tools = new Zero::ToolsPage(m_shell);
     m_shell->addPage(QStringLiteral("tools"), QStringLiteral("wrench"), tr("Tools"), m_tools);
     m_appearance = new Zero::AppearancePage(m_shell);
@@ -1973,6 +1976,9 @@ void MainWindow::setupZeroShell()
     });
     connect(m_library, &Zero::LibraryPage::setArtworkRequested, this, &MainWindow::chooseArtworkForSelected);
     connect(m_library, &Zero::LibraryPage::removeArtworkRequested, this, &MainWindow::removeArtworkFromSelected);
+
+    // Worlds (read-only hub): "Show instance in Library" is the only way out
+    connect(m_worlds, &Zero::WorldsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
 
     // Home
     auto withInstance = [](const QString& id, auto&& fn) {
@@ -2296,6 +2302,7 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
     const QList<Nav> pages = {
         { "home", tr("Go to Home"), "house", { tr("start"), tr("continue") } },
         { "library", tr("Go to Library"), "library-big", { tr("instances"), tr("games"), tr("packs") } },
+        { "worlds", tr("Go to Worlds"), "earth", { tr("saves"), tr("maps") } },
         { "tools", tr("Go to Tools"), "wrench", { tr("utilities") } },
         { "appearance", tr("Go to Appearance"), "palette", { tr("themes"), tr("look") } },
     };
@@ -2527,6 +2534,7 @@ QList<Zero::ShortcutGroup> MainWindow::buildShortcutGroups()
     navigation.entries << entry(tr("Keyboard shortcuts"), QKeySequence(QStringLiteral("Ctrl+/")));
     const QList<QPair<QString, QString>> pages = { { QStringLiteral("home"), tr("Home") },
                                                     { QStringLiteral("library"), tr("Library") },
+                                                    { QStringLiteral("worlds"), tr("Worlds") },
                                                     { QStringLiteral("tools"), tr("Tools") },
                                                     { QStringLiteral("appearance"), tr("Appearance") } };
     for (const auto& p : pages) {
@@ -2534,7 +2542,7 @@ QList<Zero::ShortcutGroup> MainWindow::buildShortcutGroups()
         if (!keys.isEmpty())
             navigation.entries << entry(tr("Go to %1").arg(p.second), keys);
     }
-    navigation.entries << entry(tr("Search instances (Library)"), QKeySequence(QStringLiteral("Ctrl+F")));
+    navigation.entries << entry(tr("Search instances / worlds"), QKeySequence(QStringLiteral("Ctrl+F")));
     navigation.entries << ShortcutEntry{ tr("Close palette, clear search"), { QStringLiteral("Esc") } };
 
     ShortcutGroup instances;
@@ -2626,6 +2634,7 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     }
     const bool library = page == QLatin1String("library");
     m_shell->setCurrentPage(library                              ? QStringLiteral("library")
+                            : page == QLatin1String("worlds")     ? QStringLiteral("worlds")  // ZERO
                             : page == QLatin1String("tools")      ? QStringLiteral("tools")
                             : page == QLatin1String("appearance") ? QStringLiteral("appearance")
                                                                   : QStringLiteral("home"));
@@ -2657,6 +2666,13 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         m_library->setSearchText(search);
     if (library && !view->currentIndex().isValid() && proxymodel->rowCount() > 0)
         view->selectionModel()->setCurrentIndex(proxymodel->index(0, 0), QItemSelectionModel::ClearAndSelect);
+
+    // Dev aid: ZERO_SCREENSHOT_WORLD=<instanceId>/<folder> selects that world on the Worlds page; ZERO_SCREENSHOT_WORLD_SEARCH=<text>
+    // types into its search field.
+    if (const QString world = qEnvironmentVariable("ZERO_SCREENSHOT_WORLD"); !world.isEmpty())
+        m_worlds->selectWorld(world);
+    if (const QString worldSearch = qEnvironmentVariable("ZERO_SCREENSHOT_WORLD_SEARCH"); !worldSearch.isEmpty())
+        m_worlds->setSearchText(worldSearch);
 
     // Dev aid: ZERO_SCREENSHOT_RUNNING=<instance id> flips that instance to "running" through the normal signal path
     // (BaseInstance::setRunning -> InstanceList::dataChanged -> pages), so the live running state can be reviewed.
@@ -2718,7 +2734,7 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         QTimer::singleShot(200, this, [this]() { m_shortcutSheet->open(); });
 
     // Let the layout, icon loading and the page fade settle before grabbing.
-    QTimer::singleShot(1500, this, [this, path]() {
+    auto grabAndFinish = [this, path]() {
         QApplication::processEvents();
         const bool ok = grab().save(path);
         qInfo() << "ZERO screenshot" << (ok ? "saved to" : "FAILED for") << path;
@@ -2755,7 +2771,12 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
                 APPLICATION->exit(0);
             }
         });
-    });
+    };
+    // ZERO: the Worlds page scans asynchronously: wait for the scan (sizes included), 3 s at most
+    if (page == QLatin1String("worlds"))
+        m_worlds->callWhenIdle([this, grabAndFinish]() { QTimer::singleShot(600, this, grabAndFinish); }, 3000);
+    else
+        QTimer::singleShot(1500, this, grabAndFinish);
 }
 
 void MainWindow::recordTransitionFrames(const QString& path, const std::function<void()>& trigger, const std::function<void()>& done)

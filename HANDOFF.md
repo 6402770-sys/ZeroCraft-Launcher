@@ -26,10 +26,11 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   Home) and `docs/zero/ARCHITECTURE.md` (Instance profiles).
   Then **Session History** (`launcher/zero/history/SessionHistory`, wired in `Application`; data
   `<data>/zero/session-history.json`) and the Home **Recent activity** section (6 rows, Diagnose on crashed/failed).
+  Then the **Worlds Hub** page (rail item after Library: Alt+3 Worlds, Alt+4 Tools, Alt+5 Appearance), read-only.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
-- Result at end of session 3: **36/36 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
+- Result at end of session 3: **37/37 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
 - `FileSystem` investigation: 12 of its 19 functions pass and now run in `build.sh test`. The 7 `test_link*` symlink
   cases are not run: on Windows without Developer Mode, symlinks need privileges, so `FS::create_link` launches
   `zerolauncher_filelink.exe` elevated (UAC prompt); the elevated process doesn't inherit the MSYS2 PATH (missing-DLL
@@ -57,10 +58,11 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | Motion system | ✅ `ZeroMotion` setting (system/on/off; **the owner's Windows has "Animation effects" off, so `system` = still: choose On in Appearance**), snapshot transitions (crossfade/rise/pixel dissolve), page rise, nav indicator glide, card lift, press ripple (Obsidian), toast slide/stack glide, theme transition, grid/list + details crossfades, dialog fade-in, native popup fades | `ZeroMotion` test (overlay lifetime, no leftover effects), evidence frames `build/zero-v2-motion-*-t*.png`; hover/press/toast motion **not** seen with real input |
 | Play button | ✅ `ZeroPlayButton`: Idle → Launching (sweep / XP bar) → Running (hover = Stop) → failure shake; driven by `Application::launchPhaseChanged/launchEnded` (Preparing at controller start, Running when the game process starts) | `ZeroPlayButton` test, static screenshots; **no real Minecraft launch verified** |
 | Appearance page | ✅ live preview of a theme before applying, theme cards, Apply (persists, transition plays), motion Follow Windows/On/Off, link to legacy appearance settings | screenshots |
-| Shell v2 | ✅ `ZeroTopBar` (title/subtitle/breadcrumb, page actions, account chip, search pill), `ShellPage` chrome API, 60 px sidebar header (logo + wordmark), Appearance/More/Settings bottom group, Alt+1..4 | `ZeroShell` test, screenshots `build/zero-v2-m4-*.png` |
+| Shell v2 | ✅ `ZeroTopBar` (title/subtitle/breadcrumb, page actions, account chip, search pill), `ShellPage` chrome API, 60 px sidebar header (logo + wordmark), Appearance/More/Settings bottom group, Alt+1..5 | `ZeroShell` test, screenshots `build/zero-v2-m4-*.png` |
 | Command palette | ✅ Ctrl+K / top-bar pill: instances (↵ Play, Ctrl+↵ show in Library), navigation, real QActions, settings pages, themes, motion; fuzzy ranking in `launcher/zero/palette/CommandMatcher`; shortcut sheet Ctrl+/ (also in More menu). Kill moved to **Ctrl+Shift+K**; Settings = **Ctrl+,** | `CommandMatcher`, `ZeroCommandPalette` tests, screenshots `build/zero-v2-m5-*.png` |
 | **Instance Profiles / Library 2.0** | ✅ `launcher/zero/profiles/` (`InstanceProfile`, `LibraryFilter`), data in `instance.cfg` (`ZeroFavorite`, `ZeroTags`, `ZeroArtwork`) + `<instance>/.zero/artwork.png` written with `QSaveFile`; `FilterChipBar`, `ArtworkCache`, `FlowLayout`; chips filter through `InstanceProxyModel::setPredicate` (groups kept) | `InstanceProfile`, `LibraryFilter`, `ZeroLibrary` tests, screenshots `build/zero-v2-m6-*.png`; **not tried with real input** |
 | **Session History** | ✅ one record per launch (played / stopped / crashed + exit code / failed) from `launchPhaseChanged` + `gameStoppedUnexpectedly` + `launchEnded`; JSON written with `QSaveFile`, cap 500, corrupt file moved to `.corrupt`; Home "Recent activity" | `SessionHistory` test, screenshots `build/zero-v2-m7-home-*.png` (hand-written history); **no real launch recorded yet** |
+| **Worlds Hub** | ✅ read-only page: every world of every instance (`launcher/zero/worlds/WorldScanner`: level.dat via Prism `World` + `versionName()`/`isHardcore()`, async sizes on QThreadPool with generations, no link/junction following), search, instance filter, sort, details panel (seed copy, open folder, show instance) | `WorldScanner` test (symlink sub-case skipped: needs privileges; junction case runs), screenshots `build/zero-v2-m8-worlds-*.png`, fake worlds' files hashed unchanged after runs; **not tried with real input** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
 
 ## Manual QA checklist (owner, real input needed)
@@ -73,7 +75,7 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
       choice survives a restart; Prism's settings dialog theme combo stays in sync
 - [ ] Motion On: page rise, nav pill glide, card lift on hover, ripple on press (Obsidian), toasts slide/stack, grid↔list
       crossfade, dialog fade-in — check for flicker (dialog fade can be removed in `fadeDialogIn`, `ZeroTheme.cpp`)
-- [ ] Ctrl+K palette: type, arrows, ↵ launches, Ctrl+↵ shows in Library, Esc returns focus; Ctrl+/ sheet; Alt+1..4;
+- [ ] Ctrl+K palette: type, arrows, ↵ launches, Ctrl+↵ shows in Library, Esc returns focus; Ctrl+/ sheet; Alt+1..5;
       Ctrl+Shift+K kills; Ctrl+, opens settings
 - [ ] Top bar: Library actions (grid/list, New instance), search/sort row, account menu opens below the chip
 - [ ] Crash Detective: force a crash → toast → Diagnose → breadcrumb "Tools › Crash Detective" → back via "Tools"
@@ -82,6 +84,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
       switching instance and restart; Set artwork… (png/jpg/webp) shows on card, details and Home hero; Remove artwork
 - [ ] Session History: launch, play, quit → Home "Recent activity" shows "Played for …"; Stop from the launcher → "Stopped
       after …"; a crash → red row with exit code + Diagnose opens Crash Detective; row click opens the instance in Library
+- [ ] Worlds: Alt+3 opens it; worlds of real instances listed with icon/version/size; search, instance filter, sort
+      persist; Ctrl+F / Esc; Seed copy toast; Open folder; Show instance in Library; Refresh; nothing inside saves changes
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
 
 ## Known limitations / open issues
@@ -100,12 +104,11 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 1. ~~Instance Profiles + Library 2.0~~ done in session 3. Left out: bulk actions (multi-select tag/favorite/move),
    "recently added" sort, favorite column in the list view; Home hero still = most recently played.
 2. ~~Session History~~ done in session 3 (Home "Recent activity"). Not done: per-instance history view, stats.
-3. **Worlds Hub** (read-only discovery: level.dat via the bundled NBT lib, icon.png, size, dates, instance) then
-   **Smart Backup** (`launcher/zero/backup/`: zip snapshots with manifest + hash verification, retention, restore with a
+3. ~~Worlds Hub~~ done in session 3 (read-only). Next: **Smart Backup** (`launcher/zero/backup/`: zip snapshots with manifest + hash verification, retention, restore with a
    safety snapshot first, pre-update hook).
 4. Downloads/Update center, Storage Manager, Java Doctor, Mod Intelligence, Repair Center, Discover, Server Vault,
    Screenshot Gallery (Phases C–E in MISSION.md).
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 
 **Recommended start for session 4:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
-`/savvy-flow` task 3 (Worlds Hub, read-only discovery).
+`/savvy-flow` task 3: Smart Backup (zip snapshots + restore; add Backup/Restore to the Worlds details panel).

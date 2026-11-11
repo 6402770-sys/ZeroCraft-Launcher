@@ -39,6 +39,9 @@ class World {
     QDateTime lastPlayed() const { return m_lastPlayed; }
     GameType gameType() const { return m_gameType; }
     int64_t seed() const { return m_randomSeed; }
+    // ZERO: game version that last saved the world (Data.Version.Name, empty if absent) and the hardcore flag (Data.hardcore)
+    QString versionName() const { return m_versionName; }
+    bool isHardcore() const { return m_hardcore; }
     bool isValid() const { return m_isValid; }
     bool isOnFS() const { return m_containerFile.isDir(); }
     QFileInfo container() const { return m_containerFile; }
@@ -91,6 +94,8 @@ class World {
     QDateTime m_lastPlayed;
     int64_t m_size = 0;
     int64_t m_randomSeed = 0;
+    QString m_versionName;  // ZERO
+    bool m_hardcore = false;  // ZERO
     GameType m_gameType;
     bool m_isValid = false;
 };

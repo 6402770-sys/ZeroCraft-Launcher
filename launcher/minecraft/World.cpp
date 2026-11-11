@@ -439,6 +439,22 @@ optional<int> read_int(nbt::value& parent, const char* name)
     }
 }
 
+// ZERO: byte tags (hardcore flag)
+optional<int> read_byte(nbt::value& parent, const char* name)
+{
+    try {
+        auto& namedValue = parent.at(name);
+        if (namedValue.get_type() != nbt::tag_type::Byte) {
+            return nullopt;
+        }
+        return static_cast<int>(namedValue.as<nbt::tag_byte>().get());
+    } catch ([[maybe_unused]] const std::out_of_range& e) {
+        return nullopt;
+    } catch ([[maybe_unused]] const std::bad_cast& e) {
+        return nullopt;
+    }
+}
+
 GameType read_gametype(nbt::value& parent, const char* name)
 {
     return GameType(read_int(parent, name));
@@ -497,6 +513,17 @@ void World::loadFromLevelDat(QByteArray data)
     m_lastPlayed = timestamp ? QDateTime::fromMSecsSinceEpoch(*timestamp) : m_levelDatTime;
 
     m_gameType = read_gametype(val, "GameType");
+
+    // ZERO: version name and hardcore flag (read-only metadata for the Worlds hub)
+    m_versionName.clear();
+    try {
+        auto& versionVal = val.at("Version");
+        if (versionVal.get_type() == nbt::tag_type::Compound)
+            m_versionName = read_string(versionVal, "Name").value_or(QString());
+    } catch (const std::out_of_range&) {
+    } catch (const std::bad_cast&) {
+    }
+    m_hardcore = read_byte(val, "hardcore").value_or(0) != 0;
 
     optional<int64_t> randomSeed;
     try {

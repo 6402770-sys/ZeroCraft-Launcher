@@ -66,6 +66,7 @@ class QMenu;
 namespace Zero {
 class HomePage;
 class LibraryPage;
+class WorldsPage;  // ZERO
 class ToolsPage;
 class AppearancePage;
 class ZeroShell;
@@ -298,6 +299,7 @@ class MainWindow : public QMainWindow {
     Zero::ZeroShell* m_shell = nullptr;
     Zero::HomePage* m_home = nullptr;
     Zero::LibraryPage* m_library = nullptr;
+    Zero::WorldsPage* m_worlds = nullptr;  // ZERO
     Zero::ToolsPage* m_tools = nullptr;
     Zero::AppearancePage* m_appearance = nullptr;
     Zero::ZeroCommandPalette* m_palette = nullptr;

@@ -17,5 +17,9 @@ QString relativeTime(qint64 msSinceEpoch);
 /// "34 h 12 min", "3 h", "12 min", "< 1 min" and "0 min" for a duration in seconds.
 QString playtime(qint64 seconds);
 
+/// File sizes, 1024 based: "0 B", "512 B", "812 KB" (no decimals below MB), "1.2 MB", "1.2 GB", "3.4 TB" (one decimal from MB up).
+/// Negative values count as 0.
+QString bytes(qint64 size);
+
 }  // namespace Format
 }  // namespace Zero

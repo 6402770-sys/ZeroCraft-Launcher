@@ -71,5 +71,22 @@ QString playtime(qint64 seconds)
     return tr("%1 h %2 min").arg(hours).arg(minutes);
 }
 
+QString bytes(qint64 size)
+{
+    if (size < 1024)
+        return tr("%1 B").arg(qMax<qint64>(size, 0));
+    double value = size / 1024.0;
+    if (qRound64(value) < 1024)
+        return tr("%1 KB").arg(qRound64(value));
+    static const char* const units[] = { "MB", "GB", "TB" };
+    int unit = 0;
+    value /= 1024.0;
+    while (unit < 2 && qRound(value * 10) >= 10240) {
+        value /= 1024.0;
+        ++unit;
+    }
+    return QStringLiteral("%1 %2").arg(QString::number(value, 'f', 1), QString::fromLatin1(units[unit]));
+}
+
 }  // namespace Format
 }  // namespace Zero

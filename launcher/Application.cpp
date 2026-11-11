@@ -334,7 +334,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" },
           { "zero-screenshot", "Dev aid: show the main window, save a screenshot to the given PNG file and quit (use with -d)", "file" },
-          { "zero-page", "Page for --zero-screenshot: home, library, worlds, screenshots, tools or appearance (default: home)", "page" } });
+          { "zero-page", "Page for --zero-screenshot: home, library, worlds, screenshots, servers, tools or appearance (default: home)", "page" } });
     // Has to be positional for some OS to handle that properly
     parser.addPositionalArgument("URL", "Import the resource(s) at the given URL(s) (same as -I / --import)", "[URL...]");
 
@@ -672,6 +672,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ZeroWorldsSort", QString("recent"));  // Worlds page: "recent" | "name" | "size" | "instance"
         m_settings->registerSetting("ZeroScreenshotsSort", QString("newest"));  // Screenshots page: "newest" | "oldest" | "instance"
         m_settings->registerSetting("ZeroScreenshotsInstance", QString());  // Screenshots page: instance id filter, empty = all instances
+        m_settings->registerSetting("ZeroServersSort", QString("name"));  // Servers page: "name" | "players" | "latency"
+        m_settings->registerSetting("ZeroServersInstance", QString());  // Servers page: instance id filter, empty = all instances
         m_settings->registerSetting("ZeroWorldsInstance", QString());  // Worlds page: instance id filter, empty = all instances
         m_settings->registerSetting("ZeroModHealthInstance", QString());  // Tools > Mod Health: last chosen instance id
         m_settings->registerSetting("ZeroAutoBackupWorlds", true);  // back up the played worlds when the game closes (all instances)

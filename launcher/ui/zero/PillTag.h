@@ -4,6 +4,8 @@
 
 #include <QWidget>
 
+class QPainter;
+
 namespace Zero {
 
 class PillTag : public QWidget {
@@ -17,7 +19,12 @@ class PillTag : public QWidget {
     /// Original two-state form: `danger` = PlainDanger, otherwise Plain.
     PillTag(const QString& text, bool danger, QWidget* parent = nullptr);
 
+    /// Width a pill with this text needs, and the pill itself painted into `rect` (for delegates that paint rows without widgets).
+    static int widthForText(const QString& text);
+    static void paintPill(QPainter* painter, const QRectF& rect, const QString& text, Tone tone);
+
     void setText(const QString& text);
+    void setTone(Tone tone);
     QString text() const { return m_text; }
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override { return sizeHint(); }

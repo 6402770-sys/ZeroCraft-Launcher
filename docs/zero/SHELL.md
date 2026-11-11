@@ -31,9 +31,9 @@ continuous horizontal rule** across the window (never change one height without 
 1. **Header** (60 px, 1 px bottom `border` line): logo mark 20 px (`program_info/zero-logo.svg`, compiled in as
    `:/zero/zero-logo.svg`, drawn as is: it is a full-colour tile) at x = 20, then the wordmark "ZERO" (Obsidian: 16 px, weight 600,
    letter-spacing 2 px; pixel-font themes: ZERO Pixel at 20 px, normal weight) in `text`. No caption. Collapsed: logo only, centred.
-2. Top items: **Home** (`house`, Alt+1), **Library** (`library-big`, Alt+2), **Worlds** (`earth`, Alt+3), **Screenshots** (`image`, Alt+4), **Tools** (`wrench`, Alt+5). Later tasks add Discover, Downloads, Theme Studio.
+2. Top items: **Home** (`house`, Alt+1), **Library** (`library-big`, Alt+2), **Worlds** (`earth`, Alt+3), **Screenshots** (`image`, Alt+4), **Servers** (`compass`, Alt+5), **Tools** (`wrench`, Alt+6). Later tasks add Discover, Downloads, Theme Studio.
 3. Stretch.
-4. Bottom group: **Appearance** (`palette`, Alt+6), **More** (`ellipsis`), **Settings** (`settings`).
+4. Bottom group: **Appearance** (`palette`, Alt+7), **More** (`ellipsis`), **Settings** (`settings`).
    - More: menu with Folders > (existing folders menu), Help > (existing help actions that are enabled), Undo trash (when
      available), About, Check for updates (only if the updater is enabled). Opens above the item.
    - Settings: opens the existing global settings dialog (not a page yet).
@@ -184,6 +184,17 @@ Gallery of every screenshot of every instance (`<gameRoot>/screenshots/*.png|jpg
   Open (default app), Show in folder, Show instance (Library), Delete… (confirmation, then `FS::trash`; a failed trash shows an Error toast and keeps the file, there is no permanent-delete fallback; on success a toast, a rescan and the next image).
   Keys: Left / Right (previous / next in the current filtered order), Home / End, Esc or a click on the backdrop closes (focus returns to the grid tile). A page change closes it.
 
+
+## Servers page
+Server Vault: every multiplayer server saved in any instance's `servers.dat`, grouped by address. Read-only: it never writes `servers.dat` (adding, editing and removing servers stays in Prism's per-instance Servers page). **A ping only proves the server answered a status request; the UI never says "online" or "available".**
+- Rail item "Servers" (`compass`, Alt+5, right after Screenshots; Tools is Alt+6, Appearance Alt+7). Palette: "Go to Servers" (keywords servers, multiplayer, ping, join). There is no per-server "Join <name>" palette entry: the list only exists after the page scanned, so such entries would appear and disappear depending on whether the page was opened. Top bar: title "Servers", subtitle "N servers from M instances" ("Scanning…" until the first scan delivered, "No servers", "<shown> of N servers" while filtering). Action: ghost **Refresh** (`refresh-cw`): rescans the files and pings every server again; disabled while a scan runs.
+- **Toolbar** like Worlds: search (280 px, "Search servers"; names, address, instance names; Ctrl+F, Esc clears), instance combo (setting `ZeroServersInstance`), sort combo Name [default] / Players / Latency (setting `ZeroServersSort` = `name` | `players` | `latency`; the order is applied once the pings settled, not on every result; servers that responded come first). Under it one caption line: "A response only means the server answered a status request. It doesn't guarantee you can join." (plus "The servers.dat of X could not be read." when a file is broken). Hidden while scanning and while there are no servers.
+- **Rows** (painted, `ServerRowDelegate`, 72 px): 48 px icon tile (the saved 64x64 PNG scaled nearest-neighbour; `compass` placeholder), name (label, demibold) / address (caption, system monospace) / "In Survival 1.20, Creative" (caption, elided). Right side: "Pinging…" caption while the ping runs; Responded = success `PillTag` + caption "123 / 500 players · 45 ms"; No response = plain pill; Invalid address = warning pill. The row tooltip repeats the disclaimer for responded servers.
+- **Details panel** (300 px, like Worlds): icon, name, address + copy button (toast "Address copied"), status pill + the disclaimer, Players / Latency / Version rows, MOTD (plain text, wrapped; hidden when empty), "Saved in" (instances), primary **Play on server** and ghost **Show instance in Library**. With several instances both buttons open a menu to pick one; busy instances (running or launching) are disabled ("(running)") and the button is disabled when every one is busy or the address is invalid. Play launches exactly like Prism's Join: `Application::launch(instance, LaunchMode::Normal, make_shared<MinecraftTarget>(MinecraftTarget::parse(address, false)))`.
+- Everything a server sends (MOTD, version) is shown as plain text only (`Qt::PlainText` labels), length-capped, control characters removed.
+- States: scanning ("Looking for servers…"), empty ("No servers yet" / "Servers you add in Minecraft's Multiplayer menu show up here from every instance."), no matches ("No servers match" + "Clear filters").
+- Pings start when the page is first shown (once per session) and on Refresh; a later rescan (instances added/removed, page shown again after 30 s) only pings addresses that have no result yet.
+
 ## Play button (`ZeroPlayButton`)
 One painted 40 px button (Home hero, Library details panel; the small play icons on "Recently played" cards stay plain), bound to an
 instance id and driven by `Application::launchPhaseChanged(id, Idle|Preparing|Running)` / `launchEnded(id, success, aborted,
@@ -200,7 +211,7 @@ gameStarted)`, so it is right however the launch started. `Preparing` = launch c
 - Accessible name + tooltip per state; Space / Enter activate; keyboard focus draws a 2 px `accent2` ring.
 
 ## Appearance page (`AppearancePage`)
-Rail item "Appearance" (`palette`, bottom group, Alt+6); top bar title "Appearance", subtitle "Themes and motion". Max width 960, scrolls when short.
+Rail item "Appearance" (`palette`, bottom group, Alt+7); top bar title "Appearance", subtitle "Themes and motion". Max width 960, scrolls when short.
 - **Theme**: `ThemePreview` (full width, 16:9, max 340 px) paints a miniature ZERO window from a `ThemeSpec` (never the active one: textured background,
   rail + active pill, header in the spec's title font, hero card with primary button bevelled/notched per spec, two cards). One card per ZERO theme
   (`ZeroTheme.h: specForThemeId`): swatches (bg, surface, accent, accent2), name, tooltip, "Current" badge on the applied one. Selecting a card
@@ -252,7 +263,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+6); top bar title "Appearan
   (`APPLICATION->launch`, `QAction::trigger`, `ShowGlobalSettings`, `setApplicationTheme` ...); a command that is not possible right now is simply not listed:
   - Instances: Enter = Play (the launch call Home uses), Ctrl+Enter = show in Library. A running instance shows "Running" and Enter shows it in the Library (Prism
     ignores a second launch).
-  - Navigation: Go to Home / Library / Worlds (keywords saves, maps) / Screenshots (keywords screenshots, gallery, images, pictures) / Tools / Appearance (Alt+N keycaps from `ZeroShell::pageShortcut`), Open Crash Detective (for the Library selection), Open Storage, Open Java Doctor, Check mods (for the Library selection).
+  - Navigation: Go to Home / Library / Worlds (keywords saves, maps) / Screenshots (keywords screenshots, gallery, images, pictures) / Servers (keywords servers, multiplayer, ping, join) / Tools / Appearance (Alt+N keycaps from `ZeroShell::pageShortcut`), Open Crash Detective (for the Library selection), Open Storage, Open Java Doctor, Check mods (for the Library selection).
   - Actions: New instance, Import instance, Manage accounts, every enabled Folders-menu entry, Undo last instance deletion (only when enabled), Settings, About,
     Check for updates (only when the updater is enabled), Keyboard shortcuts, and for the selected instance Edit / Open folder / Rename (switches to the Library first) / Delete
     (the normal confirmation).
@@ -271,7 +282,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+6); top bar title "Appearan
 - Opening a page (Alt+N, rail) closes any open overlay.
 
 ## Dev aids
-- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|worlds|screenshots|tools|appearance>`): show main window, wait for layout, `grab()` to PNG,
+- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|worlds|screenshots|servers|tools|appearance>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
 - Screenshot-mode environment variables (dev only, read by `MainWindow::zeroScreenshot`): `ZERO_SCREENSHOT_SIZE=<w>x<h>`
   (default 1280x800), `ZERO_SCREENSHOT_THEME=<theme id>` (`zero-obsidian` | `zero-minecraft`: applies that theme through
@@ -288,6 +299,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+6); top bar title "Appearan
   `ZERO_SCREENSHOT_BACKUP=<instanceId>/<folder>` creates (synchronously, before the page is grabbed) two manual backups and one safety backup of that world in the normal backups
   folder of the data dir, so the Backups block has rows to show (run it once; every run adds three).
 - Screenshots: `--zero-page screenshots` waits for the scan and the thumbnails of the visible tiles (4 s at most). `ZERO_SCREENSHOT_VIEWER=<file name>` opens the viewer on the first screenshot with that file name and waits for its full image before the grab. Fake screenshots: PNG / JPG files in `<instance>/minecraft/screenshots/` (the file's modified time is the date shown).
+- Servers: `--zero-page servers` waits for the scan and for every ping to settle (6 s at most; a refused local port can take ~4 s on Windows). `ZERO_SCREENSHOT_SERVER=<address>` selects that server (any spelling, it is normalized). Fake data: `<instance>/minecraft/servers.dat` (uncompressed NBT, root compound with a `servers` list of compounds `name` / `ip` / `icon` = base64 PNG); to see "Responded" run a tiny local fake status server on 127.0.0.1 and save `127.0.0.1:<port>` in the fixture (never ping real servers from fixtures).
 - Library filter: `ZERO_SCREENSHOT_CHIP=<favorites|running|loader:<Name>|tag:<name>>` selects that chip (nothing = All). Profile data for fake instances: `ZeroFavorite=true`,
   `ZeroTags="[\"pvp\", \"tech\"]"` (a value with commas must be quoted in the INI format), `ZeroArtwork=.zero/artwork.png` + the PNG, `notes=...`.
 - Palette: `ZERO_SCREENSHOT_PALETTE=<query>` opens the command palette with that query (`empty` = no query), `ZERO_SCREENSHOT_SHORTCUTS=1` opens the shortcut sheet.

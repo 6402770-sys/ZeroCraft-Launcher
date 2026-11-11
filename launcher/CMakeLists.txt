@@ -903,6 +903,10 @@ SET(LAUNCHER_SOURCES
     zero/storage/StorageScanner.h
     zero/gallery/ScreenshotScanner.cpp
     zero/gallery/ScreenshotScanner.h
+    zero/servers/ServerVault.cpp
+    zero/servers/ServerVault.h
+    zero/servers/ServerPinger.cpp
+    zero/servers/ServerPinger.h
     zero/worlds/WorldScanner.cpp
     zero/worlds/WorldScanner.h
 
@@ -978,6 +982,12 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/WorldRows.h
     ui/zero/pages/WorldsPage.cpp
     ui/zero/pages/WorldsPage.h
+    ui/zero/pages/ServersPage.cpp
+    ui/zero/pages/ServersPage.h
+    ui/zero/pages/ServerRows.cpp
+    ui/zero/pages/ServerRows.h
+    ui/zero/pages/ServerDetailsPanel.cpp
+    ui/zero/pages/ServerDetailsPanel.h
     ui/zero/pages/ScreenshotsPage.cpp
     ui/zero/pages/ScreenshotsPage.h
     ui/zero/pages/ScreenshotRows.cpp

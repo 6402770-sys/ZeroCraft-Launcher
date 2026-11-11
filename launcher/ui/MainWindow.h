@@ -68,6 +68,7 @@ class HomePage;
 class LibraryPage;
 class WorldsPage;  // ZERO
 class ScreenshotsPage;  // ZERO
+class ServersPage;  // ZERO
 class ToolsPage;
 class AppearancePage;
 class ZeroShell;
@@ -302,6 +303,7 @@ class MainWindow : public QMainWindow {
     Zero::LibraryPage* m_library = nullptr;
     Zero::WorldsPage* m_worlds = nullptr;  // ZERO
     Zero::ScreenshotsPage* m_screenshots = nullptr;  // ZERO
+    Zero::ServersPage* m_servers = nullptr;  // ZERO
     Zero::ToolsPage* m_tools = nullptr;
     Zero::AppearancePage* m_appearance = nullptr;
     Zero::ZeroCommandPalette* m_palette = nullptr;

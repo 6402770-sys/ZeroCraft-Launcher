@@ -123,6 +123,7 @@
 #include "ui/zero/pages/LibraryPage.h"
 #include "ui/zero/pages/WorldsPage.h"  // ZERO
 #include "ui/zero/pages/ScreenshotsPage.h"  // ZERO
+#include "ui/zero/pages/ServersPage.h"  // ZERO
 #include "ui/zero/pages/ScreenshotViewer.h"  // ZERO
 #include "zero/profiles/InstanceProfile.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
@@ -1943,6 +1944,8 @@ void MainWindow::setupZeroShell()
     m_shell->addPage(QStringLiteral("worlds"), QStringLiteral("earth"), tr("Worlds"), m_worlds);
     m_screenshots = new Zero::ScreenshotsPage(m_shell);
     m_shell->addPage(QStringLiteral("screenshots"), QStringLiteral("image"), tr("Screenshots"), m_screenshots);
+    m_servers = new Zero::ServersPage(m_shell);
+    m_shell->addPage(QStringLiteral("servers"), QStringLiteral("compass"), tr("Servers"), m_servers);
     m_tools = new Zero::ToolsPage(m_shell);
     m_shell->addPage(QStringLiteral("tools"), QStringLiteral("wrench"), tr("Tools"), m_tools);
     m_appearance = new Zero::AppearancePage(m_shell);
@@ -1993,6 +1996,7 @@ void MainWindow::setupZeroShell()
     // Worlds (read-only hub): "Show instance in Library" is the only way out
     connect(m_worlds, &Zero::WorldsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
     connect(m_screenshots, &Zero::ScreenshotsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
+    connect(m_servers, &Zero::ServersPage::showInstanceRequested, this, &MainWindow::showInLibrary);
     connect(m_shell, &Zero::ZeroShell::pageChanged, this, [this]() { m_screenshots->viewer()->closeViewer(); });  // never left open behind another page
     connect(m_tools, &Zero::ToolsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
     connect(m_tools, &Zero::ToolsPage::javaSettingsRequested, this,
@@ -2340,6 +2344,7 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         { "library", tr("Go to Library"), "library-big", { tr("instances"), tr("games"), tr("packs") } },
         { "worlds", tr("Go to Worlds"), "earth", { tr("saves"), tr("maps") } },
         { "screenshots", tr("Go to Screenshots"), "image", { tr("screenshots"), tr("gallery"), tr("images"), tr("pictures") } },
+        { "servers", tr("Go to Servers"), "compass", { tr("servers"), tr("multiplayer"), tr("ping"), tr("join") } },
         { "tools", tr("Go to Tools"), "wrench", { tr("utilities") } },
         { "appearance", tr("Go to Appearance"), "palette", { tr("themes"), tr("look") } },
     };
@@ -2615,6 +2620,7 @@ QList<Zero::ShortcutGroup> MainWindow::buildShortcutGroups()
                                                     { QStringLiteral("library"), tr("Library") },
                                                     { QStringLiteral("worlds"), tr("Worlds") },
                                                     { QStringLiteral("screenshots"), tr("Screenshots") },
+                                                    { QStringLiteral("servers"), tr("Servers") },
                                                     { QStringLiteral("tools"), tr("Tools") },
                                                     { QStringLiteral("appearance"), tr("Appearance") } };
     for (const auto& p : pages) {
@@ -2716,6 +2722,7 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     m_shell->setCurrentPage(library                              ? QStringLiteral("library")
                             : page == QLatin1String("worlds")     ? QStringLiteral("worlds")  // ZERO
                             : page == QLatin1String("screenshots") ? QStringLiteral("screenshots")  // ZERO
+                            : page == QLatin1String("servers")    ? QStringLiteral("servers")  // ZERO
                             : page == QLatin1String("tools")      ? QStringLiteral("tools")
                             : page == QLatin1String("appearance") ? QStringLiteral("appearance")
                                                                   : QStringLiteral("home"));
@@ -2907,6 +2914,13 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
                     QTimer::singleShot(600, this, grabAndFinish);
             },
             4000);
+    }
+    else if (page == QLatin1String("servers")) {
+        // ZERO: the Servers page scans on the pool and pings over the network: wait for the scan and the pings (6 s at most).
+        // Dev aid: ZERO_SCREENSHOT_SERVER=<address> selects that server (any spelling of the address).
+        if (const QString address = qEnvironmentVariable("ZERO_SCREENSHOT_SERVER"); !address.isEmpty())
+            m_servers->selectServer(address);
+        m_servers->callWhenIdle([this, grabAndFinish]() { QTimer::singleShot(600, this, grabAndFinish); }, 6000);
     }
     else if (waitForMods) {
         // ZERO: Mod Health reads the mods on a pool thread: grab once the report is on screen (8 s at most)

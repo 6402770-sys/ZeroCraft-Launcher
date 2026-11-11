@@ -35,12 +35,13 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   shared `ui/zero/PillTag`).
   `6596ab825` + `c22556aaa` **Mod Intelligence** (`launcher/zero/mods/`, `ui/zero/pages/ModHealthView`, Tools › Mod
   Health, Library "Check mods").
+  `742869210` **Repair actions** in Mod Health (first Repair Center slice: `launcher/zero/mods/ModRepair`).
   Downloads/Update center was skipped for now: it hooks into Prism's network/task engine (higher regression risk on a
   core path); Storage Manager and Java Doctor are self-contained and came first.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
-- Result at end of session 4: **42/42 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
+- Result at end of session 4: **43/43 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
 - `FileSystem` investigation: 12 of its 19 functions pass and now run in `build.sh test`. The 7 `test_link*` symlink
   cases are not run: on Windows without Developer Mode, symlinks need privileges, so `FS::create_link` launches
   `zerolauncher_filelink.exe` elevated (UAC prompt); the elevated process doesn't inherit the MSYS2 PATH (missing-DLL
@@ -78,6 +79,7 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | **Storage Manager** | ✅ Tools › Storage: total + drive free space, 11 categories (no double counting, links/junctions not followed), per-instance rows (click → Library), Clean up: logs/crash reports > 30 days → Recycle Bin after confirmation, each file re-validated, never a permanent delete; world backups + interrupted-restore folders info only | `StorageScanner` test (28 cases), screenshots `build/zero-v2-m11-*.png`; **confirm dialog / real Recycle Bin move / toasts never clicked through** |
 | **Java Doctor** | ✅ Tools › Java Doctor: pure `diagnose()` mirrors `AutoInstallJava` + `VerifyJavaInstall` (pinned → detected → download; configured path; 32-bit + >2 GB; ignored check); requirements read from `mmc-pack.json` + patches/meta files without loading or writing anything; per-instance status pill + "Use Java N" (confirmation, refused while running; writes `OverrideJavaLocation`/`JavaPath`/`AutomaticJava` like Prism's Java page); runtimes list; Crash Detective "wrong Java" links here | `JavaDoctor` test (36 cases), screenshots `build/zero-v2-m12-*.png`; **"Use Java N" never clicked through; no real launch after a change** |
 | **Mod Intelligence** | ✅ own read-only parser (fabric/quilt json, mods.toml + neoforge.mods.toml, mcmod.info, manifest, nested jars from memory, depth ≤ 3); tri-state version matching (Fabric predicates, Maven ranges); findings Confirmed/Likely/Possible/Unknown: missing/mismatched deps, MC version, loader version, wrong loader (Connector / NeoForge 1.20.1-1.20.4 lower to Possible), breaks/conflicts, duplicates, unreadable jars; an unreadable jar lowers missing-dep to Possible. Tools › Mod Health with instance picker, Library "Check mods", palette "Check mods". No online/outdated checks | `ModHealth` test (159 cases incl. real zip jars), screenshots `build/zero-v2-m13-*.png`; **never run on a real modpack** |
+| **Mod repair actions** | ✅ Confirmed wrong loader / MC version / loader version → "Disable mod…"; Confirmed duplicates → disable all but the unique newest (only when every version compares); preview dialog lists each `x.jar → x.jar.disabled`; never deletes, never overwrites an existing target, refused while running; Undo toast; "Fix N problems…"; Disabled mods card with Enable | `ModRepair` test (22 + 1 skipped symlink case), screenshots `build/zero-v2-m14-*.png`; **dialogs, Undo and Enable never clicked** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
 
 ## Manual QA checklist (owner, real input needed)
@@ -112,6 +114,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
       "Use Java N" → confirm → instance settings show the new path; Java settings button opens the Java page
 - [ ] Mod Health on a real modpack (Fabric and Forge/NeoForge): no false Confirmed findings; try removing a dependency
       (e.g. fabric-api) → Confirmed missing; Library "Check mods" opens it for that instance
+- [ ] Mod repair: "Disable mod…" → preview → file renamed to `.disabled` → Undo restores it; "Fix N problems…";
+      Enable in "Disabled mods"; refused while the game runs; Prism's Mods page agrees with the new state
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
 
 ## Known limitations / open issues
@@ -133,11 +137,11 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 3. ~~Worlds Hub~~ and ~~Smart Backup (manual + restore)~~ done in session 3, ~~automatic after playing~~ session 4.
    Smart Backup left: scheduled backups, per-instance auto opt-out, instance backup/restore, pre-update snapshots, restore preview, import/export of worlds;
    backup rows show only relative time (several "Just now" look alike; full date in the tooltip). Empty folders are not stored.
-4. ~~Storage Manager~~ (session 4; left: "find large files", scan progress). ~~Java Doctor~~ (session 4). ~~Mod Intelligence~~ (session 4; left: outdated checks via Modrinth/CurseForge, Repair
-   Center actions). Downloads/Update center, Repair Center, Discover, Server Vault,
+4. ~~Storage Manager~~ (session 4; left: "find large files", scan progress). ~~Java Doctor~~ (session 4). ~~Mod Intelligence~~ (session 4; left: outdated checks via Modrinth/CurseForge). Repair Center:
+   first slice = Mod Health repair actions (session 4). Downloads/Update center, Repair Center, Discover, Server Vault,
    Screenshot Gallery (Phases C–E in MISSION.md).
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 
 **Recommended start for session 5:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
 `/savvy-flow`: the manual QA of session 4's features with real input is the most valuable next step (owner), then
-Repair Center (fix actions with preview, starting from Mod Health findings), Screenshot Gallery, Downloads/Update center.
+more Repair Center actions (Java reset to automatic, leftover cleanup with preview), Screenshot Gallery, Downloads/Update center.

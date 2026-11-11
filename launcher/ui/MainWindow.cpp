@@ -122,6 +122,8 @@
 #include "ui/zero/pages/HomePage.h"
 #include "ui/zero/pages/LibraryPage.h"
 #include "ui/zero/pages/WorldsPage.h"  // ZERO
+#include "ui/zero/pages/ScreenshotsPage.h"  // ZERO
+#include "ui/zero/pages/ScreenshotViewer.h"  // ZERO
 #include "zero/profiles/InstanceProfile.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
 #include "ui/zero/pages/AppearancePage.h"
@@ -1939,6 +1941,8 @@ void MainWindow::setupZeroShell()
     m_shell->addPage(QStringLiteral("library"), QStringLiteral("library-big"), tr("Library"), m_library);
     m_worlds = new Zero::WorldsPage(m_shell);
     m_shell->addPage(QStringLiteral("worlds"), QStringLiteral("earth"), tr("Worlds"), m_worlds);
+    m_screenshots = new Zero::ScreenshotsPage(m_shell);
+    m_shell->addPage(QStringLiteral("screenshots"), QStringLiteral("image"), tr("Screenshots"), m_screenshots);
     m_tools = new Zero::ToolsPage(m_shell);
     m_shell->addPage(QStringLiteral("tools"), QStringLiteral("wrench"), tr("Tools"), m_tools);
     m_appearance = new Zero::AppearancePage(m_shell);
@@ -1988,6 +1992,8 @@ void MainWindow::setupZeroShell()
 
     // Worlds (read-only hub): "Show instance in Library" is the only way out
     connect(m_worlds, &Zero::WorldsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
+    connect(m_screenshots, &Zero::ScreenshotsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
+    connect(m_shell, &Zero::ZeroShell::pageChanged, this, [this]() { m_screenshots->viewer()->closeViewer(); });  // never left open behind another page
     connect(m_tools, &Zero::ToolsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
     connect(m_tools, &Zero::ToolsPage::javaSettingsRequested, this,
             [this]() { QTimer::singleShot(0, this, [this]() { APPLICATION->ShowGlobalSettings(this, QStringLiteral("java-settings")); }); });
@@ -2333,6 +2339,7 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         { "home", tr("Go to Home"), "house", { tr("start"), tr("continue") } },
         { "library", tr("Go to Library"), "library-big", { tr("instances"), tr("games"), tr("packs") } },
         { "worlds", tr("Go to Worlds"), "earth", { tr("saves"), tr("maps") } },
+        { "screenshots", tr("Go to Screenshots"), "image", { tr("screenshots"), tr("gallery"), tr("images"), tr("pictures") } },
         { "tools", tr("Go to Tools"), "wrench", { tr("utilities") } },
         { "appearance", tr("Go to Appearance"), "palette", { tr("themes"), tr("look") } },
     };
@@ -2607,6 +2614,7 @@ QList<Zero::ShortcutGroup> MainWindow::buildShortcutGroups()
     const QList<QPair<QString, QString>> pages = { { QStringLiteral("home"), tr("Home") },
                                                     { QStringLiteral("library"), tr("Library") },
                                                     { QStringLiteral("worlds"), tr("Worlds") },
+                                                    { QStringLiteral("screenshots"), tr("Screenshots") },
                                                     { QStringLiteral("tools"), tr("Tools") },
                                                     { QStringLiteral("appearance"), tr("Appearance") } };
     for (const auto& p : pages) {
@@ -2707,6 +2715,7 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     const bool library = page == QLatin1String("library");
     m_shell->setCurrentPage(library                              ? QStringLiteral("library")
                             : page == QLatin1String("worlds")     ? QStringLiteral("worlds")  // ZERO
+                            : page == QLatin1String("screenshots") ? QStringLiteral("screenshots")  // ZERO
                             : page == QLatin1String("tools")      ? QStringLiteral("tools")
                             : page == QLatin1String("appearance") ? QStringLiteral("appearance")
                                                                   : QStringLiteral("home"));
@@ -2886,6 +2895,19 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     // ZERO: the Worlds page scans asynchronously: wait for the scan (sizes included), 3 s at most
     if (page == QLatin1String("worlds"))
         m_worlds->callWhenIdle([this, grabAndFinish]() { QTimer::singleShot(600, this, grabAndFinish); }, 3000);
+    else if (page == QLatin1String("screenshots")) {
+        // ZERO: the Screenshots page scans and decodes thumbnails on the pool: wait for the scan and the visible thumbnails (4 s at most).
+        // Dev aid: ZERO_SCREENSHOT_VIEWER=<file name> opens the viewer on that file and waits for its full image before the grab.
+        m_screenshots->callWhenIdle(
+            [this, grabAndFinish]() {
+                const QString viewerFile = qEnvironmentVariable("ZERO_SCREENSHOT_VIEWER");
+                if (!viewerFile.isEmpty() && m_screenshots->openViewerByFileName(viewerFile))
+                    m_screenshots->callWhenViewerReady([this, grabAndFinish]() { QTimer::singleShot(600, this, grabAndFinish); }, 4000);
+                else
+                    QTimer::singleShot(600, this, grabAndFinish);
+            },
+            4000);
+    }
     else if (waitForMods) {
         // ZERO: Mod Health reads the mods on a pool thread: grab once the report is on screen (8 s at most)
         auto done = std::make_shared<bool>(false);

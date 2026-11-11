@@ -31,9 +31,9 @@ continuous horizontal rule** across the window (never change one height without 
 1. **Header** (60 px, 1 px bottom `border` line): logo mark 20 px (`program_info/zero-logo.svg`, compiled in as
    `:/zero/zero-logo.svg`, drawn as is: it is a full-colour tile) at x = 20, then the wordmark "ZERO" (Obsidian: 16 px, weight 600,
    letter-spacing 2 px; pixel-font themes: ZERO Pixel at 20 px, normal weight) in `text`. No caption. Collapsed: logo only, centred.
-2. Top items: **Home** (`house`, Alt+1), **Library** (`library-big`, Alt+2), **Worlds** (`earth`, Alt+3), **Tools** (`wrench`, Alt+4). Later tasks add Discover, Downloads, Theme Studio.
+2. Top items: **Home** (`house`, Alt+1), **Library** (`library-big`, Alt+2), **Worlds** (`earth`, Alt+3), **Screenshots** (`image`, Alt+4), **Tools** (`wrench`, Alt+5). Later tasks add Discover, Downloads, Theme Studio.
 3. Stretch.
-4. Bottom group: **Appearance** (`palette`, Alt+5), **More** (`ellipsis`), **Settings** (`settings`).
+4. Bottom group: **Appearance** (`palette`, Alt+6), **More** (`ellipsis`), **Settings** (`settings`).
    - More: menu with Folders > (existing folders menu), Help > (existing help actions that are enabled), Undo trash (when
      available), About, Check for updates (only if the updater is enabled). Opens above the item.
    - Settings: opens the existing global settings dialog (not a page yet).
@@ -169,6 +169,21 @@ READ-ONLY hub: it lists every singleplayer world of every instance and never wri
 - Scanning (`launcher/zero/worlds/WorldScanner`): first time the page is shown, again on show when the last scan is older than 30 s, on **Refresh**, and (500 ms debounce)
   when instances are added / removed / reset or an instance was renamed. Running-state changes only update the badges. See ARCHITECTURE.md "Worlds Hub".
 
+## Screenshots page
+Gallery of every screenshot of every instance (`<gameRoot>/screenshots/*.png|jpg|jpeg`). Read-only except the viewer's "Delete…", which only moves one file to the Recycle Bin after a confirmation.
+- Rail item "Screenshots" (`image`, Alt+4, right after Worlds). Palette: "Go to Screenshots" (keywords screenshots, gallery, images, pictures). Top bar: title "Screenshots", subtitle "N screenshots in M instances"
+  ("Scanning…" until the first scan delivered, "No screenshots", "<shown> of N screenshots" while filtering). Action: ghost **Refresh** (`refresh-cw`), disabled while a scan runs.
+- **Toolbar row** like Worlds: search (280 px, "Search screenshots"; file name + instance name; Ctrl+F, Esc clears), instance combo ("All instances" + instances that have screenshots; setting `ZeroScreenshotsInstance`),
+  sort combo (Newest [default] / Oldest / Instance; setting `ZeroScreenshotsSort` = `newest` | `oldest` | `instance`). Hidden while scanning and while there are no screenshots.
+- **Grid**: one `QListView` in icon mode + `ScreenshotModel` + `ScreenshotDelegate` (painted tiles, uniform grid, wrapping). Fluid: columns = as many tiles with a thumbnail >= 240 px as fit, tiles share the width evenly (first column flush left, last flush right, 16 px gap). A tile: 16:9 thumbnail (>= 240 px wide) cover-cropped with radius md, caption below: instance name (label) over the relative date (caption,
+  `textSecondary`), 8 px padding, 16 px gap between tiles. Hover `surfaceHover`, selected `elevated` + 1 px `accent` border. Until the thumbnail is decoded: a `surface` placeholder with the `image` icon.
+  Thumbnails come from `ThumbnailCache` (pool decoding with `QImageReader::setScaledSize`, LRU of 300, key = path + modified time, memory only).
+- States: scanning ("Looking for screenshots…"), empty ("No screenshots yet" / "Press F2 in game to take one. They show up here from every instance."), no matches ("No screenshots match" + "Clear filters").
+- **Viewer** (double-click or Enter on a tile): an overlay child of the page (not a window), backdrop = theme `bg` at ~99 % alpha, fades in and out with `Motion::fadeIn/fadeOut` (instant with reduced motion). The image is scaled to fit (never above 1:1; the
+  thumbnail is shown until the full image is decoded on the pool). Bottom bar (panel, radius lg): file name (label) over `<instance> · <full date> · <size> · N of M` (caption), ghost buttons Copy (`copy`, disabled until the image is decoded; toast "Copied to clipboard"),
+  Open (default app), Show in folder, Show instance (Library), Delete… (confirmation, then `FS::trash`; a failed trash shows an Error toast and keeps the file, there is no permanent-delete fallback; on success a toast, a rescan and the next image).
+  Keys: Left / Right (previous / next in the current filtered order), Home / End, Esc or a click on the backdrop closes (focus returns to the grid tile). A page change closes it.
+
 ## Play button (`ZeroPlayButton`)
 One painted 40 px button (Home hero, Library details panel; the small play icons on "Recently played" cards stay plain), bound to an
 instance id and driven by `Application::launchPhaseChanged(id, Idle|Preparing|Running)` / `launchEnded(id, success, aborted,
@@ -185,7 +200,7 @@ gameStarted)`, so it is right however the launch started. `Preparing` = launch c
 - Accessible name + tooltip per state; Space / Enter activate; keyboard focus draws a 2 px `accent2` ring.
 
 ## Appearance page (`AppearancePage`)
-Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearance", subtitle "Themes and motion". Max width 960, scrolls when short.
+Rail item "Appearance" (`palette`, bottom group, Alt+6); top bar title "Appearance", subtitle "Themes and motion". Max width 960, scrolls when short.
 - **Theme**: `ThemePreview` (full width, 16:9, max 340 px) paints a miniature ZERO window from a `ThemeSpec` (never the active one: textured background,
   rail + active pill, header in the spec's title font, hero card with primary button bevelled/notched per spec, two cards). One card per ZERO theme
   (`ZeroTheme.h: specForThemeId`): swatches (bg, surface, accent, accent2), name, tooltip, "Current" badge on the applied one. Selecting a card
@@ -237,7 +252,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
   (`APPLICATION->launch`, `QAction::trigger`, `ShowGlobalSettings`, `setApplicationTheme` ...); a command that is not possible right now is simply not listed:
   - Instances: Enter = Play (the launch call Home uses), Ctrl+Enter = show in Library. A running instance shows "Running" and Enter shows it in the Library (Prism
     ignores a second launch).
-  - Navigation: Go to Home / Library / Worlds (keywords saves, maps) / Tools / Appearance (Alt+N keycaps from `ZeroShell::pageShortcut`), Open Crash Detective (for the Library selection), Open Storage, Open Java Doctor, Check mods (for the Library selection).
+  - Navigation: Go to Home / Library / Worlds (keywords saves, maps) / Screenshots (keywords screenshots, gallery, images, pictures) / Tools / Appearance (Alt+N keycaps from `ZeroShell::pageShortcut`), Open Crash Detective (for the Library selection), Open Storage, Open Java Doctor, Check mods (for the Library selection).
   - Actions: New instance, Import instance, Manage accounts, every enabled Folders-menu entry, Undo last instance deletion (only when enabled), Settings, About,
     Check for updates (only when the updater is enabled), Keyboard shortcuts, and for the selected instance Edit / Open folder / Rename (switches to the Library first) / Delete
     (the normal confirmation).
@@ -256,7 +271,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
 - Opening a page (Alt+N, rail) closes any open overlay.
 
 ## Dev aids
-- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|worlds|tools|appearance>`): show main window, wait for layout, `grab()` to PNG,
+- `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|worlds|screenshots|tools|appearance>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
 - Screenshot-mode environment variables (dev only, read by `MainWindow::zeroScreenshot`): `ZERO_SCREENSHOT_SIZE=<w>x<h>`
   (default 1280x800), `ZERO_SCREENSHOT_THEME=<theme id>` (`zero-obsidian` | `zero-minecraft`: applies that theme through
@@ -272,6 +287,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
 - Worlds: `ZERO_SCREENSHOT_WORLD=<instanceId>/<folder>` selects that world (the key is `<instance id>/<world folder name>`), `ZERO_SCREENSHOT_WORLD_SEARCH=<text>` types into the Worlds search. With `--zero-page worlds` the grab waits until the scan (sizes included) finished, 3 s at most. Fake worlds: `<instance>/minecraft/saves/<folder>/level.dat` (gzipped NBT; `icon.png` optional).
   `ZERO_SCREENSHOT_BACKUP=<instanceId>/<folder>` creates (synchronously, before the page is grabbed) two manual backups and one safety backup of that world in the normal backups
   folder of the data dir, so the Backups block has rows to show (run it once; every run adds three).
+- Screenshots: `--zero-page screenshots` waits for the scan and the thumbnails of the visible tiles (4 s at most). `ZERO_SCREENSHOT_VIEWER=<file name>` opens the viewer on the first screenshot with that file name and waits for its full image before the grab. Fake screenshots: PNG / JPG files in `<instance>/minecraft/screenshots/` (the file's modified time is the date shown).
 - Library filter: `ZERO_SCREENSHOT_CHIP=<favorites|running|loader:<Name>|tag:<name>>` selects that chip (nothing = All). Profile data for fake instances: `ZeroFavorite=true`,
   `ZeroTags="[\"pvp\", \"tech\"]"` (a value with commas must be quoted in the INI format), `ZeroArtwork=.zero/artwork.png` + the PNG, `notes=...`.
 - Palette: `ZERO_SCREENSHOT_PALETTE=<query>` opens the command palette with that query (`empty` = no query), `ZERO_SCREENSHOT_SHORTCUTS=1` opens the shortcut sheet.

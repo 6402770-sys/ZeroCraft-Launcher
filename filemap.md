@@ -33,6 +33,8 @@
 - `launcher/zero/storage/` — Storage Manager core: `StorageScanner` (per-category / per-instance disk usage, old log / crash report cleanup candidates, restore leftovers, validated Recycle Bin trash, async scanner; no widgets)
 - `launcher/zero/mods/` — Mod Intelligence core: `Versions` (version compare, Fabric predicates, Maven ranges, Yes / No / Unknown), `ModMetadata` (read-only jar parser: fabric / quilt / mods.toml / neoforge.mods.toml / mcmod.info, nested jars), `ModHealth` (instance context + pure `analyze` with confidence levels), `ModHealthScanner` (async folder scan), `ModRepair` (repair actions: pure `actionsFor`, `disableJar` / `enableJar` renames to `.disabled`, never overwrites or deletes); no widgets
 - `launcher/zero/backup/` — Smart Backup: `WorldBackup` (create / verify / list / restore / retention / delete of world backups; no widgets), `WorldBackupJobs` (app-level runner: one job per world on the pool, launch lock), `AutoBackup` (automatic backups of the played worlds after a session)
+- `launcher/zero/gallery/` — Screenshot Gallery scanner: `ScreenshotScanner` (read-only `scanScreenshotsDir`, sort / search, async scanner with generations; no widgets)
+- `launcher/ui/zero/pages/` (Screenshot Gallery) — `ScreenshotsPage` (toolbar, grid, empty states), `ScreenshotRows` (`ScreenshotModel` + painted `ScreenshotDelegate`), `ScreenshotViewer` (full-size overlay), `ThumbnailCache` (pool-decoded LRU thumbnails)
 - `launcher/ui/zero/pages/` (Worlds Hub) — `WorldsPage` (toolbar, list, empty states), `WorldRows` (`WorldRowModel` + painted `WorldRowDelegate`), `WorldDetailsPanel`, `WorldBackupsSection` (Backups block of the details panel), `WorldIcon` (pixel-crisp world icon tiles)
 - `launcher/zero/history/` — session history: `SessionHistory` (one record per launch, classification, JSON store, recorder slots; no widgets)
 - `launcher/ui/zero/pages/` (Library 2.0) — `FilterChipBar` (scrollable single-select chips), `ArtworkCache` (`Artwork::cover`, `ArtworkView`), `FlowLayout` (wrapping layout for tags)
@@ -43,6 +45,7 @@
 - `tests/ZeroTheme_test.cpp`, `tests/ZeroPixelFont_test.cpp` — theme engine v2 (specs, contrast, panel shapes, texture) and pixel font tests
 - `tests/ZeroPlayButton_test.cpp` — Play button state machine (cycle, failure, abort, crash, ignored clicks, stop request)
 - `tests/ZeroMotion_test.cpp` — motion system: setting resolution + legacy migration, overlays (self-deleting, replaceable, nothing with motion off), ripple, toasts
+- `tests/ScreenshotScanner_test.cpp` — screenshot scanner, sort / search, async generations
 - `tests/ZeroShell_test.cpp` — shell/top bar chrome swap, breadcrumb, Alt+N shortcuts
 - `tests/InstanceProfile_test.cpp`, `tests/LibraryFilter_test.cpp`, `tests/ZeroLibrary_test.cpp` — profile data (tags, artwork atomic write, mod count), filter chips, chip bar / flow layout / artwork crop / card star click
 - `tests/WorldBackup_test.cpp` — Smart Backup: round trip, verify, zip-slip, restore + failure paths, retention (manual / safety / auto), listing, free space, job runner / launch lock

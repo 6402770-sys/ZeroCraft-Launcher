@@ -26,7 +26,7 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   Home) and `docs/zero/ARCHITECTURE.md` (Instance profiles).
   Then **Session History** (`launcher/zero/history/SessionHistory`, wired in `Application`; data
   `<data>/zero/session-history.json`) and the Home **Recent activity** section (6 rows, Diagnose on crashed/failed).
-  Then the **Worlds Hub** page (rail item after Library: Alt+3 Worlds, Alt+4 Tools, Alt+5 Appearance), read-only.
+  Then the **Worlds Hub** page (rail item after Library: Alt+3 Worlds, Alt+4 Screenshots, Alt+5 Tools, Alt+6 Appearance), read-only.
   Then **Smart Backup** (manual world backups + verified restore with a safety snapshot, in the Worlds details panel).
 - **Session 4 (Mission 002, Phase C)**: owner asleep, autonomous run following this file's priority order.
   `acaf9c883` **automatic world backups** after playing (`launcher/zero/backup/AutoBackup`; job runner now app-level).

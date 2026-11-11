@@ -901,6 +901,8 @@ SET(LAUNCHER_SOURCES
     zero/profiles/LibraryFilter.h
     zero/storage/StorageScanner.cpp
     zero/storage/StorageScanner.h
+    zero/gallery/ScreenshotScanner.cpp
+    zero/gallery/ScreenshotScanner.h
     zero/worlds/WorldScanner.cpp
     zero/worlds/WorldScanner.h
 
@@ -976,6 +978,14 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/WorldRows.h
     ui/zero/pages/WorldsPage.cpp
     ui/zero/pages/WorldsPage.h
+    ui/zero/pages/ScreenshotsPage.cpp
+    ui/zero/pages/ScreenshotsPage.h
+    ui/zero/pages/ScreenshotRows.cpp
+    ui/zero/pages/ScreenshotRows.h
+    ui/zero/pages/ScreenshotViewer.cpp
+    ui/zero/pages/ScreenshotViewer.h
+    ui/zero/pages/ThumbnailCache.cpp
+    ui/zero/pages/ThumbnailCache.h
     ui/zero/pages/JavaDoctorView.cpp
     ui/zero/pages/JavaDoctorView.h
     ui/zero/pages/ModHealthView.cpp

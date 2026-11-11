@@ -53,6 +53,13 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
   `launchPhaseChanged`, `gameStoppedUnexpectedly` and `launchEnded`, so CLI launches without a main window are recorded too. The core takes an
   injectable clock and name lookup and does not depend on `Application` (own `Phase` enum). Home's "Recent activity" reads `SessionHistory::global()`.
 
+## Screenshot Gallery
+- **Scanner** (`launcher/zero/gallery/ScreenshotScanner`, no widgets, no `APPLICATION`): `scanScreenshotsDir(instanceId, instanceName, dir)` lists `*.png|jpg|jpeg` (case-insensitive) directly in `<gameRoot>/screenshots`, skipping links, junctions and non-files; `sortScreenshots` (Newest / Oldest / Instance) and
+  `matchesSearch` are pure. `ScreenshotScanner` mirrors `WorldScanner`: the source provider runs on the GUI thread, the scan on `QThreadPool::globalInstance()`, results come back through `QCoreApplication::instance()` (queued) with a generation check, `listChanged()` / `scanningChanged()`. Read-only.
+- **Thumbnails** (`ui/zero/pages/ThumbnailCache`): decoded on the pool with `QImageReader::setScaledSize` (never the full image on the GUI thread), `QCache` LRU of 300 pixmaps keyed by path + modified time, `thumbnailReady(path)`; memory only, nothing is written to disk. Undecodable files stay placeholders.
+- **UI**: `ScreenshotsPage` (filter / sort, settings `ZeroScreenshotsInstance` / `ZeroScreenshotsSort`), `ScreenshotModel` + `ScreenshotDelegate` (painted tiles in a `QListView` icon mode), `ScreenshotViewer` (overlay child of the page; full image decoded on the pool, the shown file is moved to the Recycle Bin with
+  `FS::trash` only after a confirmation and never permanently deleted when that fails). Tests: `tests/ScreenshotScanner_test.cpp`.
+
 ## Worlds Hub (Mission 002, milestone 8)
 - **Read-only rule**: the scanner and the page never write, rename, move or delete anything inside an instance or a world. They do not use `World::rename / destroy / resetIcon / install`
   or touch level.dat; `tests/WorldScanner_test.cpp` hashes a world tree (contents and mtimes) around a scan to keep that true. The only writers are the Smart Backup service and its

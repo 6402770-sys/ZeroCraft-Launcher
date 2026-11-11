@@ -41,6 +41,7 @@ set(TEST_SOURCES
     LibraryFilter_test.cpp
     ZeroLibrary_test.cpp
     WorldScanner_test.cpp
+    ScreenshotScanner_test.cpp
     WorldBackup_test.cpp
     AutoBackup_test.cpp
     StorageScanner_test.cpp

@@ -15,6 +15,7 @@
 #include <QStringList>
 
 #include "zero/mods/ModMetadata.h"
+#include "zero/mods/ModRepair.h"
 
 namespace Zero {
 namespace Mods {
@@ -67,6 +68,7 @@ struct Finding {
     QString title;          ///< user-facing English, ready to show
     QString detail;
     QString suggestion;
+    QList<RepairAction> actions;  ///< safe fixes ZERO can apply (empty from `analyze`; `scanModsFolder` fills it via `actionsFor`)
 };
 
 struct Report {
@@ -79,6 +81,8 @@ struct Report {
 
     int count(Confidence c) const;
     bool isClean() const { return findings.isEmpty(); }
+    /// Every action of every finding, one per file (a file named by two findings appears once).
+    QList<RepairAction> allActions() const;
 };
 
 /// Pure. `enabledJars` are the parsed enabled mods; `disabledFileNames` the disabled files (`x.jar.disabled`), which are never

@@ -889,6 +889,8 @@ SET(LAUNCHER_SOURCES
     zero/mods/ModHealthScanner.h
     zero/mods/ModMetadata.cpp
     zero/mods/ModMetadata.h
+    zero/mods/ModRepair.cpp
+    zero/mods/ModRepair.h
     zero/mods/Versions.cpp
     zero/mods/Versions.h
     zero/palette/CommandMatcher.cpp

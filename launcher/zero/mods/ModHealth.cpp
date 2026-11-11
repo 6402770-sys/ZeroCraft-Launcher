@@ -875,6 +875,21 @@ int Report::count(Confidence c) const
     return unknown;
 }
 
+QList<RepairAction> Report::allActions() const
+{
+    QList<RepairAction> out;
+    QSet<QString> seen;
+    for (const Finding& f : findings) {
+        for (const RepairAction& a : f.actions) {
+            if (seen.contains(a.fileName))
+                continue;
+            seen.insert(a.fileName);
+            out.append(a);
+        }
+    }
+    return out;
+}
+
 InstanceContext readInstanceContext(const QString& instanceRoot)
 {
     InstanceContext ctx;

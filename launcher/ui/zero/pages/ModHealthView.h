@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// ZERO Launcher - Tools > Mod Health: shows what the Mod Intelligence core (zero/mods) found in the mods of one instance. Read-only: it
-// never changes, moves or deletes a mod.
+// ZERO Launcher - Tools > Mod Health: shows what the Mod Intelligence core (zero/mods) found in the mods of one instance. The analysis is
+// read-only. The only change the page can make is the repair action: after a preview dialog it renames a mod jar to `.jar.disabled`
+// (and back); it never deletes or overwrites a file.
 #pragma once
 
+#include <QList>
 #include <QString>
+#include <QStringList>
 #include <QWidget>
 #include "zero/mods/ModHealth.h"
 
@@ -48,6 +51,11 @@ class ModHealthView : public QWidget {
     void rebuild();
     void updateControls();
     void openModsFolder();
+    bool instanceBusy(const QString& instanceId) const;
+    /// Preview dialog, then rename the files of `actions` to `.disabled` (toast with Undo, then a new analysis).
+    void askDisable(const QList<Mods::RepairAction>& actions);
+    /// Renames `disabledNames` back (Undo / the "Enable" button), toast, new analysis.
+    void restore(const QString& instanceId, const QString& modsDir, const QStringList& disabledNames);
 
     QWidget* m_controls;
     QPushButton* m_recheck;
@@ -63,6 +71,12 @@ class ModHealthView : public QWidget {
 
     Mods::InstanceContext m_context;
     Mods::Report m_report;
+    QString m_modsDir;  ///< mods folder of the instance of `m_report`
+    struct DisabledFile {
+        QString name;
+        qint64 size = 0;
+    };
+    QList<DisabledFile> m_disabled;  ///< `*.disabled` files directly in `m_modsDir`, by name
     bool m_scanning = false;
     bool m_hasReport = false;
 };

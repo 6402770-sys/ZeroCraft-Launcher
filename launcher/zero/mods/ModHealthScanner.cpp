@@ -30,7 +30,10 @@ Report scanModsFolder(const QString& modsDir, const InstanceContext& context)
             enabled.append(parseJar(info.absoluteFilePath()));
         }
     }
-    return analyze(enabled, context, disabledNames, disabledJars);
+    Report report = analyze(enabled, context, disabledNames, disabledJars);
+    for (Finding& f : report.findings)
+        f.actions = actionsFor(f, enabled);
+    return report;
 }
 
 ModHealthScanner::ModHealthScanner(QObject* parent) : QObject(parent)

@@ -4,8 +4,11 @@
 #include <QComboBox>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
@@ -13,6 +16,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <functional>
 #include "Application.h"
 #include "ElidedLabel.h"
 #include "InstanceList.h"
@@ -21,10 +25,13 @@
 #include "ui/zero/PillTag.h"
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroEmptyState.h"
+#include "ui/zero/ZeroFormat.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/ZeroToast.h"
 #include "zero/mods/ModHealthScanner.h"
+#include "zero/mods/ModRepair.h"
 
 namespace Zero {
 
@@ -99,6 +106,18 @@ QString confidenceText(Confidence c)
         case Confidence::Unknown: break;
     }
     return QObject::tr("Unknown");
+}
+
+QString withoutFinalDot(QString error)
+{
+    while (error.endsWith(QLatin1Char('.')))
+        error.chop(1);
+    return error;
+}
+
+QString modsCount(int n)
+{
+    return n == 1 ? QObject::tr("1 mod") : QObject::tr("%1 mods").arg(n);
 }
 
 }  // namespace
@@ -212,6 +231,7 @@ void ModHealthView::scan()
         emit reportShown();
         return;
     }
+    m_modsDir = instance->modsRoot();
     m_context = readInstanceContext(instance->instanceRoot());
     if (m_context.loader == InstanceLoader::None) {
         m_stack->setCurrentWidget(m_noLoader);
@@ -232,7 +252,12 @@ void ModHealthView::onReport(const QString& instanceId, const Report& report)
     m_scanning = false;
     m_hasReport = true;
     m_report = report;
-    if (report.modsScanned == 0 && report.findings.isEmpty()) {
+    m_disabled.clear();
+    const QFileInfoList files = QDir(m_modsDir).entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo& info : files)
+        if (!info.isSymLink() && info.fileName().endsWith(QLatin1String(".disabled"), Qt::CaseInsensitive))
+            m_disabled.append({ info.fileName(), info.size() });
+    if (report.modsScanned == 0 && report.findings.isEmpty() && m_disabled.isEmpty()) {
         m_stack->setCurrentWidget(m_noMods);
     } else {
         rebuild();
@@ -312,6 +337,17 @@ void ModHealthView::rebuild()
         texts->addWidget(makeLabel(parts.join(QStringLiteral(" · ")), Role::Caption, card, "secondary"));
         top->addLayout(texts, 1);
 
+        int fixable = 0;
+        for (const Finding& f : r.findings)
+            if (!f.actions.isEmpty())
+                ++fixable;
+        if (fixable >= 2) {
+            auto* fix = makeButton(tr("Fix %1 problems…").arg(fixable), QString(), "primary", card);
+            fix->setToolTip(tr("Disable the mods that cause these problems"));
+            const QList<RepairAction> all = r.allActions();
+            connect(fix, &QPushButton::clicked, this, [this, all]() { askDisable(all); });
+            top->addWidget(fix, 0, Qt::AlignTop);
+        }
         auto* open = makeButton(tr("Open mods folder"), QStringLiteral("folder-open"), "ghost", card);
         connect(open, &QPushButton::clicked, this, &ModHealthView::openModsFolder);
         top->addWidget(open, 0, Qt::AlignTop);
@@ -369,6 +405,13 @@ void ModHealthView::rebuild()
             texts->addWidget(files);
         }
         h->addLayout(texts, 1);
+        if (!f.actions.isEmpty()) {
+            const QString label = f.actions.size() == 1 ? tr("Disable mod…") : tr("Disable %1 duplicates…").arg(f.actions.size());
+            auto* fix = makeButton(label, QString(), "secondary", row);
+            const QList<RepairAction> actions = f.actions;
+            connect(fix, &QPushButton::clicked, this, [this, actions]() { askDisable(actions); });
+            h->addWidget(fix, 0, Qt::AlignTop);
+        }
         lay->addWidget(row);
     };
 
@@ -396,10 +439,122 @@ void ModHealthView::rebuild()
         page->addWidget(card);
     }
 
+    if (!m_disabled.isEmpty()) {
+        QVBoxLayout* lay = nullptr;
+        auto* card = makeSection(tr("Disabled mods"), host, &lay);
+        lay->setSpacing(Tokens::spaceXs);
+        for (const DisabledFile& d : std::as_const(m_disabled)) {
+            auto* row = new QWidget(card);
+            auto* h = new QHBoxLayout(row);
+            h->setContentsMargins(0, Tokens::spaceXs, 0, Tokens::spaceXs);
+            h->setSpacing(Tokens::spaceMd);
+            auto* name = new ElidedLabel(row);
+            Style::applyRole(name, Role::Label);
+            name->setFullText(d.name);
+            h->addWidget(name, 1);
+            h->addWidget(makeLabel(Format::bytes(d.size), Role::Caption, row, "secondary"));
+            auto* enable = makeButton(tr("Enable"), QString(), "ghost", row);
+            enable->setToolTip(tr("Rename %1 back so the game loads it again").arg(d.name));
+            const QString fileName = d.name;
+            const QString instanceId = currentInstanceId();
+            const QString modsDir = m_modsDir;
+            connect(enable, &QPushButton::clicked, this, [this, instanceId, modsDir, fileName]() { restore(instanceId, modsDir, { fileName }); });
+            h->addWidget(enable);
+            lay->addWidget(row);
+        }
+        page->addWidget(card);
+    }
+
     page->addStretch(1);
     if (QWidget* old = m_scroll->takeWidget())
         old->deleteLater();
     m_scroll->setWidget(m_host);
+}
+
+bool ModHealthView::instanceBusy(const QString& instanceId) const
+{
+    auto* inst = APPLICATION->instances()->getInstanceById(instanceId);
+    return inst && (inst->isRunning() || APPLICATION->launchPhase(instanceId) != Application::LaunchPhase::Idle);
+}
+
+void ModHealthView::askDisable(const QList<RepairAction>& actions)
+{
+    const QString instanceId = currentInstanceId();
+    auto* inst = APPLICATION->instances()->getInstanceById(instanceId);
+    if (!inst || actions.isEmpty())
+        return;
+    QWidget* host = window();
+    const QString name = inst->name();
+    if (instanceBusy(instanceId)) {
+        ZeroToast::show(host, tr("Close %1 before changing its mods").arg(name), ZeroToast::Kind::Warning);
+        return;
+    }
+
+    QStringList lines;
+    for (const RepairAction& a : actions)
+        lines << QStringLiteral("%1 → %1.disabled").arg(a.fileName);
+    QMessageBox box(QMessageBox::Question, tr("Disable mods?"), tr("ZERO will rename these files in the mods folder:"), QMessageBox::NoButton, host);
+    box.setTextFormat(Qt::PlainText);
+    box.setInformativeText(lines.join(QLatin1Char('\n')) +
+                           tr("\n\nNothing is deleted. You can enable them again below or from the instance's Mods page."));
+    QPushButton* disable = box.addButton(tr("Disable"), QMessageBox::AcceptRole);
+    QPushButton* cancel = box.addButton(tr("Cancel"), QMessageBox::RejectRole);
+    box.setDefaultButton(cancel);
+    box.exec();
+    if (box.clickedButton() != disable)
+        return;
+
+    // the game may have been started while the dialog was open
+    if (instanceBusy(instanceId)) {
+        ZeroToast::show(host, tr("Close %1 before changing its mods").arg(name), ZeroToast::Kind::Warning);
+        return;
+    }
+    const QString modsDir = inst->modsRoot();
+    const RepairBatchResult batch = applyAll(modsDir, actions);
+
+    QPointer<ModHealthView> self(this);
+    std::function<void()> undo;
+    if (!batch.succeeded.isEmpty()) {
+        const QStringList renamed = batch.succeeded;
+        undo = [self, instanceId, modsDir, renamed]() {
+            if (self)
+                self->restore(instanceId, modsDir, renamed);
+        };
+    }
+    if (batch.firstError.isEmpty()) {
+        ZeroToast::show(host, tr("Disabled %1").arg(modsCount(batch.succeeded.size())), ZeroToast::Kind::Success, tr("Undo"), undo);
+    } else {
+        QString text = withoutFinalDot(batch.firstError);
+        if (!batch.succeeded.isEmpty())
+            text = tr("%1 (disabled %2 of %3)").arg(text).arg(batch.succeeded.size()).arg(actions.size());
+        ZeroToast::show(host, text, ZeroToast::Kind::Error, batch.succeeded.isEmpty() ? QString() : tr("Undo"), undo);
+    }
+    scan();
+}
+
+void ModHealthView::restore(const QString& instanceId, const QString& modsDir, const QStringList& disabledNames)
+{
+    QWidget* host = window();
+    auto* inst = APPLICATION->instances()->getInstanceById(instanceId);
+    if (instanceBusy(instanceId)) {
+        ZeroToast::show(host, tr("Close %1 before changing its mods").arg(inst ? inst->name() : tr("the instance")), ZeroToast::Kind::Warning);
+        return;
+    }
+    int enabled = 0;
+    QString firstError;
+    for (const QString& file : disabledNames) {
+        const RepairResult r = enableJar(modsDir, file);
+        if (r.ok)
+            ++enabled;
+        else if (firstError.isEmpty())
+            firstError = withoutFinalDot(r.error);
+    }
+    if (!firstError.isEmpty())
+        ZeroToast::show(host, firstError, ZeroToast::Kind::Error);
+    else
+        ZeroToast::show(host, tr("Enabled %1").arg(modsCount(enabled)), ZeroToast::Kind::Success);
+    if (instanceId == currentInstanceId())
+        scan();
 }
 
 }  // namespace Zero

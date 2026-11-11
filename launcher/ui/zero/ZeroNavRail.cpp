@@ -71,6 +71,12 @@ class NavItem : public QAbstractButton {
         m_hint = hint;
         updateTip();
     }
+    /// One sentence about what the section is for, shown under the label in the tooltip.
+    void setDescription(const QString& description)
+    {
+        m_description = description;
+        updateTip();
+    }
     /// Pill rectangle of this item in rail coordinates (the rail paints the active pill, see ZeroNavRail::paintEvent).
     QRectF pillRect() const { return QRectF(geometry()).adjusted(kPillInset, 0, -kPillInset, 0); }
 
@@ -161,15 +167,19 @@ class NavItem : public QAbstractButton {
    private:
     void updateTip()
     {
-        if (m_hint.isEmpty())
+        QString head = m_hint.isEmpty() ? text() : text() + QStringLiteral("  ") + m_hint;
+        if (!m_description.isEmpty())
+            setToolTip(QStringLiteral("<b>%1</b><br>%2").arg(head.toHtmlEscaped(), m_description.toHtmlEscaped()));
+        else if (m_hint.isEmpty())
             setToolTip(showsLabel() ? QString() : text());
         else
-            setToolTip(text() + QStringLiteral("  ") + m_hint);
+            setToolTip(head);
     }
 
     QString m_id;
     QString m_icon;
     QString m_hint;
+    QString m_description;
     Motion::StateAnimator* m_hover;
     QVariantAnimation m_pop;
     bool m_current = false;
@@ -322,6 +332,14 @@ void ZeroNavRail::setBottomWidget(QWidget* widget)
     if (widget)
         m_bottomLayout->addWidget(widget);
     m_bottomHolder->setVisible(widget != nullptr);
+}
+
+void ZeroNavRail::setItemDescription(const QString& id, const QString& description)
+{
+    // pages are in m_items; action items (More) are only children of the rail
+    for (auto* button : findChildren<QAbstractButton*>(QString(), Qt::FindDirectChildrenOnly))
+        if (auto* item = dynamic_cast<NavItem*>(button); item && item->id() == id)
+            item->setDescription(description);
 }
 
 void ZeroNavRail::setItemShortcutHint(const QString& id, const QString& hint)

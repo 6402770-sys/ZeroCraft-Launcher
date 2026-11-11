@@ -39,6 +39,8 @@ class ZeroNavRail : public QWidget {
 
     /// Text appended to the item's tooltip ("Alt+2"); an item with a hint always has a tooltip.
     void setItemShortcutHint(const QString& id, const QString& hint);
+    /// Tooltip sentence about what the section is for (pages and action items).
+    void setItemDescription(const QString& id, const QString& description);
     void setCurrent(const QString& id);
     QString current() const { return m_current; }
     void setItemVisible(const QString& id, bool visible);

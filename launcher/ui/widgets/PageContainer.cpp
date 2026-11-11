@@ -118,6 +118,12 @@ PageContainer::PageContainer(BasePageProvider* pageProvider, QString defaultId, 
     m_pageList->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
     m_pageList->setModel(m_proxyModel);
     connect(m_pageList->selectionModel(), &QItemSelectionModel::currentRowChanged, this, &PageContainer::currentChanged);
+    // ZERO: selecting a row without making it current (UI Automation, screen readers) opens that page too
+    connect(m_pageList->selectionModel(), &QItemSelectionModel::selectionChanged, this, [this](const QItemSelection& selected) {
+        const QModelIndexList rows = selected.indexes();
+        if (!rows.isEmpty() && rows.first() != m_pageList->currentIndex())
+            m_pageList->setCurrentIndex(rows.first());
+    });
     m_pageStack->setStackingMode(QStackedLayout::StackOne);
     m_pageList->setFocus();
     selectPage(std::move(defaultId));

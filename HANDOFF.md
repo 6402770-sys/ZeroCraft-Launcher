@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-11 (session 5, Mission 002) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-11 (session 6, Mission 002) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -50,6 +50,17 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   sort, search-field icon centred on every page (qss `QLineEdit QToolButton`), accessible clickable cards and palette
   rows, restored-over world goes to the Recycle Bin as `<folder> (replaced <date>)`, Crash Detective no-logs caption
   removed and the top-bar title keeps "Tools › Crash Detective" (search pill shrinks first).
+- **Session 6 (owner present, owner's list)**: `68c811a80` gallery blink fix (no model reset when a rescan finds the same
+  rows, immediate layout after a real reset; same guard in Worlds/Servers). `ada0a6299` **Minecraft is the default
+  theme** (one-time move from Obsidian, `ZeroMinecraftDefaultApplied`) + original 16×16 pixel-art app mark
+  (`program_info/zero-logo-minecraft.svg`; window/taskbar icon and rail logo follow the theme). `adc76c5ba` **animations
+  on by default** (`ZeroMotion` empty = on) + page-enter `Transition::Kind::Cascade`, `Motion::ItemReveal` list entrances
+  (`ui/zero/ZeroReveal`), thumbnail fade-in, `ZeroSkeleton` loading states, Storage bars fill, rail icon pop.
+  `1b3b67665` **favorite worlds/servers** (`zero/favorites/FavoriteStore`, `<data>/zero/favorites.json`). `6cfff02e4`
+  **Settings inside ZERO** (`ui/zero/pages/ZeroSettingsPage`, `Application::OpenSettings`) and the redesigned
+  `PageContainer` (side list with summaries, explanations, option help strip; `ui/zero/ZeroPageNav`, `ZeroPageHelp`) used
+  by Settings, the **instance window** (header card, Play/Stop styling) and every page dialog. Then rail tooltips that say
+  what each section is for, and selecting a section through accessibility switches the page.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
@@ -102,6 +113,11 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | **Screenshot Gallery** | ✅ `launcher/zero/gallery/ScreenshotScanner` (read-only) + `ScreenshotsPage`: fluid 16:9 grid, thumbnails decoded on the pool at 400 px into an in-memory LRU (300), search / instance filter / sort persisted, in-window viewer (←/→, Esc, Copy, Open, Show in folder, Show instance, Delete → Recycle Bin after confirmation, never a permanent delete) | `ScreenshotScanner` test, screenshots `build/zero-v2-m15-*.png`; **viewer buttons, keys and delete never used with real input** |
 | **Server Vault** | ✅ read-only `servers.dat` parser (own, on the bundled nbt lib), address normalization + grouping across instances, `ServerPinger` (McResolver/McClient, 4 in flight, 5 s timeout, session cache, motd flattening), `ServersPage` + details panel, Play on server = Prism's Join | `ServerVault` test (49 cases incl. pinger vs a fake local status server), screenshots `build/zero-v2-m16-servers-*.png`; **real quick-join launch, real servers and menu popups never exercised** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
+| **Default theme + app mark** | ✅ Minecraft default (fresh installs; Obsidian installs move once, an explicit Obsidian afterwards sticks); pixel mark crisp at whole multiples of 16 device px | screenshots, live title bar check |
+| **Motion v2** | ✅ on by default; Cascade page enter; ItemReveal (Library grid/list on chip/sort, Worlds/Screenshots/Servers on first fill/filter/sort); thumbnail fade; skeletons (Screenshots, Servers, Storage, Java Doctor, Mod Health); Storage bars; rail icon pop | `ZeroMotion` test (cascade overlay, skeleton sweep, reveal), live frame captures; **feel not reviewed by the owner yet** |
+| **Favorites** (worlds, servers) | ✅ star column on rows (click toggles without selecting), details "Add to favorites", favorites first in every sort, "Favorites" toggle filter (`ZeroWorldsFavoritesOnly` / `ZeroServersFavoritesOnly`) | `FavoriteStore` test, live clicks |
+| **Settings page** | ✅ rail page after More (Ctrl+,): fresh pages on open, applied on leave/close/quit, emits globalSettingsAboutToOpen/Applied; modal dialog kept for the launch-without-account flow | live: change applied only after leaving; screenshots |
+| **Page frame** (`PageContainer`) | ✅ ZERO side list (icon, name, two-line summary), title + explanation, option help strip (tooltip → group text), Cascade between sections; instance window header card + Play/Stop | live hover check in instance Settings |
 
 ## Manual QA checklist (owner, real input needed)
 Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On** (Windows animation effects are off here).
@@ -140,8 +156,17 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 - [ ] Screenshots (Alt+4): thumbnails of real screenshots, filter/sort persist; viewer ←/→/Esc, Copy, Open, Delete → Recycle Bin
 - [ ] Servers (Alt+5): servers of real instances grouped across instances; "Responded" / "No response" pills (and the note that a response is not availability); sort by Players / Latency; **Play on server** launches the instance and joins (with several instances: menu; disabled while the instance runs); Copy address toast; Refresh re-pings; a real quick join was never run
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
+- [ ] Session 6: the Minecraft theme is on after updating; title bar/taskbar show the pixel mark, Obsidian shows the old one
+- [ ] Animations feel right (page cascade, list entrances, thumbnail fades, skeletons while loading); Appearance → Motion Off stops them
+- [ ] Gallery never blinks any more (the original blink was not reproduced here: watch for it with many screenshots)
+- [ ] Worlds/Servers: star a row, it moves to the top; "Favorites" shows only them; the details button follows
+- [ ] Settings (rail, Ctrl+,): sections explain themselves, the help strip follows the pointer, changes apply when you leave
+- [ ] Instance window: header card, sections with summaries, help strip in its Settings page, Play / Stop / Close
 
 ## Known limitations / open issues
+- The instance window's section list scrolls a little with the header card (12 sections × 60 px).
+- The test data dir of session 6 (`scratchpad/data`) got a real `accounts.json` (a sign-in happened in a test window);
+  the owner was asked about deleting it. Runs after that used an account-free copy.
 - Prism public infrastructure still used: meta server, wiki/help URLs, translations, Prism-branded login success page.
   Release blockers in `docs/zero/CREDENTIALS.md`. `curseforge:`/`modrinth:` handlers shared with Prism.
 - No updater, installer not built (NSIS template rebranded only; windeployqt not set up).
@@ -167,6 +192,7 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
    ~~Screenshot Gallery~~ (session 4) (Phases C–E in MISSION.md).
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 
-**Recommended start for session 5:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
-`/savvy-flow`: the manual QA of session 4's features with real input is the most valuable next step (owner), then
-more Repair Center actions (Java reset to automatic, leftover cleanup with preview), Downloads/Update center, Discover.
+**Recommended start for session 7:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
+the owner reviews session 6 (theme, icon, animations, Settings, instance window) and says what to tune; then more
+Repair Center actions, Downloads/Update center, Discover, and ZERO translations (Spanish first) to lift the English-only
+mode.

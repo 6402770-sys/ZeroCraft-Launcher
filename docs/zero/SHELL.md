@@ -318,3 +318,22 @@ Rail item "Appearance" (`palette`, bottom group, Alt+7); top bar title "Appearan
 - Tests: `tests/WorldBackup_test.cpp` (Smart Backup: round trip, verification, zip-slip, restore and its failure paths, retention, listing, free-space refusal, job runner and launch lock).
 - Tests: `tests/WorldScanner_test.cpp` (scan of real folder layouts, skipped entries, read-only guarantee, folder size without following links, search / sort, scanner generations, destruction while jobs run).
 - Tests: `tests/ZeroShell_test.cpp` (top bar chrome per page, swap on page change, `chromeChanged`, breadcrumb click, Alt+N, chip anchor).
+
+## Session 6 additions
+- **Rail**: Settings is a page (last item, after More; Ctrl+,). Every item's tooltip says what the section is for. The
+  icon of the section you open pops. The rail logo is the pixel mark under the Minecraft theme.
+- **Settings page** (`pages/ZeroSettingsPage`): top bar "Settings" + current section as subtitle; ZERO page frame (side
+  list with summaries, explanation under the title, help strip "Point at an option, or move to it with Tab, to see what
+  it does."), footer "Changes are saved when you leave Settings.". Dev aid: `--zero-page settings`,
+  `ZERO_SCREENSHOT_SETTINGS=<page id>`.
+- **Instance window**: title = instance name; header card (icon, name, "1.20.1 · Forge", Running / Not running pill);
+  same frame and help strip; buttons Help (ghost), Play (primary, with the arrow menu), Restart, Stop (danger), Close.
+- **Worlds / Servers**: star column at the right of each row (solid gold = favorite, outline on the hovered row; a click
+  toggles it without selecting the row); "Add to favorites" / "Favorite" in the details panel; favorites first in every
+  sort; ghost toggle "Favorites" before the instance filter shows only favorites (remembered); "Clear filters" turns it off.
+- **Loading states**: Screenshots (tiles), Servers and Java Doctor (rows), Storage and Mod Health (report) show a caption
+  over skeleton shapes with a sweeping highlight instead of a centred "Looking for..." state.
+- **Motion**: Appearance → Motion order On (default) / Follow Windows / Off. Page changes cascade in; lists and grids
+  fill in a diagonal wave on first fill, filter and sort changes (not while typing a search); screenshot thumbnails fade
+  in from the placeholder; Storage bars fill.
+

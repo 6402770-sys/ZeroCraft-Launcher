@@ -113,6 +113,7 @@
 #include "zero/ZeroLanguage.h"  // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackup.h"  // ZERO
+#include "ui/zero/ZeroNavRail.h"
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/pages/ZeroSettingsPage.h"
 #include "ui/zero/ZeroFormat.h"
@@ -1971,6 +1972,22 @@ void MainWindow::setupZeroShell()
     m_settingsPage = new Zero::ZeroSettingsPage(APPLICATION->globalSettingsPages(), m_shell);
     m_shell->setSettingsPage(m_settingsPage);
     m_shell->finishRail();
+    // What each section is for, in the rail tooltips (the labels alone do not say it).
+    {
+        const QList<QPair<QString, QString>> descriptions = {
+            { "home", tr("Pick up where you left off: your last instance, favorites and recent activity.") },
+            { "library", tr("All your instances. Create, edit, tag, favorite and play them.") },
+            { "worlds", tr("Every singleplayer world of every instance, with verified backups.") },
+            { "screenshots", tr("One gallery with the screenshots of all your instances.") },
+            { "servers", tr("The multiplayer servers saved in your instances, with their status.") },
+            { "tools", tr("Fixers and checkers: crashes, disk space, Java and mods.") },
+            { "appearance", tr("ZERO themes and animations.") },
+            { "more", tr("Help, about, folders and less common actions.") },
+            { "settings", tr("Everything else: folders, Java and memory, accounts, game window...") },
+        };
+        for (const auto& [id, text] : descriptions)
+            m_shell->rail()->setItemDescription(id, text);
+    }
 
     // The toolbars and menu bar are hidden, so their shortcuts would be dead: register every action on the window.
     addActions({ ui->actionAddInstance, ui->actionSettings, ui->actionUndoTrashInstance, ui->actionLaunchInstance,

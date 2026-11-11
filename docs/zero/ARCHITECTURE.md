@@ -30,6 +30,27 @@ install/launch, auth, mod platforms, tasks, networking) is kept and only changed
   `UseSystemLocale` ignored), the translation index is not downloaded, and the Language settings page, its palette entry
   and the setup wizard's language page are hidden. The saved `Language` setting is left untouched. To add translations
   later: ship ZERO `.qm` files, install them next to Prism's translator, and flip the flag.
+- **Default theme** = `Zero::kDefaultThemeId` (Minecraft). `Zero::appLogo()` / `Application::logo()` return the
+  pixel mark under the Minecraft theme; `ThemeManager::setApplicationTheme` sets it as the application window icon on
+  every switch (the main window has no own icon, so it follows).
+- **Motion v2.** `ZeroMotion` empty = on. Page enter = `Transition::Kind::Cascade` (old snapshot washes to `bg`, new
+  snapshot rises 10 px and is revealed top to bottom through a 180 px gradient mask). `Motion::ItemReveal`
+  (`ui/zero/ZeroReveal`) wraps a view's delegate (`installItemReveal`) and paints items with a stagger by position
+  (`durStagger` per 56 px down / 220 px right, capped at 420 ms). `ZeroSkeleton` = loading placeholder with a sweep that
+  only runs while visible with motion on. `ThumbnailCache` remembers arrival times for the fade-in.
+- **Favorites** (`zero/favorites/FavoriteStore`): one JSON file per data dir, keys per kind (world =
+  `<instance>/<folder>`, server = normalized address), `changed(kind, key, favorite)`; `FavoriteStore::instance()` is
+  null without an Application (tests), and the UI then hides every star.
+- **Page frame.** Prism's `PageContainer` (settings, instance window, page dialogs) keeps its API but builds a ZERO
+  layout: `Zero::PageNavDelegate` side list (`kPageIdRole` from `PageModel`), title + `PageHelp::forPage().about`, and
+  with `setOptionHelpEnabled(true)` an app-level event filter that maps Enter/FocusIn inside the current page to
+  `PageHelp::forWidget()` (tooltip, else ZERO text by object name, else by enclosing group box). Sections switch with
+  the Cascade overlay. `setSidebarHeader()` / `setSidebarFooter()` for the instance card and the "saved when you leave"
+  note.
+- **Settings page.** `Zero::ZeroSettingsPage` creates a `PageContainer` from `Application::globalSettingsPages()` on show
+  and applies + deletes it on hide (fresh values every time; a second, modal settings dialog can never be overwritten
+  by stale widgets). `Application::OpenSettings()` navigates there; `ShowGlobalSettings()` stays the modal dialog for
+  flows that must block.
 - **Accessibility of painted widgets.** `ZeroCard` gets a factory interface (clickable = Button with a "press" action that
   emits `clicked()`, name falls back to its first label); `PaletteResults` exposes one ListItem per row (StaticText for
   headers, "press" runs the command) whose interfaces are invalidated by a generation counter on every `setRows()`.

@@ -221,7 +221,7 @@ QList<ITheme*> ThemeManager::getValidApplicationThemes()
     }
     // ZERO: the ZERO themes are listed first, the default one at the very top
     qsizetype front = 0;
-    for (const QString id : { QString::fromLatin1(Zero::ZeroTheme::kId), QString::fromLatin1(Zero::ZeroMinecraftTheme::kId) }) {
+    for (const QString id : { QString::fromLatin1(Zero::ZeroMinecraftTheme::kId), QString::fromLatin1(Zero::ZeroTheme::kId) }) {
         for (qsizetype i = front; i < ret.size(); ++i) {
             if (ret[i]->id() == id) {
                 ret.move(i, front++);
@@ -307,6 +307,8 @@ void ThemeManager::setApplicationTheme(const QString& name, bool initial)
         theme->apply(initial);
         Zero::setThemeActive(Zero::isZeroThemeId(newId));
         appliedThemeId = newId;
+        // ZERO: the app mark follows the theme; windows without their own icon (main window, dialogs) pick it up.
+        QGuiApplication::setWindowIcon(APPLICATION->logo());
 
         if (changing) {
             const bool dissolve = newId == QLatin1String(Zero::ZeroMinecraftTheme::kId);
@@ -335,7 +337,7 @@ void ThemeManager::applyCurrentlySelectedTheme(bool initial)
     themeDebugLog() << "<> Icon theme set.";
     auto applicationTheme = settings->get("ApplicationTheme").toString();
     if (applicationTheme == "") {
-        applicationTheme = Zero::ZeroTheme::kId;  // ZERO default (was: system style)
+        applicationTheme = Zero::kDefaultThemeId;  // ZERO default (was: system style)
     }
     setApplicationTheme(applicationTheme, initial);
     themeDebugLog() << "<> Application theme set.";

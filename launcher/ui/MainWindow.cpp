@@ -184,7 +184,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     setMinimumSize(1100, 700);
     setAcceptDrops(true);
 
-    setWindowIcon(APPLICATION->logo());
+    // ZERO: no own icon, so the window follows the application icon, which ThemeManager switches with the theme.
+    QGuiApplication::setWindowIcon(APPLICATION->logo());
     setWindowTitle(APPLICATION->applicationDisplayName());
 #ifndef QT_NO_ACCESSIBILITY
     setAccessibleName(BuildConfig.LAUNCHER_DISPLAYNAME);
@@ -2560,7 +2561,7 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
     {
         QString current = APPLICATION->settings()->get("ApplicationTheme").toString();
         if (current.isEmpty())
-            current = QString::fromLatin1(Zero::ZeroTheme::kId);
+            current = QString::fromLatin1(Zero::kDefaultThemeId);
         bool suggestedGiven = false;
         for (ITheme* theme : APPLICATION->themeManager()->getValidApplicationThemes()) {
             if (!Zero::isZeroThemeId(theme->id()))

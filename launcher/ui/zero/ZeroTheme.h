@@ -58,4 +58,12 @@ class ZeroMinecraftTheme : public ZeroTheme {
     ThemeSpec baseSpec() override;
 };
 
+/// The ZERO default theme: Minecraft (first start, empty setting, first card on the Appearance page).
+inline constexpr const char* kDefaultThemeId = ZeroMinecraftTheme::kId;
+
+/// Resource path of the app mark that matches the active theme (the pixel-art mark under the Minecraft theme).
+QString appLogoPath();
+/// The app mark of the active theme (window / taskbar icon, rail header).
+QIcon appLogo();
+
 }  // namespace Zero

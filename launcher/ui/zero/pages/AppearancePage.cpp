@@ -467,7 +467,7 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
 QString AppearancePage::currentThemeId() const
 {
     const QString id = APPLICATION->settings()->get("ApplicationTheme").toString();
-    return id.isEmpty() ? QString::fromLatin1(ZeroTheme::kId) : id;  // empty = ThemeManager's ZERO default
+    return id.isEmpty() ? QString::fromLatin1(kDefaultThemeId) : id;  // empty = ThemeManager's ZERO default
 }
 
 void AppearancePage::buildThemeCards()

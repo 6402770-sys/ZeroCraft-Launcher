@@ -57,6 +57,7 @@
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
 #include "zero/ZeroLanguage.h"  // ZERO
+#include "ui/zero/ZeroTheme.h"  // ZERO
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/instanceview/AccessibleInstanceView.h"
 
@@ -665,6 +666,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
         // ZERO: one-time switch to Obsidian + flat_white (so users imported from Prism get the ZERO look once)
         m_settings->registerSetting("ZeroThemeInitialized", false);
+        m_settings->registerSetting("ZeroMinecraftDefaultApplied", false);
         m_settings->registerSetting("ZeroReduceMotion", false);  // legacy: only consulted while ZeroMotion was never set
         // "system" (follow Windows "Animation effects") | "on" | "off". Empty = never chosen = "system", except that a
         // legacy ZeroReduceMotion=true keeps meaning "off" (Zero::Motion::resolveEnabled).
@@ -1000,11 +1002,20 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     // Themes
     m_themeManager = std::make_unique<ThemeManager>();
 
-    // ZERO: first start (including a fresh import from Prism) selects Obsidian + flat_white once; later choices stick.
+    // ZERO: first start (including a fresh import from Prism) selects the default ZERO theme (Minecraft) + flat_white once;
+    // later choices stick.
     if (!m_settings->get("ZeroThemeInitialized").toBool()) {
-        m_settings->set("ApplicationTheme", "zero-obsidian");
+        m_settings->set("ApplicationTheme", QString::fromLatin1(Zero::kDefaultThemeId));
         m_settings->set("IconTheme", "flat_white");
         m_settings->set("ZeroThemeInitialized", true);
+        m_settings->set("ZeroMinecraftDefaultApplied", true);
+    }
+    // ZERO: Minecraft became the default theme (session 6). Installs still on the old default move once; choosing
+    // Obsidian again in Appearance sticks.
+    if (!m_settings->get("ZeroMinecraftDefaultApplied").toBool()) {
+        if (m_settings->get("ApplicationTheme").toString() == QLatin1String(Zero::ZeroTheme::kId))
+            m_settings->set("ApplicationTheme", QString::fromLatin1(Zero::kDefaultThemeId));
+        m_settings->set("ZeroMinecraftDefaultApplied", true);
     }
 
 #ifdef Q_OS_MACOS
@@ -1642,6 +1653,9 @@ JavaInstallList* Application::javalist()
 
 QIcon Application::logo()
 {
+    // ZERO: the app mark follows the theme (pixel-art mark under the Minecraft theme)
+    if (Zero::isThemeActive())
+        return Zero::appLogo();
     return QIcon(":/" + BuildConfig.LAUNCHER_SVGFILENAME);
 }
 

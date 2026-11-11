@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ZeroNavRail.h"
 
+#include <QPixmap>
+#include <QtMath>
 #include <QAbstractButton>
 #include <QFocusEvent>
 #include <QFontMetrics>
@@ -23,6 +25,7 @@ constexpr int kIconPad = 12;        // pill-left to icon
 constexpr int kIconGap = 10;        // icon to label
 constexpr int kHeaderHeight = 60;   // logo header: same height as the top bar, so the two bottom lines are one rule
 constexpr int kLogoSize = 20;
+constexpr int kPixelLogoSize = 24;  // target for the pixel mark, rounded to a multiple of 16 device pixels
 }  // namespace
 
 class NavItem : public QAbstractButton {
@@ -168,10 +171,24 @@ class RailHeader : public QWidget {
 
         const int contentH = height() - 1;
         const bool wide = width() >= kLabelMinWidth;
-        const int logoX = wide ? kPillInset + kIconPad : (width() - kLogoSize) / 2;
-        const QRect logo(logoX, (contentH - kLogoSize) / 2, kLogoSize, kLogoSize);
-        static const QIcon mark(QStringLiteral(":/zero/zero-logo.svg"));  // full-colour app mark: drawn as is
-        mark.paint(&p, logo);
+        // Pixel themes draw the pixel-art mark at a whole multiple of its 16 px grid (crisp at every scale factor).
+        const bool pixelMark = t.id == QLatin1String("minecraft");
+        const qreal dpr = devicePixelRatioF();
+        const int markDevice = pixelMark ? qMax(16, qRound(kPixelLogoSize * dpr / 16.0) * 16) : 0;
+        const int logoSize = pixelMark ? qCeil(markDevice / dpr) : kLogoSize;
+        const int logoX = wide ? kPillInset + kIconPad - (logoSize - kLogoSize) / 2 : (width() - logoSize) / 2;
+        const QRect logo(logoX, (contentH - logoSize) / 2, logoSize, logoSize);
+        if (pixelMark) {
+            static const QIcon pixel(QStringLiteral(":/zero/zero-logo-minecraft.svg"));
+            QPixmap pm = pixel.pixmap(QSize(markDevice, markDevice), 1.0);
+            pm.setDevicePixelRatio(dpr);
+            p.setRenderHint(QPainter::SmoothPixmapTransform, false);
+            p.drawPixmap(logo.topLeft(), pm);
+            p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        } else {
+            static const QIcon mark(QStringLiteral(":/zero/zero-logo.svg"));  // full-colour app mark: drawn as is
+            mark.paint(&p, logo);
+        }
         if (!wide)
             return;
 

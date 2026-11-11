@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QDialog>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QLineEdit>
 #include <QMenu>
 #include <QObject>
@@ -290,6 +291,17 @@ double ZeroTheme::fadeAmount()
 QColor ZeroTheme::fadeColor()
 {
     return Theme::current().bg;
+}
+
+QString appLogoPath()
+{
+    const bool minecraft = isThemeActive() && Theme::current().id == QLatin1String("minecraft");
+    return minecraft ? QStringLiteral(":/zero/zero-logo-minecraft.svg") : QStringLiteral(":/zero/zero-logo.svg");
+}
+
+QIcon appLogo()
+{
+    return QIcon(appLogoPath());
 }
 
 }  // namespace Zero

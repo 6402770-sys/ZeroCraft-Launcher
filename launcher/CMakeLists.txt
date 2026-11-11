@@ -932,6 +932,12 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroReveal.h
     ui/zero/ZeroSkeleton.cpp
     ui/zero/ZeroSkeleton.h
+    ui/zero/ZeroPageHelp.cpp
+    ui/zero/ZeroPageHelp.h
+    ui/zero/ZeroPageNav.cpp
+    ui/zero/ZeroPageNav.h
+    ui/zero/pages/ZeroSettingsPage.cpp
+    ui/zero/pages/ZeroSettingsPage.h
     ui/zero/ZeroNavRail.cpp
     ui/zero/ZeroNavRail.h
     ui/zero/ZeroPaint.cpp

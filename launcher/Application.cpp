@@ -1834,6 +1834,13 @@ void Application::ShowGlobalSettings(class QWidget* parent, QString openPage)
     }
 }
 
+void Application::OpenSettings(QWidget* parent, QString openPage)
+{
+    if (m_mainWindow && m_mainWindow->showSettingsPage(openPage))
+        return;
+    ShowGlobalSettings(parent, std::move(openPage));
+}
+
 MainWindow* Application::showMainWindow(bool minimized)
 {
     if (m_mainWindow) {

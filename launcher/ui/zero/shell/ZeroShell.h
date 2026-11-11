@@ -29,6 +29,9 @@ class ZeroShell : public QWidget {
     /// Adds a page and its rail item. Pages are appended in order; the first one added becomes current. The n-th page
     /// added (n <= 9) gets the window-wide shortcut Alt+n, shown in its rail tooltip.
     void addPage(const QString& id, const QString& iconName, const QString& label, ShellPage* page, Placement placement = Placement::Top);
+    /// The "settings" page: listed last in the bottom group, after "More" (call before finishRail()). Without it the
+    /// Settings rail item only emits settingsRequested().
+    void setSettingsPage(ShellPage* page);
     void setCurrentPage(const QString& id);
     QString currentPage() const { return m_current; }
     ShellPage* page(const QString& id) const { return m_pages.value(id); }
@@ -68,6 +71,7 @@ class ZeroShell : public QWidget {
     QHash<QString, QKeySequence> m_shortcuts;
     QString m_current;
     bool m_railFinished = false;
+    ShellPage* m_settingsPage = nullptr;
     bool m_hasStretch = false;
 };
 

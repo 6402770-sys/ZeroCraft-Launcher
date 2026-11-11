@@ -48,6 +48,9 @@
 #include "QObjectPtr.h"
 
 class QPushButton;
+namespace Zero {
+class PillTag;
+}
 class PageContainer;
 class InstanceWindow : public QMainWindow, public BasePageContainer {
     Q_OBJECT
@@ -82,6 +85,8 @@ class InstanceWindow : public QMainWindow, public BasePageContainer {
 
    private:
     void updateButtons();
+    void updateStatePill();  // ZERO
+    QWidget* buildInstanceHeader();  // ZERO
 
    private:
     LaunchTask* m_proc;
@@ -93,4 +98,5 @@ class InstanceWindow : public QMainWindow, public BasePageContainer {
     QToolButton* m_launchButton = nullptr;
     QPushButton* m_restartButton = nullptr;
     QPushButton* m_killButton = nullptr;
+    Zero::PillTag* m_statePill = nullptr;  // ZERO
 };

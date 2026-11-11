@@ -17,6 +17,7 @@
 
 #include <QEvent>
 #include <QListView>
+#include "ui/zero/ZeroPageNav.h"
 #include <QScrollBar>
 #include <QStyledItemDelegate>
 
@@ -50,6 +51,8 @@ class PageModel : public QAbstractListModel {
         switch (role) {
             case Qt::DisplayRole:
                 return m_pages.at(index.row())->displayName();
+            case Zero::PageNavDelegate::kPageIdRole:  // ZERO: the side list shows a summary per page id
+                return m_pages.at(index.row())->id();
             case Qt::DecorationRole: {
                 QIcon icon = m_pages.at(index.row())->icon();
                 if (icon.isNull())
@@ -86,18 +89,19 @@ class PageView : public QListView {
    public:
     PageView(QWidget* parent = 0) : QListView(parent)
     {
-        setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Expanding);
-        setItemDelegate(new PageViewDelegate(this));
+        // ZERO: painted rows (icon, name, plain-language summary), fixed width, transparent
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+        setItemDelegate(new Zero::PageNavDelegate(this));
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setFrameShape(QFrame::NoFrame);
+        setMouseTracking(true);
+        viewport()->setAttribute(Qt::WA_Hover, true);
+        setStyleSheet(QStringLiteral("QListView { background: transparent; border: none; } QScrollBar:vertical { width: 6px; }"));
+        viewport()->setAutoFillBackground(false);
+        setFixedWidth(Zero::PageNavDelegate::kWidth);
     }
 
-    virtual QSize sizeHint() const
-    {
-        int width = sizeHintForColumn(0) + frameWidth() * 2 + 5;
-        if (verticalScrollBar()->isVisible())
-            width += verticalScrollBar()->width();
-        return QSize(width, 100);
-    }
+    virtual QSize sizeHint() const { return QSize(Zero::PageNavDelegate::kWidth, 100); }
 
     virtual bool eventFilter(QObject* obj, QEvent* event)
     {

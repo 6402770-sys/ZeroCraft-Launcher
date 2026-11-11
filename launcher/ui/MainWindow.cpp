@@ -114,6 +114,7 @@
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackup.h"  // ZERO
 #include "ui/zero/ZeroTheme.h"
+#include "ui/zero/pages/ZeroSettingsPage.h"
 #include "ui/zero/ZeroFormat.h"
 #include "ui/zero/palette/ZeroCommandPalette.h"
 #include "ui/zero/palette/ZeroShortcutSheet.h"
@@ -1455,7 +1456,19 @@ void MainWindow::checkForUpdates()
 
 void MainWindow::on_actionSettings_triggered()
 {
-    APPLICATION->ShowGlobalSettings(this, "global-settings");
+    APPLICATION->OpenSettings(this);
+}
+
+bool MainWindow::showSettingsPage(const QString& pageId)
+{
+    if (!m_settingsPage || !m_shell)
+        return false;
+    m_settingsPage->selectSection(pageId);
+    m_shell->setCurrentPage(QStringLiteral("settings"));
+    setWindowState(windowState() & ~Qt::WindowMinimized);
+    raise();
+    activateWindow();
+    return true;
 }
 
 void MainWindow::globalSettingsClosed()
@@ -1506,7 +1519,7 @@ void MainWindow::on_actionManageSkins_triggered()
 
 void MainWindow::on_actionManageAccounts_triggered()
 {
-    APPLICATION->ShowGlobalSettings(this, "accounts");
+    APPLICATION->OpenSettings(this, "accounts");
 }
 
 void MainWindow::on_actionReportBug_triggered()
@@ -1676,6 +1689,8 @@ void MainWindow::on_actionViewSelectedInstFolder_triggered()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (m_settingsPage)
+        m_settingsPage->applyAll();  // Settings saves when you leave it; quitting while it is open counts as leaving
     // Save the window state and geometry.
     APPLICATION->settings()->set("MainWindowState", QString::fromUtf8(saveState().toBase64()));
     APPLICATION->settings()->set("MainWindowGeometry", QString::fromUtf8(saveGeometry().toBase64()));
@@ -1953,6 +1968,8 @@ void MainWindow::setupZeroShell()
     m_appearance = new Zero::AppearancePage(m_shell);
     m_shell->addPage(QStringLiteral("appearance"), QStringLiteral("palette"), tr("Appearance"), m_appearance,
                      Zero::ZeroShell::Placement::Bottom);  // bottom group: Appearance, More, Settings
+    m_settingsPage = new Zero::ZeroSettingsPage(APPLICATION->globalSettingsPages(), m_shell);
+    m_shell->setSettingsPage(m_settingsPage);
     m_shell->finishRail();
 
     // The toolbars and menu bar are hidden, so their shortcuts would be dead: register every action on the window.
@@ -2002,7 +2019,7 @@ void MainWindow::setupZeroShell()
     connect(m_shell, &Zero::ZeroShell::pageChanged, this, [this]() { m_screenshots->viewer()->closeViewer(); });  // never left open behind another page
     connect(m_tools, &Zero::ToolsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
     connect(m_tools, &Zero::ToolsPage::javaSettingsRequested, this,
-            [this]() { QTimer::singleShot(0, this, [this]() { APPLICATION->ShowGlobalSettings(this, QStringLiteral("java-settings")); }); });
+            [this]() { QTimer::singleShot(0, this, [this]() { APPLICATION->OpenSettings(this, QStringLiteral("java-settings")); }); });
 
     // Home
     auto withInstance = [](const QString& id, auto&& fn) {
@@ -2061,7 +2078,7 @@ void MainWindow::setupZeroShell()
         APPLICATION->settings()->set("ApplicationTheme", id);
     });
     connect(m_appearance, &Zero::AppearancePage::moreOptionsRequested, this,
-            [this]() { APPLICATION->ShowGlobalSettings(this, QStringLiteral("appearance-settings")); });
+            [this]() { APPLICATION->OpenSettings(this, QStringLiteral("appearance-settings")); });
 
     // Tools: Crash Detective opens an instance's settings through the same window the Edit button uses.
     connect(m_tools, &Zero::ToolsPage::instanceSettingsRequested, this, [withInstance](const QString& id) {
@@ -2553,7 +2570,7 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         c.keywords = s.keywords;
         c.iconName = QStringLiteral("settings");
         c.primaryLabel = tr("Open");
-        c.run = [this, pageId]() { QTimer::singleShot(0, this, [this, pageId]() { APPLICATION->ShowGlobalSettings(this, pageId); }); };
+        c.run = [this, pageId]() { QTimer::singleShot(0, this, [this, pageId]() { APPLICATION->OpenSettings(this, pageId); }); };
         out.append(c);
     }
 
@@ -2729,7 +2746,11 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
                             : page == QLatin1String("servers")    ? QStringLiteral("servers")  // ZERO
                             : page == QLatin1String("tools")      ? QStringLiteral("tools")
                             : page == QLatin1String("appearance") ? QStringLiteral("appearance")
+                            : page == QLatin1String("settings")   ? QStringLiteral("settings")  // ZERO
                                                                   : QStringLiteral("home"));
+    // Dev aid: ZERO_SCREENSHOT_SETTINGS=<page id> selects that Settings section (with --zero-page settings).
+    if (const QString section = qEnvironmentVariable("ZERO_SCREENSHOT_SETTINGS"); !section.isEmpty() && m_settingsPage)
+        m_settingsPage->selectSection(section);
     // Dev aid: ZERO_SCREENSHOT_SELECT_THEME=<theme id> selects that card on the Appearance page (nothing is applied).
     if (const QString pick = qEnvironmentVariable("ZERO_SCREENSHOT_SELECT_THEME"); !pick.isEmpty())
         m_appearance->selectTheme(pick);

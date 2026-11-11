@@ -38,6 +38,7 @@
 
 #include <QListView>
 #include <QModelIndex>
+#include <QPointer>
 #include <QWidget>
 
 #include "ui/pages/BasePageContainer.h"
@@ -52,6 +53,7 @@ class QListView;
 class QLineEdit;
 class QStackedLayout;
 class QGridLayout;
+class QPushButton;
 
 class PageContainer : public QWidget, public BasePageContainer {
     Q_OBJECT
@@ -90,11 +92,23 @@ class PageContainer : public QWidget, public BasePageContainer {
 
     void changeEvent(QEvent*) override;
 
-    void hidePageList() { m_pageList->hide(); }
+    void hidePageList() { m_sidebar->hide(); }
+
+    // ZERO
+    /// Widget shown above the side list (the instance window puts the instance's picture and name there).
+    void setSidebarHeader(QWidget* header);
+    /// Small caption under the side list ("Changes are saved automatically").
+    void setSidebarFooter(const QString& text);
+    /// The help strip under the page that explains the option under the pointer or with keyboard focus.
+    void setOptionHelpEnabled(bool enabled);
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
    private:
     void createUI();
     void retranslate();
+    void updateHeader();                  // ZERO: title, explanation and Help button of the current page
+    void showOptionHelp(QWidget* widget);  // ZERO: help strip text for an option of the current page
+    void resetOptionHelp();
 
    public slots:
     void help();
@@ -116,4 +130,16 @@ class PageContainer : public QWidget, public BasePageContainer {
     QListView* m_pageList;
     QLabel* m_header;
     QGridLayout* m_layout;
+    // ZERO
+    QWidget* m_sidebar = nullptr;
+    QLayout* m_sidebarHeaderSlot = nullptr;
+    QLabel* m_sidebarFooter = nullptr;
+    QWidget* m_contentHost = nullptr;
+    QLabel* m_about = nullptr;
+    QWidget* m_helpStrip = nullptr;
+    QLabel* m_helpIcon = nullptr;
+    QLabel* m_helpText = nullptr;
+    QString m_extraInfo;
+    QPointer<QWidget> m_helpWidget;
+    bool m_optionHelp = false;
 };

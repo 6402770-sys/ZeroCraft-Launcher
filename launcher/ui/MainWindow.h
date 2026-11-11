@@ -71,6 +71,7 @@ class ScreenshotsPage;  // ZERO
 class ServersPage;  // ZERO
 class ToolsPage;
 class AppearancePage;
+class ZeroSettingsPage;
 class ZeroShell;
 class ZeroCommandPalette;
 class ZeroShortcutSheet;
@@ -85,6 +86,8 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
    public:
+    /// ZERO: shows Settings as a page of this window and selects `pageId` (empty = last section). False when unavailable.
+    bool showSettingsPage(const QString& pageId = QString());
     explicit MainWindow(QWidget* parent = 0);
     ~MainWindow();
 
@@ -306,6 +309,7 @@ class MainWindow : public QMainWindow {
     Zero::ServersPage* m_servers = nullptr;  // ZERO
     Zero::ToolsPage* m_tools = nullptr;
     Zero::AppearancePage* m_appearance = nullptr;
+    Zero::ZeroSettingsPage* m_settingsPage = nullptr;
     Zero::ZeroCommandPalette* m_palette = nullptr;
     Zero::ZeroShortcutSheet* m_shortcutSheet = nullptr;
     QList<QAction*> m_accountActions;  // per-account actions (they carry the Ctrl+N shortcuts), recreated on repopulate

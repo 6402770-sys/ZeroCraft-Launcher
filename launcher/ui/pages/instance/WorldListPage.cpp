@@ -373,7 +373,7 @@ void WorldListPage::populateWorldToolsMenu()
         noToolsAction->setEnabled(false);
         m_worldToolsMenu->addSeparator();
         auto* settingsAction = m_worldToolsMenu->addAction(tr("Open Settings"));
-        connect(settingsAction, &QAction::triggered, this, [] { APPLICATION->ShowGlobalSettings(nullptr, "external-tools"); });
+        connect(settingsAction, &QAction::triggered, this, [] { APPLICATION->OpenSettings(nullptr, "external-tools"); });
     } else {
         for (auto it = tools.constBegin(); it != tools.constEnd(); ++it) {
             if (ASSERT_NEVER(it.key().isEmpty())) {

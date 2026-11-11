@@ -540,9 +540,9 @@ void MinecraftSettingsWidget::openGlobalSettings()
     qDebug() << id;
 
     if (id == "javaPage") {
-        APPLICATION->ShowGlobalSettings(this, "java-settings");
+        APPLICATION->OpenSettings(this, "java-settings");
     } else {  // TODO select tab
-        APPLICATION->ShowGlobalSettings(this, "minecraft-settings");
+        APPLICATION->OpenSettings(this, "minecraft-settings");
     }
 }
 

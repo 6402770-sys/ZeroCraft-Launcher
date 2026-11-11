@@ -196,6 +196,11 @@ class Application : public QApplication {
     bool updatesAreAllowed() const;
 
     void ShowGlobalSettings(class QWidget* parent, QString openPage = QString());
+    /// ZERO: opens Settings as a page of the main window (non-blocking) and selects `openPage`; falls back to the modal
+    /// dialog of ShowGlobalSettings() when there is no main window. Flows that must wait for the user (the launch
+    /// controller asking for an account) keep using ShowGlobalSettings().
+    void OpenSettings(class QWidget* parent, QString openPage = QString());
+    GenericPageProvider* globalSettingsPages() { return m_globalSettingsProvider.get(); }
 
     bool updaterEnabled();
     static QString updaterBinaryName();

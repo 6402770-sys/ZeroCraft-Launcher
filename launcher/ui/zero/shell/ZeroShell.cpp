@@ -93,8 +93,20 @@ void ZeroShell::finishRail()
     connect(more, &QAbstractButton::clicked, this,
             [this, more]() { emit moreMenuRequested(more->mapToGlobal(QPoint(more->width() + Tokens::spaceSm, more->height()))); });
 
-    auto* settings = m_rail->addActionItem(QStringLiteral("settings"), QStringLiteral("settings"), tr("Settings"));
-    connect(settings, &QAbstractButton::clicked, this, &ZeroShell::settingsRequested);
+    if (m_settingsPage) {
+        m_pages.insert(QStringLiteral("settings"), m_settingsPage);
+        m_stack->addWidget(m_settingsPage);
+        m_rail->addItem(QStringLiteral("settings"), QStringLiteral("settings"), tr("Settings"));
+        m_rail->setItemShortcutHint(QStringLiteral("settings"), QKeySequence(Qt::CTRL | Qt::Key_Comma).toString(QKeySequence::NativeText));
+    } else {
+        auto* settings = m_rail->addActionItem(QStringLiteral("settings"), QStringLiteral("settings"), tr("Settings"));
+        connect(settings, &QAbstractButton::clicked, this, &ZeroShell::settingsRequested);
+    }
+}
+
+void ZeroShell::setSettingsPage(ShellPage* page)
+{
+    m_settingsPage = page;
 }
 
 void ZeroShell::setCurrentPage(const QString& id)

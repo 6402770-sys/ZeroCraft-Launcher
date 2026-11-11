@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-10 (session 3, Mission 002) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-11 (session 4, Mission 002) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -28,6 +28,8 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   `<data>/zero/session-history.json`) and the Home **Recent activity** section (6 rows, Diagnose on crashed/failed).
   Then the **Worlds Hub** page (rail item after Library: Alt+3 Worlds, Alt+4 Tools, Alt+5 Appearance), read-only.
   Then **Smart Backup** (manual world backups + verified restore with a safety snapshot, in the Worlds details panel).
+- **Session 4 (Mission 002, Phase C)**: owner asleep, autonomous run following this file's priority order.
+  `acaf9c883` **automatic world backups** after playing (`launcher/zero/backup/AutoBackup`; job runner now app-level).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
@@ -65,6 +67,7 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | **Session History** | ✅ one record per launch (played / stopped / crashed + exit code / failed) from `launchPhaseChanged` + `gameStoppedUnexpectedly` + `launchEnded`; JSON written with `QSaveFile`, cap 500, corrupt file moved to `.corrupt`; Home "Recent activity" | `SessionHistory` test, screenshots `build/zero-v2-m7-home-*.png` (hand-written history); **no real launch recorded yet** |
 | **Worlds Hub** | ✅ read-only page: every world of every instance (`launcher/zero/worlds/WorldScanner`: level.dat via Prism `World` + `versionName()`/`isHardcore()`, async sizes on QThreadPool with generations, no link/junction following), search, instance filter, sort, details panel (seed copy, open folder, show instance) | `WorldScanner` test (symlink sub-case skipped: needs privileges; junction case runs), screenshots `build/zero-v2-m8-worlds-*.png`, fake worlds' files hashed unchanged after runs; **not tried with real input** |
 | **Smart Backup** (worlds) | ✅ `launcher/zero/backup/` (`WorldBackup` pure functions, `WorldBackupJobs` runner): zips in `<data>/zero/backups/<instance>/<world>/` with a SHA-256 manifest, written as `.part` and verified before rename; restore = verify → safety snapshot → extract to `saves/.zero-restore-*` + verify → rename swap with rollback → old world to Recycle Bin; zip-slip rejected; retention 10 manual + 3 safety; refused while the instance runs and launch blocked during a job | `WorldBackup` test (66 rows incl. corruption, zip-slip, failed swap rollback, retention, free space), screenshots `build/zero-v2-m9-backups-*.png`; **restore/delete dialogs, toasts, Recycle Bin and the launch block never clicked through in the app** |
+| **Auto backups** | ✅ `Kind::Auto` (keep 5/world): when a session where the game ran ends, worlds whose `level.dat` changed since the game started are backed up one at a time (>2 GB skipped + warned); instance launch-locked meanwhile; global toggle `ZeroAutoBackupWorlds` (default on) at the bottom of the Worlds backups section; one toast per outcome | `AutoBackup` test (real temp worlds + real jobs), `WorldBackup` test, screenshot `build/zero-v2-m10-autobackup.png`; **never triggered by a real game session** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
 
 ## Manual QA checklist (owner, real input needed)
@@ -91,6 +94,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 - [ ] Smart Backup (use a throwaway world first!): Back up now → toast + row; Restore → confirm → world replaced, a
       Safety row appears, the game opens the restored world; Delete → Recycle Bin; buttons disabled while the game runs;
       Play blocked with a message while a backup runs (large world); leftover `saves/.zero-*` folders only after a crash
+- [ ] Auto backups: play a world, quit → toast "Backed up 1 world(s) of …", an **Auto** row in Worlds; untouched worlds get
+      none; Play is blocked while it runs; unticking "Back up automatically after playing" stops it
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
 
 ## Known limitations / open issues
@@ -109,8 +114,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 1. ~~Instance Profiles + Library 2.0~~ done in session 3. Left out: bulk actions (multi-select tag/favorite/move),
    "recently added" sort, favorite column in the list view; Home hero still = most recently played.
 2. ~~Session History~~ done in session 3 (Home "Recent activity"). Not done: per-instance history view, stats.
-3. ~~Worlds Hub~~ and ~~Smart Backup (manual + restore)~~ done in session 3. Smart Backup left: automatic backups
-   (after playing / scheduled), instance backup/restore, pre-update snapshots, restore preview, import/export of worlds;
+3. ~~Worlds Hub~~ and ~~Smart Backup (manual + restore)~~ done in session 3, ~~automatic after playing~~ session 4.
+   Smart Backup left: scheduled backups, per-instance auto opt-out, instance backup/restore, pre-update snapshots, restore preview, import/export of worlds;
    backup rows show only relative time (several "Just now" look alike; full date in the tooltip). Empty folders are not stored.
 4. Downloads/Update center, Storage Manager, Java Doctor, Mod Intelligence, Repair Center, Discover, Server Vault,
    Screenshot Gallery (Phases C–E in MISSION.md).

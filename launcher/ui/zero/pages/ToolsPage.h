@@ -11,6 +11,7 @@ class QStackedLayout;
 namespace Zero {
 
 class CrashDetectiveView;
+class StorageView;
 
 class ToolsPage : public ShellPage {
     Q_OBJECT
@@ -27,17 +28,21 @@ class ToolsPage : public ShellPage {
 
     /// Opens Crash Detective for `instanceId`; analyzes right away when `analyzeNow` is set.
     void openCrashDetective(const QString& instanceId, bool analyzeNow, std::optional<int> exitCode = std::nullopt);
+    /// Opens Storage and starts a scan.
+    void openStorage();
     /// Default instance for Crash Detective (the Library selection). Ignored while a result is showing.
     void setPreferredInstance(const QString& instanceId);
     /// Back to the grid of tools.
     void showOverview();
-    /// True while Crash Detective is open.
+    /// True while a tool (Crash Detective or Storage) is open.
     bool isToolOpen() const;
 
     CrashDetectiveView* crashDetective() const { return m_detective; }
+    StorageView* storage() const { return m_storage; }
 
    signals:
     void instanceSettingsRequested(const QString& instanceId);
+    void showInstanceRequested(const QString& instanceId);
 
    protected:
     void showEvent(QShowEvent* event) override;
@@ -45,6 +50,7 @@ class ToolsPage : public ShellPage {
    private:
     QStackedLayout* m_stack;
     CrashDetectiveView* m_detective;
+    StorageView* m_storage;
 };
 
 }  // namespace Zero

@@ -197,8 +197,9 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
 
 ## Tools page and Crash Detective
 - `ToolsPage` (`pages/ToolsPage`): top bar title "Tools", subtitle "Utilities for keeping your instances healthy"; the content is a grid
-  of tool cards (only Crash Detective for now). A card opens the tool inside the page; then the top bar shows the breadcrumb
+  of tool cards (Crash Detective, Storage). A card opens the tool inside the page; then the top bar shows the breadcrumb
   "Tools > Crash Detective" (clicking "Tools" goes back to the overview) and the tool's description as subtitle. There is no back button.
+- **Storage** (`pages/StorageView`, core in `zero/storage/StorageScanner`): opening it starts a scan (not when one is running). First scan: centered "Measuring disk usage..." state; later rescans keep the report and show "Updating..." in the summary card. Top bar action: ghost **Rescan** (disabled while scanning / trashing). Cards: summary (total, data folder, free space on the drive), "Where the space goes" (per category, sorted, share bars), "Instances" (per instance, bar relative to the largest, click or Enter shows it in the Library, folder button), "Clean up" (old logs / crash reports older than 30 days -> confirmation -> Recycle Bin only; World backups folder link; interrupted restore folders listed information-only, never deletable). Command palette: "Open Storage".
 - `CrashDetectiveView`: has no header of its own. Its controls (spinner, instance combo 220 px, **Analyze**) are lent to the top bar as the
   page's action widget while the tool is open. Instance combo (defaults to the Library selection), **Analyze**, spinner while the work runs on a
   `QtConcurrent` thread, then one `FindingCard` per finding (severity icon, title, confidence badge, explanation, "What to try",
@@ -234,7 +235,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
   (`APPLICATION->launch`, `QAction::trigger`, `ShowGlobalSettings`, `setApplicationTheme` ...); a command that is not possible right now is simply not listed:
   - Instances: Enter = Play (the launch call Home uses), Ctrl+Enter = show in Library. A running instance shows "Running" and Enter shows it in the Library (Prism
     ignores a second launch).
-  - Navigation: Go to Home / Library / Worlds (keywords saves, maps) / Tools / Appearance (Alt+N keycaps from `ZeroShell::pageShortcut`), Open Crash Detective (for the Library selection).
+  - Navigation: Go to Home / Library / Worlds (keywords saves, maps) / Tools / Appearance (Alt+N keycaps from `ZeroShell::pageShortcut`), Open Crash Detective (for the Library selection), Open Storage.
   - Actions: New instance, Import instance, Manage accounts, every enabled Folders-menu entry, Undo last instance deletion (only when enabled), Settings, About,
     Check for updates (only when the updater is enabled), Keyboard shortcuts, and for the selected instance Edit / Open folder / Rename (switches to the Library first) / Delete
     (the normal confirmation).
@@ -259,6 +260,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+5); top bar title "Appearan
   (default 1280x800), `ZERO_SCREENSHOT_THEME=<theme id>` (`zero-obsidian` | `zero-minecraft`: applies that theme through
   `ThemeManager::setApplicationTheme` before grabbing), `ZERO_SCREENSHOT_RUNNING=<instance id>` (flips that instance to running through the normal signal
   path), `ZERO_SCREENSHOT_SEARCH=<text>` (types into the Library search). List mode is the `ZeroLibraryView=list` setting.
+  `ZERO_SCREENSHOT_TOOL=storage` (with `--zero-page tools`) opens Tools > Storage and grabs once the scan finished (5 s max; `ZERO_SCREENSHOT_SCROLL=1` scrolls the report to its end first).
   `ZERO_SCREENSHOT_DIAGNOSE=<instance id>` opens Tools > Crash Detective for that instance and analyzes it
   (`ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code>` passes an exit code, `ZERO_SCREENSHOT_EVIDENCE=1` expands every evidence block).
 - `ZERO_SCREENSHOT_LAUNCH_PHASE=<instance id>:<preparing|running>` emits `Application::launchPhaseChanged` for that instance 300 ms after start (the signal the Play

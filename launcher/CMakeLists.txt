@@ -962,6 +962,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/WorldRows.h
     ui/zero/pages/WorldsPage.cpp
     ui/zero/pages/WorldsPage.h
+    ui/zero/pages/StorageView.cpp
+    ui/zero/pages/StorageView.h
     ui/zero/pages/ToolsPage.cpp
     ui/zero/pages/ToolsPage.h
     ui/zero/pages/ZeroInstanceDelegate.cpp

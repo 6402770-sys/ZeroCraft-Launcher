@@ -125,6 +125,7 @@
 #include "zero/profiles/InstanceProfile.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
 #include "ui/zero/pages/AppearancePage.h"
+#include "ui/zero/pages/StorageView.h"
 #include "ui/zero/pages/ToolsPage.h"
 #include "ui/zero/pages/ZeroInstanceDelegate.h"
 #include "ui/zero/shell/ZeroShell.h"
@@ -1981,6 +1982,7 @@ void MainWindow::setupZeroShell()
 
     // Worlds (read-only hub): "Show instance in Library" is the only way out
     connect(m_worlds, &Zero::WorldsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
+    connect(m_tools, &Zero::ToolsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
 
     // Home
     auto withInstance = [](const QString& id, auto&& fn) {
@@ -2056,7 +2058,7 @@ void MainWindow::setupZeroShell()
                 [this](const QString&, const QString& instanceName, int backedUp, const QStringList& tooLarge, int failed,
                        const QString& firstError) {
                     if (backedUp > 0)
-                        Zero::ZeroToast::show(this, tr("Backed up %n world(s) of %1", nullptr, backedUp).arg(instanceName),
+                        Zero::ZeroToast::show(this, (backedUp == 1 ? tr("Backed up 1 world of %1").arg(instanceName) : tr("Backed up %1 worlds of %2").arg(backedUp).arg(instanceName)),
                                               Zero::ZeroToast::Kind::Success);
                     if (failed > 0)
                         Zero::ZeroToast::show(this, tr("Automatic backup failed for %1: %2").arg(instanceName, firstError),
@@ -2351,6 +2353,20 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         c.primaryLabel = tr("Open");
         c.run = [this]() {
             m_tools->openCrashDetective(m_selectedInstance ? m_selectedInstance->id() : QString(), false);
+            m_shell->setCurrentPage(QStringLiteral("tools"));
+        };
+        out.append(c);
+    }
+    {
+        PaletteCommand c;
+        c.id = QStringLiteral("nav:storage");
+        c.kind = Kind::Navigation;
+        c.title = tr("Open Storage");
+        c.keywords = { tr("storage"), tr("disk"), tr("space"), tr("cleanup"), tr("size") };
+        c.iconName = QStringLiteral("hard-drive");
+        c.primaryLabel = tr("Open");
+        c.run = [this]() {
+            m_tools->openStorage();
             m_shell->setCurrentPage(QStringLiteral("tools"));
         };
         out.append(c);
@@ -2759,6 +2775,13 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         }
     }
 
+    // Dev aid: ZERO_SCREENSHOT_TOOL=storage opens Tools > Storage (with --zero-page tools); the grab waits for the scan (5 s max).
+    bool waitForStorage = false;
+    if (qEnvironmentVariable("ZERO_SCREENSHOT_TOOL") == QLatin1String("storage")) {
+        m_tools->openStorage();
+        waitForStorage = m_tools->storage()->scanner()->isScanning();
+    }
+
     // Dev aids: ZERO_SCREENSHOT_PALETTE=<query> opens the command palette with that query ("empty" = no query),
     // ZERO_SCREENSHOT_SHORTCUTS=1 opens the keyboard shortcut sheet.
     if (const QString paletteQuery = qEnvironmentVariable("ZERO_SCREENSHOT_PALETTE"); !paletteQuery.isEmpty()) {
@@ -2813,7 +2836,23 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     // ZERO: the Worlds page scans asynchronously: wait for the scan (sizes included), 3 s at most
     if (page == QLatin1String("worlds"))
         m_worlds->callWhenIdle([this, grabAndFinish]() { QTimer::singleShot(600, this, grabAndFinish); }, 3000);
-    else
+    else if (waitForStorage) {
+        // ZERO: Storage scans asynchronously: grab once the report is in (5 s at most)
+        auto* scanner = m_tools->storage()->scanner();
+        auto done = std::make_shared<bool>(false);
+        auto fire = [this, grabAndFinish, done]() {
+            if (*done)
+                return;
+            *done = true;
+            QTimer::singleShot(600, this, [this, grabAndFinish]() {
+                if (qEnvironmentVariableIntValue("ZERO_SCREENSHOT_SCROLL") == 1)
+                    m_tools->storage()->scrollToEnd();
+                grabAndFinish();
+            });
+        };
+        connect(scanner, &Zero::Storage::StorageScanner::reportReady, this, fire);
+        QTimer::singleShot(5000, this, fire);
+    } else
         QTimer::singleShot(1500, this, grabAndFinish);
 }
 

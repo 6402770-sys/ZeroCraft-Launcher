@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 #include "CrashDetectiveView.h"
 #include "ElidedLabel.h"
+#include "StorageView.h"
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
@@ -48,35 +49,43 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(Tokens::spaceLg);
 
-    auto* card = new ZeroCard(overview);
-    card->setClickable(true);
-    card->setMinimumHeight(96);
-    card->setContentsMargins(0, 0, 0, 0);
-    auto* row = new QHBoxLayout(card);
-    row->setContentsMargins(Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg);
-    row->setSpacing(Tokens::spaceLg);
-    auto* tile = new QLabel(card);
-    tile->setFixedSize(44, 44);
-    tile->setProperty("zeroTile", true);
-    tile->setAlignment(Qt::AlignCenter);
-    auto applyIcon = [tile]() { tile->setPixmap(Icons::pixmap(QStringLiteral("stethoscope"), Theme::current().text, 22, tile->devicePixelRatioF())); };
-    applyIcon();
-    connect(&Theme::instance(), &Theme::changed, tile, applyIcon);
-    row->addWidget(tile, 0, Qt::AlignTop);
-    auto* texts = new QVBoxLayout;
-    texts->setContentsMargins(0, 0, 0, 0);
-    texts->setSpacing(Tokens::spaceXs);
-    auto* title = new QLabel(tr("Crash Detective"), card);
-    Style::applyRole(title, Role::Heading);
-    texts->addWidget(title);
-    auto* caption = new QLabel(tr("Reads your logs and crash reports and explains why the game stopped, with fixes you can try."), card);
-    Style::applyRole(caption, Role::Caption);
-    caption->setWordWrap(true);
-    texts->addWidget(caption);
-    texts->addStretch(1);
-    row->addLayout(texts, 1);
-    connect(card, &ZeroCard::clicked, this, [this]() { openCrashDetective(m_detective->currentInstanceId(), false); });
-    grid->addWidget(card, 0, 0);
+    auto makeToolCard = [this, overview, grid](int column, const QString& icon, const QString& name, const QString& description) {
+        auto* card = new ZeroCard(overview);
+        card->setClickable(true);
+        card->setMinimumHeight(96);
+        card->setContentsMargins(0, 0, 0, 0);
+        auto* row = new QHBoxLayout(card);
+        row->setContentsMargins(Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg);
+        row->setSpacing(Tokens::spaceLg);
+        auto* tile = new QLabel(card);
+        tile->setFixedSize(44, 44);
+        tile->setProperty("zeroTile", true);
+        tile->setAlignment(Qt::AlignCenter);
+        auto applyIcon = [tile, icon]() { tile->setPixmap(Icons::pixmap(icon, Theme::current().text, 22, tile->devicePixelRatioF())); };
+        applyIcon();
+        connect(&Theme::instance(), &Theme::changed, tile, applyIcon);
+        row->addWidget(tile, 0, Qt::AlignTop);
+        auto* texts = new QVBoxLayout;
+        texts->setContentsMargins(0, 0, 0, 0);
+        texts->setSpacing(Tokens::spaceXs);
+        auto* title = new QLabel(name, card);
+        Style::applyRole(title, Role::Heading);
+        texts->addWidget(title);
+        auto* caption = new QLabel(description, card);
+        Style::applyRole(caption, Role::Caption);
+        caption->setWordWrap(true);
+        texts->addWidget(caption);
+        texts->addStretch(1);
+        row->addLayout(texts, 1);
+        grid->addWidget(card, 0, column);
+        return card;
+    };
+    auto* detectiveCard = makeToolCard(0, QStringLiteral("stethoscope"), tr("Crash Detective"),
+                                       tr("Reads your logs and crash reports and explains why the game stopped, with fixes you can try."));
+    connect(detectiveCard, &ZeroCard::clicked, this, [this]() { openCrashDetective(m_detective->currentInstanceId(), false); });
+    auto* storageCard = makeToolCard(1, QStringLiteral("hard-drive"), tr("Storage"),
+                                     tr("See what uses disk space across instances, worlds, backups and caches, and clean up safely."));
+    connect(storageCard, &ZeroCard::clicked, this, &ToolsPage::openStorage);
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
     grid->setColumnStretch(2, 1);
@@ -88,6 +97,11 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     m_detective = new CrashDetectiveView(this);
     connect(m_detective, &CrashDetectiveView::instanceSettingsRequested, this, &ToolsPage::instanceSettingsRequested);
     m_stack->addWidget(centered(m_detective, this));
+
+    // ----- Storage -----
+    m_storage = new StorageView(this);
+    connect(m_storage, &StorageView::showInstanceRequested, this, &ToolsPage::showInstanceRequested);
+    m_stack->addWidget(centered(m_storage, this));
 }
 
 void ToolsPage::showEvent(QShowEvent* event)
@@ -99,17 +113,25 @@ void ToolsPage::showEvent(QShowEvent* event)
 
 bool ToolsPage::isToolOpen() const
 {
-    return m_stack->currentIndex() == 1;
+    return m_stack->currentIndex() != 0;
 }
 
 QString ToolsPage::title() const
 {
-    return isToolOpen() ? tr("Crash Detective") : tr("Tools");
+    switch (m_stack->currentIndex()) {
+        case 1: return tr("Crash Detective");
+        case 2: return tr("Storage");
+        default: return tr("Tools");
+    }
 }
 
 QString ToolsPage::subtitle() const
 {
-    return isToolOpen() ? CrashDetectiveView::description() : tr("Utilities for keeping your instances healthy");
+    switch (m_stack->currentIndex()) {
+        case 1: return CrashDetectiveView::description();
+        case 2: return StorageView::description();
+        default: return tr("Utilities for keeping your instances healthy");
+    }
 }
 
 QString ToolsPage::breadcrumbParent() const
@@ -119,7 +141,11 @@ QString ToolsPage::breadcrumbParent() const
 
 QWidget* ToolsPage::topBarActions() const
 {
-    return isToolOpen() ? m_detective->controlsWidget() : nullptr;  // spinner, instance combo, Analyze
+    switch (m_stack->currentIndex()) {
+        case 1: return m_detective->controlsWidget();  // spinner, instance combo, Analyze
+        case 2: return m_storage->controlsWidget();    // Rescan
+        default: return nullptr;
+    }
 }
 
 void ToolsPage::showOverview()
@@ -145,6 +171,13 @@ void ToolsPage::openCrashDetective(const QString& instanceId, bool analyzeNow, s
     emit chromeChanged();
     if (analyzeNow)
         m_detective->analyze(exitCode);
+}
+
+void ToolsPage::openStorage()
+{
+    m_stack->setCurrentIndex(2);
+    emit chromeChanged();
+    m_storage->open();
 }
 
 }  // namespace Zero

@@ -274,6 +274,10 @@ class MainWindow : public QMainWindow {
     void toggleShortcutSheet();
     void showInstanceContextMenuAt(const QPoint& globalPos, bool onInstance, const QString& group);
     void renameSelectedInstance(const QString& newName);
+    // instance profile (favorite, artwork): the pages emit requests, these apply them
+    void toggleFavorite(const QString& instanceId);
+    void chooseArtworkForSelected();
+    void removeArtworkFromSelected();
     void editInstance(MinecraftInstance* instance);
 
    private:

@@ -112,6 +112,23 @@ QIcon icon(const QString& name, const QColor& color)
     return ic;
 }
 
+QIcon filledIcon(const QString& name, const QColor& color)
+{
+    static QHash<QPair<QString, QRgb>, QIcon> cache;
+    const auto key = qMakePair(name, color.rgba());
+    if (auto it = cache.constFind(key); it != cache.constEnd())
+        return *it;
+    auto svg = tintedSvg(name, color);
+    if (svg.isEmpty()) {
+        qWarning() << "ZeroIcons: unknown icon" << name;
+        return {};
+    }
+    svg.replace("fill=\"none\"", QByteArray("fill=\"") + colorToSvg(color).toUtf8() + "\"");
+    QIcon ic(new TintedSvgEngine(svg, color.alphaF()));
+    cache.insert(key, ic);
+    return ic;
+}
+
 QPixmap pixmap(const QString& name, const QColor& color, int logicalSize, qreal dpr)
 {
     return icon(name, color).pixmap(QSize(logicalSize, logicalSize), dpr);

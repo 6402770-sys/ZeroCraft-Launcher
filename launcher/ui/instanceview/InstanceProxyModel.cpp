@@ -22,6 +22,7 @@
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
 #include "ui/zero/pages/InstanceInfo.h"
+#include "zero/profiles/InstanceProfile.h"
 
 #include <QDebug>
 
@@ -42,9 +43,15 @@ void InstanceProxyModel::setFilterText(const QString& text)
     invalidateFilter();
 }
 
+void InstanceProxyModel::setPredicate(Predicate predicate)
+{
+    m_predicate = std::move(predicate);
+    invalidateFilter();
+}
+
 bool InstanceProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const
 {
-    if (m_filterText.isEmpty())
+    if (m_filterText.isEmpty() && !m_predicate)
         return true;
     const QModelIndex idx = sourceModel()->index(sourceRow, 0, sourceParent);
     if (!idx.isValid())
@@ -52,9 +59,12 @@ bool InstanceProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sour
     auto* instance = static_cast<MinecraftInstance*>(idx.data(InstanceList::InstancePointerRole).value<void*>());
     if (!instance)
         return false;
-    const Qt::CaseSensitivity cs = Qt::CaseInsensitive;
-    return instance->name().contains(m_filterText, cs) || idx.data(InstanceViewRoles::GroupRole).toString().contains(m_filterText, cs) ||
-           Zero::InstanceInfo::of(instance).minecraftVersion.contains(m_filterText, cs);
+    if (m_predicate && !m_predicate(instance))
+        return false;
+    if (m_filterText.isEmpty())
+        return true;
+    return Zero::LibraryFilter::textMatches(
+        m_filterText, Zero::Profile::libraryFacts(instance, idx.data(InstanceViewRoles::GroupRole).toString()));
 }
 
 QVariant InstanceProxyModel::data(const QModelIndex& index, int role) const

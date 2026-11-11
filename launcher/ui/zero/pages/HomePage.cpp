@@ -15,6 +15,7 @@
 #include <algorithm>
 #include "Application.h"
 #include "BaseInstance.h"
+#include "ArtworkCache.h"
 #include "ElidedLabel.h"
 #include "IconTile.h"
 #include "InstanceInfo.h"
@@ -27,6 +28,7 @@
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "zero/profiles/InstanceProfile.h"
 
 namespace Zero {
 
@@ -180,6 +182,11 @@ HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTim
 
     m_heroIcon = new IconTile(128, 96, m_hero);
     heroRow->addWidget(m_heroIcon, 0, Qt::AlignVCenter);
+    // with artwork the icon tile is replaced by a 256x144 cover-cropped artwork panel
+    m_heroArt = new ArtworkView(m_hero);
+    m_heroArt->setFixedSize(256, 144);
+    m_heroArt->hide();
+    heroRow->addWidget(m_heroArt, 0, Qt::AlignVCenter);
 
     auto* heroText = new QVBoxLayout;
     heroText->setContentsMargins(0, 0, 0, 0);
@@ -220,6 +227,21 @@ HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTim
     heroText->addStretch(1);
     heroRow->addLayout(heroText, 1);
     col->addWidget(m_hero);
+
+    // ----- favorites -----
+    m_favSection = new QWidget(column);
+    auto* favCol = new QVBoxLayout(m_favSection);
+    favCol->setContentsMargins(0, 0, 0, 0);
+    favCol->setSpacing(Tokens::spaceMd);
+    favCol->addWidget(makeLabel(tr("Favorites"), Role::Heading, m_favSection));
+    m_favGrid = new QGridLayout;
+    m_favGrid->setContentsMargins(0, 0, 0, 0);
+    m_favGrid->setSpacing(Tokens::spaceLg);
+    for (int c = 0; c < kRecentColumns; ++c)
+        m_favGrid->setColumnStretch(c, 1);
+    favCol->addLayout(m_favGrid);
+    m_favSection->hide();
+    col->addWidget(m_favSection);
 
     // ----- recently played -----
     m_recentSection = new QWidget(column);
@@ -310,8 +332,10 @@ HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTim
     connect(instances, &QAbstractItemModel::modelReset, this, &HomePage::scheduleRefresh);
     connect(instances, &QAbstractItemModel::layoutChanged, this, &HomePage::scheduleRefresh);
     connect(instances, &QAbstractItemModel::dataChanged, this, &HomePage::scheduleRefresh);
+    connect(Profile::Notifier::instance(), &Profile::Notifier::profileChanged, this, &HomePage::scheduleRefresh);
     connect(&Theme::instance(), &Theme::changed, this, [this]() {
         m_recentSignature.clear();
+        m_favSignature.clear();
         refreshIcons();
         scheduleRefresh();
     });
@@ -344,6 +368,7 @@ void HomePage::refresh()
         m_stack->setCurrentIndex(0);
         m_heroId.clear();
         m_recentSignature.clear();
+        m_favSignature.clear();
         return;
     }
     m_stack->setCurrentIndex(1);
@@ -376,15 +401,34 @@ void HomePage::refresh()
     }
     refreshHero(hero);
 
+    // favorites: sorted by last played like the recent row (never-played ones by name after them)
+    QList<MinecraftInstance*> favorites;
+    for (auto* inst : all) {
+        if (Profile::isFavorite(inst))
+            favorites.append(inst);
+    }
+    std::sort(favorites.begin(), favorites.end(), [&](MinecraftInstance* a, MinecraftInstance* b) {
+        if (a->lastLaunch() != b->lastLaunch())
+            return a->lastLaunch() > b->lastLaunch();
+        return collator.compare(a->name(), b->name()) < 0;
+    });
+    if (favorites.size() > kRecentColumns)
+        favorites = favorites.mid(0, kRecentColumns);
+    rebuildCards(m_favSection, m_favGrid, m_favSignature, favorites);
+
     if (recent.size() > kRecentColumns)
         recent = recent.mid(0, kRecentColumns);
-    rebuildRecent(recent);
+    rebuildCards(m_recentSection, m_recentGrid, m_recentSignature, recent);
 }
 
 void HomePage::refreshHero(MinecraftInstance* hero)
 {
     m_heroId = hero->id();
     m_heroIcon->setInstanceIcon(APPLICATION->icons()->getIcon(hero->iconKey()));
+    const QString artwork = Profile::artworkPath(hero);
+    m_heroArt->setArtwork(artwork);
+    m_heroArt->setVisible(!artwork.isEmpty());
+    m_heroIcon->setVisible(artwork.isEmpty());
     m_heroName->setFullText(hero->name());
 
     QStringList meta;
@@ -404,26 +448,26 @@ void HomePage::refreshHero(MinecraftInstance* hero)
     m_heroEdit->setEnabled(hero->canEdit());
 }
 
-void HomePage::rebuildRecent(const QList<MinecraftInstance*>& recent)
+void HomePage::rebuildCards(QWidget* section, QGridLayout* grid, QStringList& signatureRef, const QList<MinecraftInstance*>& instances)
 {
     QStringList signature;
-    for (auto* inst : recent) {
+    for (auto* inst : instances) {
         signature << inst->id() << inst->name() << inst->iconKey() << (inst->isRunning() ? "1" : "0") << (inst->canLaunch() ? "1" : "0")
                   << InstanceInfo::of(inst).summary() << Format::relativeTime(inst->lastLaunch());
     }
-    if (signature == m_recentSignature)
+    if (signature == signatureRef)
         return;
-    m_recentSignature = signature;
+    signatureRef = signature;
 
-    while (auto* item = m_recentGrid->takeAt(0)) {
+    while (auto* item = grid->takeAt(0)) {
         delete item->widget();
         delete item;
     }
-    m_recentSection->setVisible(!recent.isEmpty());
+    section->setVisible(!instances.isEmpty());
 
     int column = 0;
-    for (auto* inst : recent) {
-        auto* card = new RecentCard(inst, m_recentSection);
+    for (auto* inst : instances) {
+        auto* card = new RecentCard(inst, section);
         const QString id = inst->id();
         const bool running = inst->isRunning();
         connect(card, &ZeroCard::clicked, this, [this, id]() { emit openInLibraryRequested(id); });
@@ -433,8 +477,11 @@ void HomePage::rebuildRecent(const QList<MinecraftInstance*>& recent)
             else
                 emit playRequested(id);
         });
-        m_recentGrid->addWidget(card, 0, column++);
+        grid->addWidget(card, 0, column++);
     }
+    // empty placeholders keep every column (and its spacing) in the layout, so a short row has the same card width as a full one
+    for (; column < kRecentColumns; ++column)
+        grid->addWidget(new QWidget(section), 0, column);
 }
 
 }  // namespace Zero

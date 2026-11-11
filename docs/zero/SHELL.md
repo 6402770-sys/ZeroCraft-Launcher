@@ -62,14 +62,17 @@ continuous horizontal rule** across the window (never change one height without 
 Top bar: title "Home", no subtitle, no actions. Content max width 1280, page padding xl, vertical gap xxl between sections.
 1. **Hero** (`ZeroCard`, min height 200): instance to continue = most recently launched instance
    (`BaseInstance::lastLaunch()`), else the first instance by name.
-   - Left: 96 px instance icon on an elevated 128 px rounded tile (radius lg).
+   - Left: 96 px instance icon on an elevated 128 px rounded tile (radius lg); when the hero instance has artwork the tile is
+     replaced by a 256x144 cover-cropped artwork panel (radius lg, 1 px `border`, no gradient).
    - Overline "CONTINUE PLAYING", name (display), caption meta: `<version · loader> · Played <relative time> · <total playtime>`.
    - Buttons: **Play** (primary, lg, `play` icon) → launches that instance; while running → **Stop** (danger, `square`)
      + "Running" badge (success dot). **Edit** (secondary) → instance edit window. **Folder** (ghost, `folder-open`).
-2. **Recently played** (heading + "View library" ghost link at right): up to 6 small instance cards, sorted by last launch,
+2. **Favorites** (heading, only when at least one instance is a favorite): the same small cards as Recently played, max 6, sorted by
+   last played (never-played ones by name after them). Above Recently played.
+3. **Recently played** (heading + "View library" ghost link at right): up to 6 small instance cards, sorted by last launch,
    only instances launched at least once. Section hidden if none. Card click selects it in Library and switches page;
    card Play button launches.
-3. **Shortcuts** grid (4 tiles, `ZeroCard` clickable, icon + label + caption): New instance (`plus`), Import (`package`),
+4. **Shortcuts** grid (4 tiles, `ZeroCard` clickable, icon + label + caption): New instance (`plus`), Import (`package`),
    Accounts (`user`), Instances folder (`folder-open`).
 - Empty library → whole page is a `ZeroEmptyState`: icon `library-big`, "Your library is empty",
   "Create an instance, install a modpack or import one you already have.", primary "New instance", secondary "Import".
@@ -79,22 +82,49 @@ Top bar: title "Home", no subtitle, no actions. Content max width 1280, page pad
   Actions (top bar): view toggle (grid `layout-grid` / list `list`, ghost checkable pair) + **New instance** (primary, `plus`).
   With an empty library the toggle is hidden; New instance stays.
 - Content starts with a **toolbar row**: search field left (280 px, `search` icon, placeholder "Search instances", Ctrl+F
-  focuses, Esc clears), sort combo right (Name / Last played). Library 2.0 adds filter chips in the free space between them.
-  Hidden when the library is empty.
+  focuses, Esc clears), **filter chips** in the free space (`FilterChipBar`), sort combo right (Name / Last played / Most played =
+  `InstSortMode` `Name` / `LastLaunch` / `Playtime`, persisted, grid and list both follow). Hidden when the library is empty.
+- **Filter chips** (single select, AND-combined with the text search; pure logic in `launcher/zero/profiles/LibraryFilter`): **All**,
+  **star Favorites**, **Running** (always shown) then one chip per loader present (Vanilla, Fabric, Forge, NeoForge, Quilt, others
+  alphabetically) and one per tag present (`#tag` + instance count, alphabetical). Chip: 28 px, padding 12, `panelPath` radius md,
+  `surface` + `border`; active = `elevated` + `text` + a 6 px `accent2` dot (hover / active colors animate 140 ms; the dot slot is
+  part of every chip so selecting never moves neighbours). The row scrolls horizontally (wheel, or `chevron` buttons that appear
+  only while there is more in that direction; the active chip is scrolled into view). Clicking the active chip returns to All. Chips
+  are rebuilt on instance / profile changes (0 ms debounce, widgets of unchanged chips are kept); an active chip that vanished (the
+  last instance with that tag lost it, the loader is gone) falls back to All. Filtering goes through `InstanceProxyModel::setPredicate`
+  so the grid, the list and Prism groups stay consistent (a group exists while any of its instances pass). The text search also
+  matches tags. No match -> `ZeroEmptyState` "No instances match" with **Clear filters** (clears the search and the chip); the
+  subtitle reads "<shown> of <N> instances" while a search or chip filters.
 - Body: `[collection | details panel 300 px]`, gap lg.
 - **Grid**: Prism's `InstanceView` (keeps groups, drag-and-drop, keyboard nav, inline rename, context menu) with a new
   `ZeroInstanceDelegate` painting cards: 168×188 cell, card radius lg, bg surface, border border; icon 64 px centered
   in the top 112 px area (bg elevated, top corners rounded); name (label 13/600, elided, 2 lines max) + caption
   (version · loader). Hover: borderStrong + surfaceHover. Selected: border accent 1px + bg elevated. Running: success dot top-right.
+  **Artwork**: when the instance has artwork the top area shows it cover-cropped (top corners clipped with `panelPath`) and the instance
+  icon becomes a 28 px badge (`surface`, 1 px `border`) at its bottom-left. **Favorite**: solid `star` in `highlight` top-left (on
+  artwork over a translucent `bg` disc); on hover a hollow star fades in there, `highlight` under the pointer; clicking it toggles
+  the favorite and is consumed (no selection change, no launch): the delegate viewport event filter emits
+  `favoriteToggleRequested(instanceId)` (`InstanceView` never calls `editorEvent`).
   Group headers: overline style + count, collapsible as before.
 - **List**: `QTreeView` (no root decoration, uniform rows 36 px) over the same instances: Name (icon 20 px + name),
   Version, Loader, Group, Last played (relative), Playtime. Sortable by header. Same selection as grid (one selection model source of truth via MainWindow).
-- Search filters both views by name, group and version (case-insensitive substring).
+- Search filters both views by name, group, version and tags (case-insensitive substring).
 - **Details panel** (hidden when nothing selected → small empty state "Select an instance"): 96 px icon (click = change icon),
   name (title, double-click = rename), caption meta, stats rows (Last played, Total playtime, Group), **Play/Stop**
-  (primary, full width, lg). Then a ghost action list with icons: Edit (`pencil`), Open folder (`folder-open`),
-  Change group (`list-filter`), Copy (`copy`), Export ▸ (Zip / Modrinth / CurseForge), Create shortcut (`terminal`),
-  Delete (danger, `trash-2`). All mapped to the existing MainWindow actions; disabled states mirror them.
+  (primary, full width, lg). Then **Tags** and **Description** (below), then a ghost action list with icons: Edit (`pencil`),
+  Open folder (`folder-open`), Change group (`list-filter`), **Set artwork…** (`image`; file dialog png / jpg / jpeg / webp / bmp, handled
+  by MainWindow), **Remove artwork** (`circle-x`, only while artwork is set), Copy (`copy`), Export ▸ (Zip / Modrinth / CurseForge),
+  Create shortcut (`terminal`), Delete (danger, `trash-2`). The action buttons map to the existing MainWindow actions; disabled states mirror them.
+  - With artwork the icon tile is replaced by a 16:9 cover (`ArtworkHeader`, height-for-width) with the icon as a clickable 44 px badge at its
+    bottom-left (change icon). A `star` toggle sits right of the name (solid `highlight` when favorite, `textTertiary` outline otherwise;
+    tooltip "Add to favorites" / "Remove from favorites"; emits `favoriteToggleRequested`). The meta caption gains "N mods" (enabled `*.jar`
+    directly in the mods folder, only for instances with a mod loader; cached by folder mtime).
+  - **Tags**: overline "TAGS", wrapping chips (`FlowLayout`) each with an x to remove, then an inline "Add tag" field (24 chars max, completion
+    from every tag in the library, Enter adds, Esc cancels, Backspace on an empty field removes the last tag; disabled at 12 tags).
+  - **Description**: overline "DESCRIPTION", `QPlainTextEdit` 3-6 lines (grows with the text, scrolls beyond 6), placeholder "Add a description or notes…";
+    saved to Prism notes on focus out and after 600 ms idle, flushed before another instance is shown. An edit in progress is never overwritten
+    by a refresh.
+  - The panel scrolls as a whole (it does at 1100x700 and below).
 
 ## Play button (`ZeroPlayButton`)
 One painted 40 px button (Home hero, Library details panel; the small play icons on "Recently played" cards stay plain), bound to an
@@ -154,6 +184,8 @@ Rail item "Appearance" (`palette`, bottom group, Alt+4); top bar title "Appearan
   glides between rows in 140 ms. Hover selects, click runs, Up/Down/Tab/PageUp/PageDown move (wrapping), Enter runs, Ctrl+Enter runs the secondary action.
   Empty query: **Continue** (3 most recently played instances), **Navigation**, **Suggested**. With a query: sections Instances / Navigation / Actions / Settings /
   Appearance, the section holding the best match first; no match -> "No results for ...".
+- **Favorites in the palette**: a favorite instance shows a solid `highlight` star after its title (and also matches the keywords "favorite" / "star"); the
+  Actions section has **Toggle favorite** for the selected instance (`action:instance-favorite`).
 - **Descriptors** (`palette/PaletteTypes.h`): MainWindow is the controller. `MainWindow::buildPaletteCommands()` runs **every time the palette opens** and returns
   `PaletteCommand`s (id, kind, title, subtitle, keywords, icon, shortcut, hint/badge, `run`, optional `runSecondary`). Callbacks call existing QActions/APIs
   (`APPLICATION->launch`, `QAction::trigger`, `ShowGlobalSettings`, `setApplicationTheme` ...); a command that is not possible right now is simply not listed:
@@ -188,6 +220,8 @@ Rail item "Appearance" (`palette`, bottom group, Alt+4); top bar title "Appearan
   (`ZERO_SCREENSHOT_DIAGNOSE_EXIT=<code>` passes an exit code, `ZERO_SCREENSHOT_EVIDENCE=1` expands every evidence block).
 - `ZERO_SCREENSHOT_LAUNCH_PHASE=<instance id>:<preparing|running>` emits `Application::launchPhaseChanged` for that instance 300 ms after start (the signal the Play
   buttons listen to), `ZERO_SCREENSHOT_SELECT_THEME=<theme id>` selects a card on the Appearance page (nothing applied), `ZERO_SCREENSHOT_TOAST=1` shows one toast of each kind.
+- Library filter: `ZERO_SCREENSHOT_CHIP=<favorites|running|loader:<Name>|tag:<name>>` selects that chip (nothing = All). Profile data for fake instances: `ZeroFavorite=true`,
+  `ZeroTags="[\"pvp\", \"tech\"]"` (a value with commas must be quoted in the INI format), `ZeroArtwork=.zero/artwork.png` + the PNG, `notes=...`.
 - Palette: `ZERO_SCREENSHOT_PALETTE=<query>` opens the command palette with that query (`empty` = no query), `ZERO_SCREENSHOT_SHORTCUTS=1` opens the shortcut sheet.
 - Motion evidence frames (after the normal grab): `ZERO_SCREENSHOT_TRANSITION=<page id>` (`home` | `library` | `tools`)
   switches to that page and `ZERO_SCREENSHOT_THEME_TO=<theme id>` switches theme, each saving the window grab every 40 ms
@@ -198,4 +232,7 @@ Rail item "Appearance" (`palette`, bottom group, Alt+4); top bar title "Appearan
   An absolute output path works; a relative one is resolved against the data dir given with `-d`. Fake instances for screenshots need a valid
   `instance.cfg` (with a `[General]` header) and a well-formed `mmc-pack.json`, otherwise a debug ASSERT in `Task.cpp:108` stops the app.
 - Tests: `tests/CommandMatcher_test.cpp` (prefix beats subsequence, word starts, gaps, aliases, recency tie-breaks, highlight positions, empty query, no match), `tests/ZeroCommandPalette_test.cpp` (open/close, sections, query, wrapping navigation, Enter / Ctrl+Enter callbacks, absent commands, Esc and backdrop restore focus, scrolling, sheet).
+- Tests: `tests/InstanceProfile_test.cpp` (tag normalization, JSON round trip, favorite / notes, artwork scaling + atomic replace + clear, mod count),
+  `tests/LibraryFilter_test.cpp` (every chip kind, text search, AND combination, chip building, vanished-chip fallback), `tests/ZeroLibrary_test.cpp`
+  (`FilterChipBar`, `FlowLayout`, `Artwork::cover`, the card star click).
 - Tests: `tests/ZeroShell_test.cpp` (top bar chrome per page, swap on page change, `chromeChanged`, breadcrumb click, Alt+N, chip anchor).

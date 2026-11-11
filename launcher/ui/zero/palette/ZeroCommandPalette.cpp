@@ -389,7 +389,8 @@ void PaletteResults::paintEvent(QPaintEvent*)
 
         // Title with the matched characters emphasised, then the caption subtitle.
         int x = iconX + kIconBox + 12;
-        const int titleRoom = qMax(0, rightLimit - x);
+        const int starRoom = cmd.favorite ? 18 : 0;  // a favorite instance gets a solid star after its title
+        const int titleRoom = qMax(0, rightLimit - x - starRoom);
         const bool highlight = !row.positions.isEmpty();
         int used = 0;
         int ci = 0;
@@ -408,6 +409,10 @@ void PaletteResults::paintEvent(QPaintEvent*)
             ci = cj;
         }
         x += used;
+        if (cmd.favorite) {
+            Icons::filledIcon(QStringLiteral("star"), t.highlight).paint(&p, QRect(x + 6, cy - 6, 12, 12));
+            x += starRoom;
+        }
         if (!cmd.subtitle.isEmpty()) {
             const int subX = x + 10;
             const int room = rightLimit - subX;

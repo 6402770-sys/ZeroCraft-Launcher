@@ -30,6 +30,7 @@ struct PaletteCommand {
     QString secondaryLabel;  ///< footer: "Ctrl+↵ <label>"; shown only when runSecondary is set
     qint64 lastUsedMs = 0;   ///< instances: last launch, drives recency and the "Continue" section
     bool suggested = false;  ///< listed under "Suggested" when the query is empty
+    bool favorite = false;   ///< instances: a solid star after the title
     std::function<void()> run;
     std::function<void()> runSecondary;
 };

@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-10 (session 2, Mission 002) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-10 (session 3, Mission 002) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -20,10 +20,14 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   real launch states, Appearance page, shell v2 (top bar), command palette. Commits:
   `fca565d87` themes · `59e8b94b5` motion · `7316de327` Play + Appearance · `b0b6aa183` shell v2 · `ffde92420` palette
   (+ this handoff commit).
+- **Session 3 (Mission 002, Phase B milestone 6)**: Instance Profiles + Library 2.0: favorites, tags, description
+  (= Prism notes), per-instance artwork, filter chips, "Most played" sort, favorite star on cards, artwork covers, details
+  panel editing, Home favorites strip + artwork hero, palette favorites. Design/data notes: `docs/zero/SHELL.md` (Library,
+  Home) and `docs/zero/ARCHITECTURE.md` (Instance profiles).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
-- Result at end of session 2: **32/32 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
+- Result at end of session 3: **35/35 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
 - `FileSystem` investigation: 12 of its 19 functions pass and now run in `build.sh test`. The 7 `test_link*` symlink
   cases are not run: on Windows without Developer Mode, symlinks need privileges, so `FS::create_link` launches
   `zerolauncher_filelink.exe` elevated (UAC prompt); the elevated process doesn't inherit the MSYS2 PATH (missing-DLL
@@ -53,6 +57,7 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | Appearance page | ✅ live preview of a theme before applying, theme cards, Apply (persists, transition plays), motion Follow Windows/On/Off, link to legacy appearance settings | screenshots |
 | Shell v2 | ✅ `ZeroTopBar` (title/subtitle/breadcrumb, page actions, account chip, search pill), `ShellPage` chrome API, 60 px sidebar header (logo + wordmark), Appearance/More/Settings bottom group, Alt+1..4 | `ZeroShell` test, screenshots `build/zero-v2-m4-*.png` |
 | Command palette | ✅ Ctrl+K / top-bar pill: instances (↵ Play, Ctrl+↵ show in Library), navigation, real QActions, settings pages, themes, motion; fuzzy ranking in `launcher/zero/palette/CommandMatcher`; shortcut sheet Ctrl+/ (also in More menu). Kill moved to **Ctrl+Shift+K**; Settings = **Ctrl+,** | `CommandMatcher`, `ZeroCommandPalette` tests, screenshots `build/zero-v2-m5-*.png` |
+| **Instance Profiles / Library 2.0** | ✅ `launcher/zero/profiles/` (`InstanceProfile`, `LibraryFilter`), data in `instance.cfg` (`ZeroFavorite`, `ZeroTags`, `ZeroArtwork`) + `<instance>/.zero/artwork.png` written with `QSaveFile`; `FilterChipBar`, `ArtworkCache`, `FlowLayout`; chips filter through `InstanceProxyModel::setPredicate` (groups kept) | `InstanceProfile`, `LibraryFilter`, `ZeroLibrary` tests, screenshots `build/zero-v2-m6-*.png`; **not tried with real input** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
 
 ## Manual QA checklist (owner, real input needed)
@@ -69,6 +74,9 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
       Ctrl+Shift+K kills; Ctrl+, opens settings
 - [ ] Top bar: Library actions (grid/list, New instance), search/sort row, account menu opens below the chip
 - [ ] Crash Detective: force a crash → toast → Diagnose → breadcrumb "Tools › Crash Detective" → back via "Tools"
+- [ ] Library 2.0: star on card hover toggles favorite without selecting; chips (Favorites / Running / loader / #tag) filter
+      grid and list, clicking the active chip returns to All; add/remove tags (Enter, Esc, Backspace), description survives
+      switching instance and restart; Set artwork… (png/jpg/webp) shows on card, details and Home hero; Remove artwork
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
 
 ## Known limitations / open issues
@@ -84,11 +92,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
   palette/qss but no pixel details.
 
 ## Next tasks (priority order)
-1. **Instance Profiles + Library 2.0** (Phase B): favorites, tags, description/notes, per-instance artwork stored via
-   `BaseInstance::settings()` (instance.cfg; artwork file inside the instance folder), Library filter chips in the
-   content toolbar row (All / Favorites / Running / loaders present / tags), more sorts (last played, playtime, recently
-   added), favorite star on cards, artwork as card cover + hero background, details panel editing; Home hero prefers
-   the favorite/most recent, favorites strip. Preserve Prism groups (categories = groups). Bulk actions later.
+1. ~~Instance Profiles + Library 2.0~~ done in session 3. Left out: bulk actions (multi-select tag/favorite/move),
+   "recently added" sort, favorite column in the list view; Home hero still = most recently played.
 2. **Session History** (launch date/duration/exit status from `launchEnded` + playtime) → Home "Recent activity".
 3. **Worlds Hub** (read-only discovery: level.dat via the bundled NBT lib, icon.png, size, dates, instance) then
    **Smart Backup** (`launcher/zero/backup/`: zip snapshots with manifest + hash verification, retention, restore with a
@@ -97,5 +102,5 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
    Screenshot Gallery (Phases C–E in MISSION.md).
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 
-**Recommended start for session 3:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
-`/savvy-flow` task 1 (Instance Profiles + Library 2.0) with `savvy-careful`.
+**Recommended start for session 4:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
+`/savvy-flow` task 2 (Session History → Home "Recent activity").

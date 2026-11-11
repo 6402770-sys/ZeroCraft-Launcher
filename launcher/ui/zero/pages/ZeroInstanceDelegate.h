@@ -19,6 +19,11 @@ class ZeroInstanceDelegate : public ListViewDelegate {
     static constexpr int kCellHeight = 188;
     static constexpr int kIconAreaHeight = 112;
     static constexpr int kIconSize = 64;
+    static constexpr int kBadgeSize = 28;  ///< instance icon badge on top of artwork
+    static constexpr int kStarHit = 26;    ///< favorite star hit box (top-left corner of the card)
+
+    /// The favorite star's hit box inside a card (`cell` = the item rect).
+    static QRect starRect(const QRect& cell);
 
     explicit ZeroInstanceDelegate(QObject* parent = nullptr);
 
@@ -32,6 +37,10 @@ class ZeroInstanceDelegate : public ListViewDelegate {
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
     void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+
+   signals:
+    /// The favorite star of a card was clicked. The click is consumed: the selection does not change.
+    void favoriteToggleRequested(const QString& instanceId);
 
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -49,6 +58,8 @@ class ZeroInstanceDelegate : public ListViewDelegate {
 
     QPointer<QAbstractItemView> m_view;
     QPersistentModelIndex m_hovered;
+    QPersistentModelIndex m_starHot;  // the card whose star the pointer is over
+    QPersistentModelIndex m_starPressed;
     QList<Hover*> m_hovers;
 };
 

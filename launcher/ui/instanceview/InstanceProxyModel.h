@@ -17,6 +17,9 @@
 
 #include <QCollator>
 #include <QSortFilterProxyModel>
+#include <functional>
+
+class MinecraftInstance;
 
 class InstanceProxyModel : public QSortFilterProxyModel {
     Q_OBJECT
@@ -28,6 +31,13 @@ class InstanceProxyModel : public QSortFilterProxyModel {
     void setFilterText(const QString& text);
     QString filterText() const { return m_filterText; }
 
+    /// ZERO: extra row predicate (the Library filter chips), combined with the text filter by AND. Groups keep working:
+    /// they are derived from the rows that pass. An empty function accepts every row; setting one re-filters.
+    using Predicate = std::function<bool(MinecraftInstance*)>;
+    void setPredicate(Predicate predicate);
+    /// Re-evaluates the predicate for every row (call when what it reads changed).
+    void refilter() { invalidateFilter(); }
+
    protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
     QVariant data(const QModelIndex& index, int role) const override;
@@ -37,4 +47,5 @@ class InstanceProxyModel : public QSortFilterProxyModel {
    private:
     QCollator m_naturalSort;
     QString m_filterText;
+    Predicate m_predicate;
 };

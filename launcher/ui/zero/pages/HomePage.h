@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// ZERO Launcher - Home page: continue-playing hero, recently played cards, shortcuts. See docs/zero/SHELL.md.
+// ZERO Launcher - Home page: continue-playing hero, favorites, recently played cards, shortcuts. See docs/zero/SHELL.md.
 #pragma once
 
 #include <QList>
@@ -15,6 +15,7 @@ class QTimer;
 
 namespace Zero {
 
+class ArtworkView;
 class ElidedLabel;
 class IconTile;
 class ZeroPlayButton;
@@ -47,7 +48,7 @@ class HomePage : public ShellPage {
     void scheduleRefresh();
     void refresh();
     void refreshHero(MinecraftInstance* hero);
-    void rebuildRecent(const QList<MinecraftInstance*>& recent);
+    void rebuildCards(QWidget* section, QGridLayout* grid, QStringList& signature, const QList<MinecraftInstance*>& instances);
     void refreshIcons();
 
     QStackedLayout* m_stack;  // 0 = empty library, 1 = content
@@ -55,12 +56,18 @@ class HomePage : public ShellPage {
     // hero
     ZeroCard* m_hero;
     IconTile* m_heroIcon;
+    ArtworkView* m_heroArt;
     ElidedLabel* m_heroName;
     ElidedLabel* m_heroMeta;
     ZeroPlayButton* m_heroPlay;
     QPushButton* m_heroEdit;
     QPushButton* m_heroFolder;
     QString m_heroId;
+
+    // favorites (above recent, hidden when there are none)
+    QWidget* m_favSection;
+    QGridLayout* m_favGrid;
+    QStringList m_favSignature;
 
     // recent
     QWidget* m_recentSection;

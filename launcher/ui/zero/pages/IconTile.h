@@ -16,6 +16,8 @@ class IconTile : public QAbstractButton {
     void setInstanceIcon(const QIcon& icon);
     /// A clickable tile gets a pointing-hand cursor and emits clicked(); otherwise it is purely decorative.
     void setClickable(bool clickable);
+    /// Adds a 1 px `border` outline (used where the tile sits on top of an artwork).
+    void setOutlined(bool outlined);
 
     QSize sizeHint() const override { return { m_tile, m_tile }; }
 
@@ -28,6 +30,7 @@ class IconTile : public QAbstractButton {
     int m_icon;
     QIcon m_iconImage;
     bool m_clickable = false;
+    bool m_outlined = false;
 };
 
 }  // namespace Zero

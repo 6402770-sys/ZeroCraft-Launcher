@@ -8,6 +8,7 @@
 #include <QWidget>
 #include "InstanceDetailsPanel.h"
 #include "ui/zero/shell/ShellPage.h"
+#include "zero/profiles/LibraryFilter.h"
 
 class InstanceProxyModel;
 class InstanceView;
@@ -20,10 +21,12 @@ class QComboBox;
 class QLineEdit;
 class QSortFilterProxyModel;
 class QStackedWidget;
+class QTimer;
 class QTreeView;
 
 namespace Zero {
 
+class FilterChipBar;
 class InstanceTableModel;
 class ZeroEmptyState;
 
@@ -47,6 +50,14 @@ class LibraryPage : public ShellPage {
     /// Re-reads the sort mode from the settings (the settings dialog may have changed it).
     void syncSortFromSettings();
 
+    /// The selected filter chip (All, Favorites, Running, a loader or a tag). Combined with the search text.
+    LibraryFilter::Chip chip() const { return m_chip; }
+    void setChip(const LibraryFilter::Chip& chip);
+    /// Clears the search text and selects the All chip.
+    void clearFilters();
+    FilterChipBar* chipBar() const { return m_chips; }
+    InstanceDetailsPanel* detailsPanel() const { return m_details; }
+
     bool isListMode() const;
     QAbstractItemView* activeView() const;
     QAbstractItemView* listView() const;
@@ -59,6 +70,9 @@ class LibraryPage : public ShellPage {
     void listContextMenuRequested(const QPoint& globalPos, const QModelIndex& proxyIndex);
     void renameRequested(const QString& newName);
     void changeIconRequested();
+    void favoriteToggleRequested();
+    void setArtworkRequested();
+    void removeArtworkRequested();
 
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -66,7 +80,9 @@ class LibraryPage : public ShellPage {
    private:
     void setViewMode(bool list);    // crossfades when the mode changes
     void applyViewMode(bool list);  // the switch itself
-    void applyFilter(const QString& text);
+    void applyFilters(bool chipChanged);
+    void scheduleChipRefresh();
+    void rebuildChips();
     void updateState();
     void syncListFromGrid();
     void onListCurrentChanged(const QModelIndex& current);
@@ -81,6 +97,10 @@ class LibraryPage : public ShellPage {
     QString m_subtitle;
     QWidget* m_toolbar;  // search (left) and sort (right) row at the top of the content
     QLineEdit* m_search;
+    FilterChipBar* m_chips;
+    LibraryFilter::Chip m_chip;
+    QTimer* m_chipTimer;
+    ZeroEmptyState* m_noMatches;
     QComboBox* m_sortCombo;
     QAbstractButton* m_gridButton;
     QAbstractButton* m_listButton;

@@ -127,7 +127,7 @@ class ZeroStyleTest : public QObject {
                                        "play", "square", "plus", "star", "folder-open", "ellipsis", "pencil", "trash-2", "copy", "x",
                                        "check", "triangle-alert", "info", "circle-check", "circle-x", "layout-grid", "list", "list-filter",
                                        "clock", "user", "chevron-down", "chevron-right", "refresh-cw", "archive", "hard-drive", "cpu",
-                                       "stethoscope", "terminal", "command", "package", "box" };
+                                       "stethoscope", "terminal", "command", "package", "box", "image" };
         const auto names = Zero::Icons::availableNames();
         for (const auto& n : required)
             QVERIFY2(names.contains(n), qPrintable(n));

@@ -10,14 +10,17 @@
 #include <QMouseEvent>
 #include <QTextLayout>
 #include <QVariantAnimation>
+#include "ArtworkCache.h"
 #include "BaseInstance.h"
 #include "InstanceInfo.h"
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
+#include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroMotion.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "zero/profiles/InstanceProfile.h"
 
 namespace Zero {
 
@@ -56,6 +59,11 @@ QStringList wrapElided(const QString& text, const QFont& font, int width, int ma
 
 ZeroInstanceDelegate::ZeroInstanceDelegate(QObject* parent) : ListViewDelegate(parent) {}
 
+QRect ZeroInstanceDelegate::starRect(const QRect& cell)
+{
+    return QRect(cell.left() + 4, cell.top() + 4, kStarHit, kStarHit);
+}
+
 void ZeroInstanceDelegate::attachTo(QAbstractItemView* view)
 {
     if (m_view)
@@ -82,14 +90,63 @@ qreal ZeroInstanceDelegate::hoverProgress(const QModelIndex& index) const
 bool ZeroInstanceDelegate::eventFilter(QObject* watched, QEvent* event)
 {
     if (m_view && watched == m_view->viewport()) {
+        auto overStar = [this](const QPoint& pos, QModelIndex* hit) {
+            const QModelIndex index = m_view->indexAt(pos);
+            const bool over = index.isValid() && starRect(m_view->visualRect(index)).contains(pos);
+            if (hit)
+                *hit = over ? index : QModelIndex();
+            return over;
+        };
         switch (event->type()) {
-            case QEvent::MouseMove:
-                setHovered(m_view->indexAt(static_cast<QMouseEvent*>(event)->position().toPoint()));
+            case QEvent::MouseMove: {
+                const QPoint pos = static_cast<QMouseEvent*>(event)->position().toPoint();
+                setHovered(m_view->indexAt(pos));
+                QModelIndex hot;
+                overStar(pos, &hot);
+                if (hot != m_starHot) {
+                    const QModelIndex old = m_starHot;
+                    m_starHot = hot;
+                    repaintCard(old);
+                    repaintCard(hot);
+                    m_view->viewport()->setCursor(hot.isValid() ? Qt::PointingHandCursor : Qt::ArrowCursor);
+                }
                 break;
+            }
             case QEvent::Leave:
-            case QEvent::Hide:
+            case QEvent::Hide: {
                 setHovered({});
+                if (m_starHot.isValid()) {
+                    const QModelIndex old = m_starHot;
+                    m_starHot = QModelIndex();
+                    repaintCard(old);
+                    m_view->viewport()->setCursor(Qt::ArrowCursor);
+                }
                 break;
+            }
+            case QEvent::MouseButtonPress:
+            case QEvent::MouseButtonDblClick: {
+                // The star is a button on the card: its click never selects, drags or launches the instance.
+                auto* mouse = static_cast<QMouseEvent*>(event);
+                QModelIndex hit;
+                if (mouse->button() == Qt::LeftButton && overStar(mouse->position().toPoint(), &hit)) {
+                    m_starPressed = hit;
+                    return true;
+                }
+                break;
+            }
+            case QEvent::MouseButtonRelease: {
+                auto* mouse = static_cast<QMouseEvent*>(event);
+                if (mouse->button() == Qt::LeftButton && m_starPressed.isValid()) {
+                    QModelIndex hit;
+                    const bool still = overStar(mouse->position().toPoint(), &hit) && hit == m_starPressed;
+                    const QModelIndex pressed = m_starPressed;
+                    m_starPressed = QModelIndex();
+                    if (still)
+                        emit favoriteToggleRequested(pressed.data(InstanceList::InstanceIDRole).toString());
+                    return true;
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -204,10 +261,21 @@ void ZeroInstanceDelegate::paint(QPainter* painter, const QStyleOptionViewItem& 
     const QColor border = selected ? t.accent : mix(t.border, t.borderStrong, hover);
     painter->fillPath(cardPath, bg);
 
-    // icon area: elevated, top corners follow the card radius
+    auto* instance = static_cast<MinecraftInstance*>(index.data(InstanceList::InstancePointerRole).value<void*>());
+    const QString artwork = instance ? Profile::artworkPath(instance) : QString();
+    const QRect iconArea(cell.left(), cell.top(), cell.width(), kIconAreaHeight);
+    QPixmap cover;
+    if (!artwork.isEmpty())
+        cover = Artwork::cover(artwork, iconArea.size(), painter->device()->devicePixelRatioF());
+    const bool hasArtwork = !cover.isNull();
+
+    // icon area: elevated (or the artwork, cover-cropped); the top corners follow the card radius
     painter->save();
     painter->setClipPath(cardPath);
-    painter->fillRect(QRect(cell.left(), cell.top(), cell.width(), kIconAreaHeight), selected ? t.higher : t.elevated);
+    if (hasArtwork)
+        painter->drawPixmap(iconArea.topLeft(), cover);
+    else
+        painter->fillRect(iconArea, selected ? t.higher : t.elevated);
     painter->restore();
 
     painter->setPen(QPen(border, 1));
@@ -216,11 +284,44 @@ void ZeroInstanceDelegate::paint(QPainter* painter, const QStyleOptionViewItem& 
     Paint::paintBevel(*painter, QRectF(cell), false);
 
     const QIcon icon = qvariant_cast<QIcon>(index.data(Qt::DecorationRole));
-    const QRect iconRect(cell.left() + (cell.width() - kIconSize) / 2, cell.top() + (kIconAreaHeight - kIconSize) / 2, kIconSize, kIconSize);
-    if (!icon.isNull())
-        icon.paint(painter, iconRect);
+    if (hasArtwork) {
+        // the instance icon becomes a small badge at the bottom-left of the artwork
+        const QRectF badge(cell.left() + 8, iconArea.bottom() - 8 - kBadgeSize + 1, kBadgeSize, kBadgeSize);
+        painter->setPen(QPen(t.border, 1));
+        painter->setBrush(t.surface);
+        painter->drawPath(Paint::panelPath(badge.adjusted(0.5, 0.5, -0.5, -0.5), t.radiusMd));
+        if (!icon.isNull())
+            icon.paint(painter, badge.adjusted(3, 3, -3, -3).toRect());
+    } else {
+        const QRect iconRect(cell.left() + (cell.width() - kIconSize) / 2, cell.top() + (kIconAreaHeight - kIconSize) / 2, kIconSize,
+                             kIconSize);
+        if (!icon.isNull())
+            icon.paint(painter, iconRect);
+    }
 
-    auto* instance = static_cast<MinecraftInstance*>(index.data(InstanceList::InstancePointerRole).value<void*>());
+    // favorite star (top-left): solid in `highlight` when favorite; otherwise a hollow star that fades in on hover and lights up
+    // under the pointer
+    if (instance) {
+        const bool favorite = Profile::isFavorite(instance);
+        const bool hot = m_starHot.isValid() && m_starHot == index;
+        const qreal visible = favorite || hot ? 1.0 : hover;
+        if (visible > 0.0) {
+            const QRect hit = starRect(cell);
+            painter->save();
+            painter->setOpacity(painter->opacity() * visible);
+            if (hasArtwork) {
+                painter->setPen(Qt::NoPen);
+                painter->setBrush(withAlpha(t.bg, 0.62));
+                painter->drawEllipse(QRectF(hit).adjusted(1, 1, -1, -1));
+            }
+            const QRect glyph(hit.center().x() - 7, hit.center().y() - 7, 16, 16);
+            if (favorite)
+                Icons::filledIcon(QStringLiteral("star"), t.highlight).paint(painter, glyph);
+            else
+                Icons::icon(QStringLiteral("star"), hot ? t.highlight : t.textSecondary).paint(painter, glyph);
+            painter->restore();
+        }
+    }
 
     // status dot (top right): running = success, crashed / broken = warning
     if (instance) {

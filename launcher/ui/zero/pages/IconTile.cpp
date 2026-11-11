@@ -28,6 +28,12 @@ void IconTile::setClickable(bool clickable)
     setCursor(clickable ? Qt::PointingHandCursor : Qt::ArrowCursor);
 }
 
+void IconTile::setOutlined(bool outlined)
+{
+    m_outlined = outlined;
+    update();
+}
+
 void IconTile::mousePressEvent(QMouseEvent* event)
 {
     if (m_clickable)
@@ -41,9 +47,9 @@ void IconTile::paintEvent(QPaintEvent*)
     const auto& t = Theme::current();
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
-    p.setPen(Qt::NoPen);
+    p.setPen(m_outlined ? QPen(t.border, 1) : QPen(Qt::NoPen));
     p.setBrush(m_clickable && underMouse() ? t.higher : t.elevated);
-    p.drawPath(Paint::panelPath(QRectF(rect()), t.radiusLg));
+    p.drawPath(Paint::panelPath(m_outlined ? QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5) : QRectF(rect()), t.radiusLg));
     if (!m_iconImage.isNull()) {
         const QRect target((width() - m_icon) / 2, (height() - m_icon) / 2, m_icon, m_icon);
         m_iconImage.paint(&p, target);

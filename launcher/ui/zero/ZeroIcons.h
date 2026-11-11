@@ -20,6 +20,9 @@ namespace Icons {
 /// Returns a null icon (and logs a warning) if the name is unknown.
 QIcon icon(const QString& name, const QColor& color);
 
+/// Like icon(), but the shapes are filled with `color` as well (`fill="none"` becomes the color): a solid star. Cached.
+QIcon filledIcon(const QString& name, const QColor& color);
+
 /// Convenience: rasterised icon at a logical size and device pixel ratio.
 QPixmap pixmap(const QString& name, const QColor& color, int logicalSize, qreal dpr = 1.0);
 

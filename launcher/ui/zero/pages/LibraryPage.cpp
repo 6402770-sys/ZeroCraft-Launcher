@@ -13,12 +13,15 @@
 #include <QShortcut>
 #include <QSortFilterProxyModel>
 #include <QStackedWidget>
+#include <QSignalBlocker>
 #include <QStyledItemDelegate>
+#include <QTimer>
 #include <QToolButton>
 #include <QTreeView>
 #include <QVBoxLayout>
 #include "Application.h"
 #include "InstanceList.h"
+#include "FilterChipBar.h"
 #include "InstanceTableModel.h"
 #include "ZeroInstanceDelegate.h"
 #include "settings/SettingsObject.h"
@@ -29,6 +32,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
+#include "zero/profiles/InstanceProfile.h"
 
 namespace Zero {
 
@@ -74,13 +78,15 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     m_sortCombo->setToolTip(tr("Sort instances"));
     m_sortCombo->addItem(tr("Name"), QStringLiteral("Name"));
     m_sortCombo->addItem(tr("Last played"), QStringLiteral("LastLaunch"));
+    m_sortCombo->addItem(tr("Most played"), QStringLiteral("Playtime"));
 
     m_toolbar = new QWidget(this);
     auto* toolbarRow = new QHBoxLayout(m_toolbar);
     toolbarRow->setContentsMargins(0, 0, 0, Tokens::spaceLg);
     toolbarRow->setSpacing(Tokens::spaceLg);
+    m_chips = new FilterChipBar(this);
     toolbarRow->addWidget(m_search);
-    toolbarRow->addStretch(1);  // filter chips (Library 2.0) go here
+    toolbarRow->addWidget(m_chips, 1);
     toolbarRow->addWidget(m_sortCombo);
 
     // ----- top bar actions: view toggle + New instance -----
@@ -166,11 +172,17 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     m_collection = new QStackedWidget(this);
     m_collection->addWidget(m_grid);
     m_collection->addWidget(m_list);
-    m_collection->addWidget(new ZeroEmptyState(QStringLiteral("search"), tr("No instances found"), tr("Try a different search term."), {}, this));
+    m_noMatches = new ZeroEmptyState(QStringLiteral("search"), tr("No instances match"), tr("Try a different search or clear the filters."),
+                                     tr("Clear filters"), this);
+    connect(m_noMatches, &ZeroEmptyState::actionTriggered, this, &LibraryPage::clearFilters);
+    m_collection->addWidget(m_noMatches);
 
     m_details = new InstanceDetailsPanel(this);
     connect(m_details, &InstanceDetailsPanel::renameRequested, this, &LibraryPage::renameRequested);
     connect(m_details, &InstanceDetailsPanel::changeIconRequested, this, &LibraryPage::changeIconRequested);
+    connect(m_details, &InstanceDetailsPanel::favoriteToggleRequested, this, &LibraryPage::favoriteToggleRequested);
+    connect(m_details, &InstanceDetailsPanel::setArtworkRequested, this, &LibraryPage::setArtworkRequested);
+    connect(m_details, &InstanceDetailsPanel::removeArtworkRequested, this, &LibraryPage::removeArtworkRequested);
 
     auto* collectionRow = new QWidget(this);
     auto* row = new QHBoxLayout(collectionRow);
@@ -195,7 +207,26 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     page->addWidget(m_body, 1);
 
     // ----- behavior -----
-    connect(m_search, &QLineEdit::textChanged, this, &LibraryPage::applyFilter);
+    // filter chips: the proxy asks this predicate for every row; groups keep working because they derive from the accepted rows
+    m_proxy->setPredicate([this](MinecraftInstance* instance) {
+        return m_chip.kind == LibraryFilter::Kind::All || LibraryFilter::chipMatches(m_chip, Profile::libraryFacts(instance, QString()));
+    });
+    m_chipTimer = new QTimer(this);
+    m_chipTimer->setSingleShot(true);
+    m_chipTimer->setInterval(0);
+    connect(m_chipTimer, &QTimer::timeout, this, &LibraryPage::rebuildChips);
+    connect(m_chips, &FilterChipBar::chipActivated, this, [this](const LibraryFilter::Chip& chip) {
+        // clicking the selected chip again goes back to All
+        setChip(chip == m_chip && chip.kind != LibraryFilter::Kind::All ? LibraryFilter::Chip{} : chip);
+    });
+    connect(Profile::Notifier::instance(), &Profile::Notifier::profileChanged, this, [this]() { scheduleChipRefresh(); });
+    connect(APPLICATION->instances(), &QAbstractItemModel::rowsInserted, this, [this]() { scheduleChipRefresh(); });
+    connect(APPLICATION->instances(), &QAbstractItemModel::rowsRemoved, this, [this]() { scheduleChipRefresh(); });
+    connect(APPLICATION->instances(), &QAbstractItemModel::modelReset, this, [this]() { scheduleChipRefresh(); });
+    connect(APPLICATION->instances(), &QAbstractItemModel::dataChanged, this, [this]() { scheduleChipRefresh(); });
+    rebuildChips();
+
+    connect(m_search, &QLineEdit::textChanged, this, [this]() { applyFilters(false); });
     auto* findShortcut = new QShortcut(QKeySequence(QKeySequence::Find), this);
     connect(findShortcut, &QShortcut::activated, this, [this]() { focusSearch(); });
 
@@ -327,11 +358,56 @@ void LibraryPage::applyViewMode(bool list)
     activeView()->setFocus();
 }
 
-void LibraryPage::applyFilter(const QString& text)
+void LibraryPage::setChip(const LibraryFilter::Chip& chip)
+{
+    if (chip == m_chip)
+        return;
+    m_chip = chip;
+    m_chips->setActive(chip);
+    applyFilters(true);
+}
+
+void LibraryPage::clearFilters()
+{
+    m_chip = LibraryFilter::Chip{};
+    m_chips->setActive(m_chip);
+    {
+        const QSignalBlocker blocker(m_search);
+        m_search->clear();
+    }
+    applyFilters(true);
+    activeView()->setFocus();
+}
+
+void LibraryPage::scheduleChipRefresh()
+{
+    m_chipTimer->start();
+}
+
+/// Chips follow the library: loaders and tags appear and disappear with the instances, and an active chip that vanished
+/// (the last instance with that tag lost it) falls back to All.
+void LibraryPage::rebuildChips()
+{
+    QList<LibraryFilter::Facts> facts;
+    auto* list = APPLICATION->instances();
+    for (int i = 0; i < list->count(); ++i)
+        facts << Profile::libraryFacts(list->at(i), QString());
+    const auto chips = LibraryFilter::buildChips(facts);
+    const LibraryFilter::Chip resolved = LibraryFilter::resolveChip(m_chip, chips);
+    const bool vanished = resolved != m_chip;
+    m_chip = resolved;
+    m_chips->setChips(chips, m_chip);
+    if (vanished)
+        applyFilters(true);
+}
+
+void LibraryPage::applyFilters(bool chipChanged)
 {
     const QString keep = m_rememberedId;
     m_filtering = true;  // Qt moves the current index to a neighbor when its row is filtered out: do not remember that
-    m_proxy->setFilterText(text);
+    m_proxy->setFilterText(m_search->text());
+    if (chipChanged)
+        m_proxy->refilter();
     // The selected instance comes back when the filter shows it again; while it is hidden nothing is selected
     // (the details panel would otherwise show an instance that is not highlighted anywhere).
     const QModelIndex source = keep.isEmpty() ? QModelIndex() : APPLICATION->instances()->getInstanceIndexById(keep);
@@ -350,7 +426,7 @@ void LibraryPage::updateState()
 {
     const int total = APPLICATION->instances()->count();
     const int shown = m_proxy->rowCount();
-    const bool filtering = !m_proxy->filterText().isEmpty();
+    const bool filtering = !m_proxy->filterText().isEmpty() || m_chip.kind != LibraryFilter::Kind::All;
 
     QString subtitle;
     if (total == 0)

@@ -119,6 +119,7 @@
 #include "ui/zero/shell/ZeroTopBar.h"
 #include "ui/zero/pages/HomePage.h"
 #include "ui/zero/pages/LibraryPage.h"
+#include "zero/profiles/InstanceProfile.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
 #include "ui/zero/pages/AppearancePage.h"
 #include "ui/zero/pages/ToolsPage.h"
@@ -324,6 +325,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         auto delegate = new Zero::ZeroInstanceDelegate(this);
         view->setItemDelegate(delegate);
         delegate->attachTo(view);  // hover tracking for the card lift
+        connect(delegate, &Zero::ZeroInstanceDelegate::favoriteToggleRequested, this, &MainWindow::toggleFavorite);
         view->setFrameShape(QFrame::NoFrame);
         // do not show ugly blue border on the mac
         view->setAttribute(Qt::WA_MacShowFocusRect, false);
@@ -558,6 +560,14 @@ void MainWindow::showInstanceContextMenuAt(const QPoint& globalPos, bool onInsta
 
         actions.prepend(ui->actionChangeInstIcon);
         actions.prepend(ui->actionRenameInstance);
+        {
+            // ZERO: favorite toggle at the top of the instance menu
+            const bool favorite = Zero::Profile::isFavorite(m_selectedInstance);
+            auto* actionFavorite = new QAction(favorite ? tr("Remove from favorites") : tr("Add to favorites"), menu);
+            const QString id = m_selectedInstance->id();
+            connect(actionFavorite, &QAction::triggered, this, [this, id]() { toggleFavorite(id); });
+            actions.prepend(actionFavorite);
+        }
 
         // add header
         actions.prepend(actionSep);
@@ -1957,6 +1967,12 @@ void MainWindow::setupZeroShell()
             [this](const QPoint& globalPos, const QModelIndex&) { showInstanceContextMenuAt(globalPos, true, QString()); });
     connect(m_library, &Zero::LibraryPage::renameRequested, this, &MainWindow::renameSelectedInstance);
     connect(m_library, &Zero::LibraryPage::changeIconRequested, this, &MainWindow::on_actionChangeInstIcon_triggered);
+    connect(m_library, &Zero::LibraryPage::favoriteToggleRequested, this, [this]() {
+        if (m_selectedInstance)
+            toggleFavorite(m_selectedInstance->id());
+    });
+    connect(m_library, &Zero::LibraryPage::setArtworkRequested, this, &MainWindow::chooseArtworkForSelected);
+    connect(m_library, &Zero::LibraryPage::removeArtworkRequested, this, &MainWindow::removeArtworkFromSelected);
 
     // Home
     auto withInstance = [](const QString& id, auto&& fn) {
@@ -2246,6 +2262,9 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         c.keywords = { info.minecraftVersion, info.loader, QStringLiteral("instance") };
         c.icon = APPLICATION->icons()->getIcon(inst->iconKey());
         c.lastUsedMs = inst->lastLaunch();
+        c.favorite = Zero::Profile::isFavorite(inst);
+        if (c.favorite)
+            c.keywords << tr("favorite") << tr("star");
         if (inst->isRunning()) {
             c.hint = tr("Show ↵");
             c.primaryLabel = tr("Show in Library");
@@ -2375,6 +2394,19 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
                   { tr("settings"), tr("mods"), tr("configure") }, false, name);
         addAction(QStringLiteral("action:instance-folder"), tr("Open instance folder"), QStringLiteral("folder-open"), ui->actionViewSelectedInstFolder,
                   { tr("directory"), tr("explorer") }, false, name);
+        {
+            PaletteCommand c;
+            const QString id = m_selectedInstance->id();
+            c.id = QStringLiteral("action:instance-favorite");
+            c.kind = Kind::Action;
+            c.title = tr("Toggle favorite");
+            c.subtitle = name;
+            c.keywords = { tr("star"), tr("favourite"), tr("pin"), tr("bookmark") };
+            c.iconName = QStringLiteral("star");
+            c.primaryLabel = Zero::Profile::isFavorite(m_selectedInstance) ? tr("Remove from favorites") : tr("Add to favorites");
+            c.run = [this, id]() { toggleFavorite(id); };
+            out.append(c);
+        }
         if (ui->actionRenameInstance->isEnabled()) {
             PaletteCommand c;
             c.id = QStringLiteral("action:instance-rename");
@@ -2538,6 +2570,31 @@ QList<Zero::ShortcutGroup> MainWindow::buildShortcutGroups()
     return groups;
 }
 
+void MainWindow::toggleFavorite(const QString& instanceId)
+{
+    if (auto* instance = APPLICATION->instances()->getInstanceById(instanceId))
+        Zero::Profile::setFavorite(instance, !Zero::Profile::isFavorite(instance));
+}
+
+void MainWindow::chooseArtworkForSelected()
+{
+    if (!m_selectedInstance)
+        return;
+    const QString path = QFileDialog::getOpenFileName(this, tr("Choose artwork"), QString(),
+                                                      tr("Images (*.png *.jpg *.jpeg *.webp *.bmp);;All files (*)"));
+    if (path.isEmpty())
+        return;
+    const QString error = Zero::Profile::setArtwork(m_selectedInstance, path);
+    if (!error.isEmpty())
+        Zero::ZeroToast::show(this, error, Zero::ZeroToast::Kind::Error);
+}
+
+void MainWindow::removeArtworkFromSelected()
+{
+    if (m_selectedInstance)
+        Zero::Profile::clearArtwork(m_selectedInstance);
+}
+
 void MainWindow::renameSelectedInstance(const QString& newName)
 {
     if (m_selectedInstance == nullptr)
@@ -2577,6 +2634,20 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     if (dims.size() == 2 && dims[0].toInt() > 0 && dims[1].toInt() > 0)
         size = QSize(dims[0].toInt(), dims[1].toInt());
     resize(size);
+    // Dev aid: ZERO_SCREENSHOT_CHIP=<all|favorites|running|loader:<name>|tag:<name>> selects a Library filter chip.
+    if (const QString chip = qEnvironmentVariable("ZERO_SCREENSHOT_CHIP"); !chip.isEmpty()) {
+        using Kind = Zero::LibraryFilter::Kind;
+        Zero::LibraryFilter::Chip selected;
+        if (chip == QLatin1String("favorites"))
+            selected = { Kind::Favorites, {} };
+        else if (chip == QLatin1String("running"))
+            selected = { Kind::Running, {} };
+        else if (chip.startsWith(QLatin1String("loader:")))
+            selected = { Kind::Loader, chip.mid(7) };
+        else if (chip.startsWith(QLatin1String("tag:")))
+            selected = { Kind::Tag, chip.mid(4) };
+        m_library->setChip(selected);
+    }
     // Dev aid: ZERO_SCREENSHOT_SEARCH=<text> types into the Library search field.
     if (const QString search = qEnvironmentVariable("ZERO_SCREENSHOT_SEARCH"); !search.isEmpty())
         m_library->setSearchText(search);

@@ -9,6 +9,7 @@
 #include "CrashDetectiveView.h"
 #include "ElidedLabel.h"
 #include "JavaDoctorView.h"
+#include "ModHealthView.h"
 #include "StorageView.h"
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroIcons.h"
@@ -50,7 +51,7 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(Tokens::spaceLg);
 
-    auto makeToolCard = [this, overview, grid](int column, const QString& icon, const QString& name, const QString& description) {
+    auto makeToolCard = [this, overview, grid](int index, const QString& icon, const QString& name, const QString& description) {
         auto* card = new ZeroCard(overview);
         card->setClickable(true);
         card->setMinimumHeight(96);
@@ -78,7 +79,7 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
         texts->addWidget(caption);
         texts->addStretch(1);
         row->addLayout(texts, 1);
-        grid->addWidget(card, 0, column);
+        grid->addWidget(card, index / 2, index % 2);
         return card;
     };
     auto* detectiveCard = makeToolCard(0, QStringLiteral("stethoscope"), tr("Crash Detective"),
@@ -90,9 +91,11 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     auto* javaCard = makeToolCard(2, QStringLiteral("cpu"), tr("Java Doctor"),
                                   tr("Checks which Java each instance will use, catches problems before you launch and suggests a fix."));
     connect(javaCard, &ZeroCard::clicked, this, &ToolsPage::openJavaDoctor);
+    auto* modsCard = makeToolCard(3, QStringLiteral("package"), tr("Mod Health"),
+                                  tr("Finds missing dependencies, conflicts, duplicates and mods made for another version — without guessing."));
+    connect(modsCard, &ZeroCard::clicked, this, [this]() { openModHealth(QString()); });
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
-    grid->setColumnStretch(2, 1);
     col->addLayout(grid);
     col->addStretch(1);
     m_stack->addWidget(centered(overview, this));
@@ -113,6 +116,10 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     connect(m_java, &JavaDoctorView::showInstanceRequested, this, &ToolsPage::showInstanceRequested);
     connect(m_java, &JavaDoctorView::javaSettingsRequested, this, &ToolsPage::javaSettingsRequested);
     m_stack->addWidget(centered(m_java, this));
+
+    // ----- Mod Health -----
+    m_mods = new ModHealthView(this);
+    m_stack->addWidget(centered(m_mods, this));
 }
 
 void ToolsPage::showEvent(QShowEvent* event)
@@ -133,6 +140,7 @@ QString ToolsPage::title() const
         case 1: return tr("Crash Detective");
         case 2: return tr("Storage");
         case 3: return tr("Java Doctor");
+        case 4: return tr("Mod Health");
         default: return tr("Tools");
     }
 }
@@ -143,6 +151,7 @@ QString ToolsPage::subtitle() const
         case 1: return CrashDetectiveView::description();
         case 2: return StorageView::description();
         case 3: return JavaDoctorView::description();
+        case 4: return ModHealthView::description();
         default: return tr("Utilities for keeping your instances healthy");
     }
 }
@@ -158,6 +167,7 @@ QWidget* ToolsPage::topBarActions() const
         case 1: return m_detective->controlsWidget();  // spinner, instance combo, Analyze
         case 2: return m_storage->controlsWidget();    // Rescan
         case 3: return m_java->controlsWidget();       // Rescan
+        case 4: return m_mods->controlsWidget();       // Check again
         default: return nullptr;
     }
 }
@@ -199,6 +209,13 @@ void ToolsPage::openJavaDoctor()
     m_stack->setCurrentIndex(3);
     emit chromeChanged();
     m_java->open();
+}
+
+void ToolsPage::openModHealth(const QString& instanceId)
+{
+    m_stack->setCurrentIndex(4);
+    emit chromeChanged();
+    m_mods->open(instanceId);
 }
 
 }  // namespace Zero

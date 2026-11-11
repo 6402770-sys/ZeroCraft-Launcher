@@ -12,6 +12,7 @@ namespace Zero {
 
 class CrashDetectiveView;
 class JavaDoctorView;
+class ModHealthView;
 class StorageView;
 
 class ToolsPage : public ShellPage {
@@ -33,16 +34,19 @@ class ToolsPage : public ShellPage {
     void openStorage();
     /// Opens Java Doctor and looks for Java runtimes.
     void openJavaDoctor();
+    /// Opens Mod Health for `instanceId` (empty: the last chosen instance) and checks its mods.
+    void openModHealth(const QString& instanceId);
     /// Default instance for Crash Detective (the Library selection). Ignored while a result is showing.
     void setPreferredInstance(const QString& instanceId);
     /// Back to the grid of tools.
     void showOverview();
-    /// True while a tool (Crash Detective, Storage or Java Doctor) is open.
+    /// True while a tool (Crash Detective, Storage, Java Doctor or Mod Health) is open.
     bool isToolOpen() const;
 
     CrashDetectiveView* crashDetective() const { return m_detective; }
     StorageView* storage() const { return m_storage; }
     JavaDoctorView* javaDoctor() const { return m_java; }
+    ModHealthView* modHealth() const { return m_mods; }
 
    signals:
     void instanceSettingsRequested(const QString& instanceId);
@@ -58,6 +62,7 @@ class ToolsPage : public ShellPage {
     CrashDetectiveView* m_detective;
     StorageView* m_storage;
     JavaDoctorView* m_java;
+    ModHealthView* m_mods;
 };
 
 }  // namespace Zero

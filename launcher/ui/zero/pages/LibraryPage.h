@@ -71,6 +71,7 @@ class LibraryPage : public ShellPage {
     void renameRequested(const QString& newName);
     void changeIconRequested();
     void favoriteToggleRequested();
+    void checkModsRequested();
     void setArtworkRequested();
     void removeArtworkRequested();
 

@@ -671,6 +671,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
         m_settings->registerSetting("ZeroWorldsSort", QString("recent"));  // Worlds page: "recent" | "name" | "size" | "instance"
         m_settings->registerSetting("ZeroWorldsInstance", QString());  // Worlds page: instance id filter, empty = all instances
+        m_settings->registerSetting("ZeroModHealthInstance", QString());  // Tools > Mod Health: last chosen instance id
         m_settings->registerSetting("ZeroAutoBackupWorlds", true);  // back up the played worlds when the game closes (all instances)
 
         // Remembered state

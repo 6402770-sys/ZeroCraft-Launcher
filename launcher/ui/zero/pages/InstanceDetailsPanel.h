@@ -78,6 +78,8 @@ class InstanceDetailsPanel : public ZeroCard {
     void favoriteToggleRequested();
     void setArtworkRequested();
     void removeArtworkRequested();
+    /// "Check mods": open Tools > Mod Health for the shown instance (only offered for instances with a mod loader).
+    void checkModsRequested();
 
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -131,6 +133,7 @@ class InstanceDetailsPanel : public ZeroCard {
     // artwork buttons
     QPushButton* m_setArtwork = nullptr;
     QPushButton* m_removeArtwork = nullptr;
+    QPushButton* m_checkMods = nullptr;
 
     QVector<Binding> m_bindings;
     LibraryActions m_actions;

@@ -27,6 +27,7 @@
 - `launcher/zero/worlds/` — Worlds Hub scanner: `WorldScanner` (read-only `scanWorldsDir`, `folderSize`, sort / search, async scanner with generations; no widgets)
 - `launcher/ui/zero/pages/StorageView.{h,cpp}` — Tools > Storage UI (summary, category and instance breakdown, clean up, interrupted restores) on top of `StorageScanner`
 - `launcher/zero/java/` — Java Doctor core: `JavaDoctor` (pure `diagnose` predicting which Java a launch uses and whether it works, mirroring AutoInstallJava / CheckJava / VerifyJavaInstall; recommendation; read-only `readRequirements`; no widgets)
+- `launcher/ui/zero/pages/ModHealthView.{h,cpp}` — Tools > Mod Health UI (instance picker, summary card, findings by confidence, empty states; reads `zero/mods`)
 - `launcher/ui/zero/pages/JavaDoctorView.{h,cpp}` — Tools > Java Doctor UI (automatic Java card, instances with status pills and "Use Java N", runtimes)
 - `launcher/ui/zero/PillTag.{h,cpp}` — shared bordered pill label (plain / status tones)
 - `launcher/zero/storage/` — Storage Manager core: `StorageScanner` (per-category / per-instance disk usage, old log / crash report cleanup candidates, restore leftovers, validated Recycle Bin trash, async scanner; no widgets)

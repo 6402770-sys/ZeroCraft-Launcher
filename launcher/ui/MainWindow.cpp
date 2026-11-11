@@ -126,6 +126,7 @@
 #include "ui/zero/pages/CrashDetectiveView.h"
 #include "ui/zero/pages/AppearancePage.h"
 #include "ui/zero/pages/JavaDoctorView.h"
+#include "ui/zero/pages/ModHealthView.h"
 #include "ui/zero/pages/StorageView.h"
 #include "ui/zero/pages/ToolsPage.h"
 #include "ui/zero/pages/ZeroInstanceDelegate.h"
@@ -1978,6 +1979,10 @@ void MainWindow::setupZeroShell()
         if (m_selectedInstance)
             toggleFavorite(m_selectedInstance->id());
     });
+    connect(m_library, &Zero::LibraryPage::checkModsRequested, this, [this]() {
+        m_tools->openModHealth(m_selectedInstance ? m_selectedInstance->id() : QString());
+        m_shell->setCurrentPage(QStringLiteral("tools"));
+    });
     connect(m_library, &Zero::LibraryPage::setArtworkRequested, this, &MainWindow::chooseArtworkForSelected);
     connect(m_library, &Zero::LibraryPage::removeArtworkRequested, this, &MainWindow::removeArtworkFromSelected);
 
@@ -2384,6 +2389,20 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         c.primaryLabel = tr("Open");
         c.run = [this]() {
             m_tools->openJavaDoctor();
+            m_shell->setCurrentPage(QStringLiteral("tools"));
+        };
+        out.append(c);
+    }
+    {
+        PaletteCommand c;
+        c.id = QStringLiteral("nav:mod-health");
+        c.kind = Kind::Navigation;
+        c.title = tr("Check mods");
+        c.keywords = { tr("mods"), tr("health"), tr("conflicts"), tr("dependencies"), tr("missing") };
+        c.iconName = QStringLiteral("package");
+        c.primaryLabel = tr("Open");
+        c.run = [this]() {
+            m_tools->openModHealth(m_selectedInstance ? m_selectedInstance->id() : QString());
             m_shell->setCurrentPage(QStringLiteral("tools"));
         };
         out.append(c);
@@ -2806,6 +2825,13 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         waitForJava = !m_tools->javaDoctor()->hasEvaluated();
     }
 
+    // Dev aid: ZERO_SCREENSHOT_TOOL=mods (+ ZERO_SCREENSHOT_MODS_INSTANCE=<id>) opens Tools > Mod Health; the grab waits for the report (8 s max).
+    bool waitForMods = false;
+    if (qEnvironmentVariable("ZERO_SCREENSHOT_TOOL") == QLatin1String("mods")) {
+        m_tools->openModHealth(qEnvironmentVariable("ZERO_SCREENSHOT_MODS_INSTANCE"));
+        waitForMods = m_tools->modHealth()->isScanning();
+    }
+
     // Dev aids: ZERO_SCREENSHOT_PALETTE=<query> opens the command palette with that query ("empty" = no query),
     // ZERO_SCREENSHOT_SHORTCUTS=1 opens the keyboard shortcut sheet.
     if (const QString paletteQuery = qEnvironmentVariable("ZERO_SCREENSHOT_PALETTE"); !paletteQuery.isEmpty()) {
@@ -2860,7 +2886,18 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     // ZERO: the Worlds page scans asynchronously: wait for the scan (sizes included), 3 s at most
     if (page == QLatin1String("worlds"))
         m_worlds->callWhenIdle([this, grabAndFinish]() { QTimer::singleShot(600, this, grabAndFinish); }, 3000);
-    else if (waitForJava) {
+    else if (waitForMods) {
+        // ZERO: Mod Health reads the mods on a pool thread: grab once the report is on screen (8 s at most)
+        auto done = std::make_shared<bool>(false);
+        auto fire = [this, grabAndFinish, done]() {
+            if (*done)
+                return;
+            *done = true;
+            QTimer::singleShot(600, this, grabAndFinish);
+        };
+        connect(m_tools->modHealth(), &Zero::ModHealthView::reportShown, this, fire);
+        QTimer::singleShot(8000, this, fire);
+    } else if (waitForJava) {
         // ZERO: Java Doctor detects runtimes asynchronously: grab once the first evaluation is on screen (8 s at most)
         auto done = std::make_shared<bool>(false);
         auto fire = [this, grabAndFinish, done]() {

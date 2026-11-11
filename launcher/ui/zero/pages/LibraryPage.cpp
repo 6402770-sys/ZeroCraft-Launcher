@@ -182,6 +182,7 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     connect(m_details, &InstanceDetailsPanel::changeIconRequested, this, &LibraryPage::changeIconRequested);
     connect(m_details, &InstanceDetailsPanel::favoriteToggleRequested, this, &LibraryPage::favoriteToggleRequested);
     connect(m_details, &InstanceDetailsPanel::setArtworkRequested, this, &LibraryPage::setArtworkRequested);
+    connect(m_details, &InstanceDetailsPanel::checkModsRequested, this, &LibraryPage::checkModsRequested);
     connect(m_details, &InstanceDetailsPanel::removeArtworkRequested, this, &LibraryPage::removeArtworkRequested);
 
     auto* collectionRow = new QWidget(this);

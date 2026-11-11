@@ -976,6 +976,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/WorldsPage.h
     ui/zero/pages/JavaDoctorView.cpp
     ui/zero/pages/JavaDoctorView.h
+    ui/zero/pages/ModHealthView.cpp
+    ui/zero/pages/ModHealthView.h
     ui/zero/pages/StorageView.cpp
     ui/zero/pages/StorageView.h
     ui/zero/pages/ToolsPage.cpp

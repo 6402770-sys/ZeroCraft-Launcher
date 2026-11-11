@@ -40,6 +40,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
+#include "zero/mods/ModHealth.h"
 #include "zero/profiles/InstanceProfile.h"
 
 namespace Zero {
@@ -374,6 +375,10 @@ void InstanceDetailsPanel::setActions(const LibraryActions& actions)
     auto insert = [&](QPushButton* b) { lay->insertWidget(i++, b); };
     insert(addActionButton(parent, QStringLiteral("pencil"), tr("Edit"), actions.edit));
     insert(addActionButton(parent, QStringLiteral("folder-open"), tr("Open folder"), actions.folder));
+    m_checkMods = addActionButton(parent, QStringLiteral("package"), tr("Check mods"), nullptr);
+    connect(m_checkMods, &QPushButton::clicked, this, &InstanceDetailsPanel::checkModsRequested);
+    m_checkMods->setVisible(m_instance && Mods::readInstanceContext(m_instance->instanceRoot()).loader != Mods::InstanceLoader::None);
+    insert(m_checkMods);
     insert(addActionButton(parent, QStringLiteral("list-filter"), tr("Change group"), actions.group));
     m_setArtwork = addActionButton(parent, QStringLiteral("image"), tr("Set artwork…"), nullptr);
     connect(m_setArtwork, &QPushButton::clicked, this, &InstanceDetailsPanel::setArtworkRequested);
@@ -486,6 +491,9 @@ void InstanceDetailsPanel::refreshProfile(bool reloadEditors)
     m_artHeader->art()->setArtwork(artwork);
     if (m_removeArtwork)
         m_removeArtwork->setVisible(hasArtwork);
+
+    if (m_checkMods)  // only for instances with a mod loader (a small read of mmc-pack.json)
+        m_checkMods->setVisible(Mods::readInstanceContext(m_instance->instanceRoot()).loader != Mods::InstanceLoader::None);
 
     const InstanceInfo info = InstanceInfo::of(m_instance);
     QStringList meta;

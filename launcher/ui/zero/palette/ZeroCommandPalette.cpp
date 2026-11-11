@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ZeroCommandPalette.h"
 
+#include <QAccessible>
+#include <QAccessibleWidget>
 #include <QDateTime>
+#include <QHash>
+#include <QPointer>
 #include <QFontMetrics>
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -128,8 +132,147 @@ class PaletteLine : public QWidget {
 // PaletteResults
 // ---------------------------------------------------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Accessibility: the rows are painted, so screen readers and UI Automation get one interface per row from here.
+// ---------------------------------------------------------------------------------------------------------------------
+
+namespace {
+class PaletteRowAccessible : public QAccessibleInterface, public QAccessibleActionInterface {
+   public:
+    PaletteRowAccessible(PaletteResults* list, int row) : m_list(list), m_row(row), m_generation(list->generation()) {}
+
+    bool isValid() const override { return m_list && m_list->generation() == m_generation && m_row < m_list->rowCount(); }
+    QObject* object() const override { return nullptr; }
+    QWindow* window() const override { return m_list ? m_list->window()->windowHandle() : nullptr; }
+    QAccessibleInterface* parent() const override { return m_list ? QAccessible::queryAccessibleInterface(m_list.data()) : nullptr; }
+    QAccessibleInterface* child(int) const override { return nullptr; }
+    QAccessibleInterface* childAt(int, int) const override { return nullptr; }
+    int childCount() const override { return 0; }
+    int indexOfChild(const QAccessibleInterface*) const override { return -1; }
+    QString text(QAccessible::Text t) const override
+    {
+        if (!isValid())
+            return {};
+        if (t == QAccessible::Name)
+            return m_list->rowTitle(m_row);
+        if (t == QAccessible::Description)
+            return m_list->rowDescription(m_row);
+        return {};
+    }
+    void setText(QAccessible::Text, const QString&) override {}
+    QRect rect() const override
+    {
+        if (!isValid())
+            return {};
+        const QRect r = m_list->rowRect(m_row);
+        return QRect(m_list->mapToGlobal(r.topLeft()), r.size());
+    }
+    QAccessible::Role role() const override
+    {
+        return isValid() && m_list->row(m_row).header ? QAccessible::StaticText : QAccessible::ListItem;
+    }
+    QAccessible::State state() const override
+    {
+        QAccessible::State s;
+        if (!isValid()) {
+            s.invalid = true;
+            return s;
+        }
+        s.invisible = !m_list->isVisible();
+        s.offscreen = !m_list->rect().intersects(m_list->rowRect(m_row));
+        if (!m_list->row(m_row).header) {
+            s.selectable = true;
+            s.selected = m_list->isSelectedRow(m_row);
+        }
+        return s;
+    }
+    void* interface_cast(QAccessible::InterfaceType type) override
+    {
+        return type == QAccessible::ActionInterface ? static_cast<QAccessibleActionInterface*>(this) : nullptr;
+    }
+    QStringList actionNames() const override
+    {
+        return isValid() && !m_list->row(m_row).header ? QStringList{ pressAction() } : QStringList{};
+    }
+    void doAction(const QString& name) override
+    {
+        if (name == pressAction() && isValid())
+            m_list->activateRow(m_row);
+    }
+    QStringList keyBindingsForAction(const QString&) const override { return {}; }
+
+   private:
+    QPointer<PaletteResults> m_list;
+    int m_row;
+    quint64 m_generation;
+};
+
+class PaletteResultsAccessible : public QAccessibleWidget {
+   public:
+    explicit PaletteResultsAccessible(PaletteResults* list) : QAccessibleWidget(list, QAccessible::List) {}
+    ~PaletteResultsAccessible() override { clearRows(); }
+
+    int childCount() const override { return list()->rowCount(); }
+    QAccessibleInterface* child(int index) const override
+    {
+        if (index < 0 || index >= list()->rowCount())
+            return nullptr;
+        sync();
+        if (const auto it = m_rows.constFind(index); it != m_rows.constEnd())
+            return QAccessible::accessibleInterface(it.value());
+        auto* iface = new PaletteRowAccessible(list(), index);
+        m_rows.insert(index, QAccessible::registerAccessibleInterface(iface));
+        return iface;
+    }
+    int indexOfChild(const QAccessibleInterface* child) const override
+    {
+        sync();
+        for (auto it = m_rows.cbegin(); it != m_rows.cend(); ++it)
+            if (QAccessible::accessibleInterface(it.value()) == child)
+                return it.key();
+        return -1;
+    }
+    QAccessibleInterface* childAt(int x, int y) const override
+    {
+        const QPoint p = list()->mapFromGlobal(QPoint(x, y));
+        for (int i = 0; i < list()->rowCount(); ++i)
+            if (list()->rowRect(i).contains(p))
+                return child(i);
+        return nullptr;
+    }
+
+   private:
+    PaletteResults* list() const { return static_cast<PaletteResults*>(widget()); }
+    void sync() const
+    {
+        if (m_generation == list()->generation())
+            return;
+        clearRows();
+        m_generation = list()->generation();
+    }
+    void clearRows() const
+    {
+        for (QAccessible::Id id : std::as_const(m_rows))
+            QAccessible::deleteAccessibleInterface(id);
+        m_rows.clear();
+    }
+
+    mutable QHash<int, QAccessible::Id> m_rows;
+    mutable quint64 m_generation = 0;
+};
+
+QAccessibleInterface* paletteAccessibleFactory(const QString& className, QObject* object)
+{
+    if (className == QLatin1String("Zero::PaletteResults") && object && object->isWidgetType())
+        return new PaletteResultsAccessible(static_cast<PaletteResults*>(object));
+    return nullptr;
+}
+}  // namespace
+
 PaletteResults::PaletteResults(QWidget* parent) : QWidget(parent)
 {
+    static const bool accessibleFactoryInstalled = (QAccessible::installFactory(paletteAccessibleFactory), true);
+    Q_UNUSED(accessibleFactoryInstalled)
     setMouseTracking(true);
     setFocusPolicy(Qt::NoFocus);
     m_glide.setDuration(Tokens::durFast);
@@ -171,12 +314,52 @@ void PaletteResults::setRows(const QList<Row>& rows, const QList<PaletteCommand>
         }
     }
     m_scroll = 0;
+    ++m_generation;
     m_glide.stop();
     m_selectedRow = m_commandRows.isEmpty() ? -1 : m_commandRows.first();
     m_highlightY = m_selectedRow >= 0 ? m_tops.at(m_selectedRow) : 0;
     setFixedHeight(viewHeight());
     update();
+    if (QAccessible::isActive()) {
+        QAccessibleEvent reorder(this, QAccessible::ObjectReorder);
+        QAccessible::updateAccessibility(&reorder);
+    }
     emit selectionChanged();
+}
+
+QString PaletteResults::rowTitle(int index) const
+{
+    const Row& r = m_rows.at(index);
+    if (r.header)
+        return r.text;
+    return m_commands && r.command >= 0 && r.command < m_commands->size() ? m_commands->at(r.command).title : QString();
+}
+
+QString PaletteResults::rowDescription(int index) const
+{
+    const Row& r = m_rows.at(index);
+    if (r.header || !m_commands || r.command < 0 || r.command >= m_commands->size())
+        return {};
+    const PaletteCommand& c = m_commands->at(r.command);
+    QStringList parts;
+    if (!c.subtitle.isEmpty())
+        parts << c.subtitle;
+    if (!c.badge.isEmpty())
+        parts << c.badge;
+    if (!c.shortcut.isEmpty())
+        parts << c.shortcut.toString(QKeySequence::NativeText);
+    return parts.join(QStringLiteral(" · "));
+}
+
+QRect PaletteResults::rowRect(int index) const
+{
+    return QRect(0, m_tops.at(index) - m_scroll, width(), m_rows.at(index).header ? kHeaderHeight : kRowHeight);
+}
+
+void PaletteResults::activateRow(int index)
+{
+    if (index >= 0 && index < m_rows.size() && !m_rows.at(index).header)
+        emit activated(m_rows.at(index).command, false);
 }
 
 int PaletteResults::selectedCommand() const
@@ -248,6 +431,14 @@ void PaletteResults::select(int row, bool scroll, bool animate)
     }
     update();
     emit selectionChanged();
+    if (QAccessible::isActive()) {
+        if (QAccessibleInterface* iface = QAccessible::queryAccessibleInterface(this)) {
+            if (QAccessibleInterface* child = iface->child(row)) {
+                QAccessibleEvent selected(child, QAccessible::Selection);
+                QAccessible::updateAccessibility(&selected);
+            }
+        }
+    }
 }
 
 void PaletteResults::ensureVisible(int row)

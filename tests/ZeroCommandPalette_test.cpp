@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // ZeroCommandPalette + ZeroShortcutSheet: open / close, sections, keyboard navigation (wraps), Enter and Ctrl+Enter run the
 // callbacks, commands the provider leaves out are absent, Esc and backdrop clicks close and give the focus back.
+#include <QAccessible>
 #include <QApplication>
 #include <QLineEdit>
 #include <QTest>
@@ -161,6 +162,45 @@ class ZeroCommandPaletteTest : public QObject {
         for (int i = 0; i < ids.size(); ++i)
             QTest::keyClick(f.palette->input(), Qt::Key_Down);
         QCOMPARE(f.palette->selectedIndex(), 0);  // a full cycle returns to the start
+    }
+
+    void rowsAreAccessible()
+    {
+        Fixture f;
+        f.palette->open();
+        f.palette->setQuery("java");
+        QAccessibleInterface* list = QAccessible::queryAccessibleInterface(f.palette->results());
+        QVERIFY(list);
+        QCOMPARE(list->role(), QAccessible::List);
+        QVERIFY(list->childCount() >= 2);
+        QCOMPARE(list->child(0)->role(), QAccessible::StaticText);  // section header
+        int java = -1;
+        for (int i = 0; i < list->childCount(); ++i)
+            if (list->child(i)->text(QAccessible::Name) == QLatin1String("Settings: Java"))
+                java = i;
+        QVERIFY(java > 0);
+        QAccessibleInterface* item = list->child(java);
+        QCOMPARE(item->role(), QAccessible::ListItem);
+        QCOMPARE(list->indexOfChild(item), java);
+        QCOMPARE(item->parent(), list);
+        QVERIFY(item->state().selected);
+        QVERIFY(item->rect().isValid());
+
+        // A new query makes the old row interfaces invalid; the list hands out fresh ones.
+        f.palette->setQuery("vanilla");
+        QVERIFY(!item->isValid());
+        QAccessibleInterface* vanilla = nullptr;
+        for (int i = 0; i < list->childCount(); ++i)
+            if (list->child(i)->text(QAccessible::Name) == QLatin1String("Vanilla 1.21"))
+                vanilla = list->child(i);
+        QVERIFY(vanilla);
+        QVERIFY(vanilla->isValid());
+        QAccessibleActionInterface* action = vanilla->actionInterface();
+        QVERIFY(action);
+        QVERIFY(action->actionNames().contains(QAccessibleActionInterface::pressAction()));
+        action->doAction(QAccessibleActionInterface::pressAction());
+        QCOMPARE(f.log, (QStringList{ "play:vanilla" }));
+        QVERIFY(!f.palette->isOpen());
     }
 
     void enterRunsTheSelectedCommandAndCloses()

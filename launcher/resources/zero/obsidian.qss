@@ -254,6 +254,17 @@ QComboBox QLineEdit, QAbstractSpinBox QLineEdit {
     min-height: 0;
 }
 
+/* QLineEdit's own icon buttons (leading search icon, clear button) are QToolButtons: without this they inherit the
+   button min-height, which stretches them and pushes the icon ~8 px below the field's centre. */
+QLineEdit QToolButton {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-height: 0;
+    min-width: 0;
+}
+
+
 
 QTextEdit, QPlainTextEdit, QTextBrowser {
     background-color: @surface@;

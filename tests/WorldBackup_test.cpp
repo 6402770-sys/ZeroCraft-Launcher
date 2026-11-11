@@ -677,6 +677,33 @@ class WorldBackupTest : public QObject {
         QVERIFY(zeroLeftovers(saves).first().startsWith(".zero-replaced-W-"));
     }
 
+    void restoreTrashesTheOldWorldUnderAReadableName()
+    {
+        QTemporaryDir root;
+        const QString saves = root.filePath("saves");
+        const QString world = makeWorld(saves, "W", worldTree(6));
+        const QString dir = root.filePath("b");
+        const BackupResult backup = createBackup(world, dir, Kind::Manual, metaFor("W"));
+        QVERIFY(backup.ok);
+        QVERIFY(writeFile(world + "/extra.txt", QByteArray("x")));
+
+        QStringList trashed;
+        Hooks hooks = removeHooks();
+        const auto remove = hooks.trashPath;
+        hooks.trashPath = [&trashed, remove](const QString& path) {
+            trashed << path;
+            return remove(path);
+        };
+        const RestoreResult r = restoreBackup(backup.zipPath, world, dir, metaFor("W"), hooks);
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(trashed.size(), 1);
+        const QFileInfo info(trashed.first());
+        QVERIFY2(info.fileName().startsWith("W (replaced "), qPrintable(info.fileName()));  // what the Recycle Bin shows
+        QCOMPARE(QDir(info.absolutePath()).canonicalPath(), QDir(saves).canonicalPath());  // "Restore" there puts it back in saves
+        QVERIFY(zeroLeftovers(saves).isEmpty());
+        QVERIFY(!QFileInfo::exists(world + "/extra.txt"));
+    }
+
     void restoreRefusesWithoutFreeSpaceBeforeTouchingAnything()
     {
         QTemporaryDir root;

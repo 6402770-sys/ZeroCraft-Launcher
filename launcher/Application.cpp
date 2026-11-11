@@ -56,6 +56,7 @@
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
+#include "zero/ZeroLanguage.h"  // ZERO
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/instanceview/AccessibleInstanceView.h"
 
@@ -945,7 +946,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         {
             m_globalSettingsProvider = std::make_unique<GenericPageProvider>(tr("Settings"));
             m_globalSettingsProvider->addPage<LauncherPage>();
-            m_globalSettingsProvider->addPage<LanguagePage>();
+            if (!Zero::Language::kEnglishOnly)  // ZERO: hidden while the launcher is English only
+                m_globalSettingsProvider->addPage<LanguagePage>();
             m_globalSettingsProvider->addPage<AppearancePage>();
             m_globalSettingsProvider->addPage<MinecraftPage>();
             m_globalSettingsProvider->addPage<JavaPage>();
@@ -1130,7 +1132,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     // load translations
     {
         m_translations.reset(new TranslationsModel("translations"));
-        m_translations->downloadIndex();
+        if (Zero::Language::kEnglishOnly) {
+            // ZERO: English only for now (no translator, en_US locale, no index download); see zero/ZeroLanguage.h.
+            m_translations->selectLanguage(Zero::Language::kEnglishCode);
+        } else {
+            m_translations->downloadIndex();
+        }
         qInfo() << "Your language is" << m_translations->selectedLanguage();
         qInfo() << "<> Translations loaded.";
     }
@@ -1345,7 +1352,7 @@ bool Application::createSetupWizard()
     }();
     bool askjava = BuildConfig.JAVA_DOWNLOADER_ENABLED && !javaRequired && !settings()->get("AutomaticJavaDownload").toBool() &&
                    !settings()->get("AutomaticJavaSwitch").toBool() && !settings()->get("UserAskedAboutAutomaticJavaDownload").toBool();
-    bool languageRequired = settings()->get("Language").toString().isEmpty();
+    bool languageRequired = !Zero::Language::kEnglishOnly && settings()->get("Language").toString().isEmpty();  // ZERO: English only
     bool pasteInterventionRequired = settings()->get("PastebinURL") != "";
     bool validWidgets = m_themeManager->isValidApplicationTheme(settings()->get("ApplicationTheme").toString());
     bool validIcons = m_themeManager->isValidIconTheme(settings()->get("IconTheme").toString());

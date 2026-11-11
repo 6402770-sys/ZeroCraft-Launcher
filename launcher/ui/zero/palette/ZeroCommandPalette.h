@@ -96,6 +96,16 @@ class PaletteResults : public QWidget {
     QRect selectedRowRect() const;
     int scrollOffset() const { return m_scroll; }
 
+    // Accessibility: every row (header or command) is one child of the list's accessible interface.
+    int rowCount() const { return int(m_rows.size()); }
+    const Row& row(int index) const { return m_rows.at(index); }
+    QString rowTitle(int index) const;
+    QString rowDescription(int index) const;
+    QRect rowRect(int index) const;  ///< widget coordinates
+    bool isSelectedRow(int index) const { return index == m_selectedRow; }
+    void activateRow(int index);     ///< same as clicking a command row; headers do nothing
+    quint64 generation() const { return m_generation; }  ///< bumped by setRows(); stale row interfaces become invalid
+
    signals:
     void selectionChanged();
     void activated(int commandIndex, bool secondary);
@@ -119,6 +129,7 @@ class PaletteResults : public QWidget {
     const QList<PaletteCommand>* m_commands = nullptr;
     QString m_emptyText;
     int m_selectedRow = -1;
+    quint64 m_generation = 0;
     int m_scroll = 0;
     qreal m_highlightY = 0;
     QVariantAnimation m_glide;

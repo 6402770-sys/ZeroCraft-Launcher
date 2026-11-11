@@ -2,6 +2,8 @@
 // Library 2.0 widgets that do not need the Application: FilterChipBar (chips, selection, reuse, fallback, scrolling arrows),
 // FlowLayout (wrapping), Artwork::cover (cover crop).
 #include <QAbstractButton>
+#include <QAccessible>
+#include <QLabel>
 #include <QApplication>
 #include <QImage>
 #include <QListView>
@@ -16,6 +18,7 @@
 #include "InstanceList.h"
 #include "ui/zero/pages/FlowLayout.h"
 #include "ui/zero/pages/ZeroInstanceDelegate.h"
+#include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "zero/profiles/LibraryFilter.h"
@@ -53,6 +56,31 @@ std::unique_ptr<FilterChipBar> makeBar(int width)
 class ZeroLibraryTest : public QObject {
     Q_OBJECT
    private slots:
+    void clickableCardIsAnAccessibleButton()
+    {
+        Zero::ZeroCard card;
+        card.setClickable(true);
+        new QLabel(QStringLiteral("Storage"), &card);
+        QSignalSpy clicked(&card, &Zero::ZeroCard::clicked);
+        QAccessibleInterface* iface = QAccessible::queryAccessibleInterface(&card);
+        QVERIFY(iface);
+        QCOMPARE(iface->role(), QAccessible::Button);
+        QCOMPARE(iface->text(QAccessible::Name), QStringLiteral("Storage"));  // falls back to the card's first text
+        card.setAccessibleName(QStringLiteral("Minecraft"));
+        QCOMPARE(iface->text(QAccessible::Name), QStringLiteral("Minecraft"));
+        QVERIFY(iface->actionInterface());
+        iface->actionInterface()->doAction(QAccessibleActionInterface::pressAction());
+        QCOMPARE(clicked.count(), 1);
+
+        Zero::ZeroCard plain;  // not clickable: a group, and "press" does nothing
+        QSignalSpy plainClicked(&plain, &Zero::ZeroCard::clicked);
+        QAccessibleInterface* plainIface = QAccessible::queryAccessibleInterface(&plain);
+        QCOMPARE(plainIface->role(), QAccessible::Grouping);
+        if (QAccessibleActionInterface* a = plainIface->actionInterface())
+            a->doAction(QAccessibleActionInterface::pressAction());
+        QCOMPARE(plainClicked.count(), 0);
+    }
+
     void initTestCase()
     {
         qRegisterMetaType<Chip>();

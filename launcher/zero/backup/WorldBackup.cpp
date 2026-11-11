@@ -720,9 +720,18 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
         return fail(message);
     }
 
-    // e. the old world is also in the safety backup: a failure here must not fail the restore
-    if (hadWorld && !hooks.trashPath(replaced))
-        qWarning() << "ZERO restore: could not remove the replaced world folder" << replaced << "(left in place, safe to delete)";
+    // e. the old world is also in the safety backup: a failure here must not fail the restore. It gets a readable name
+    //    first, so the Recycle Bin shows which world it was (and "Restore" there brings it back as a separate world).
+    if (hadWorld) {
+        const QString readable = QDir(saves).filePath(
+            tr("%1 (replaced %2)").arg(folder, QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH.mm.ss"))));
+        const bool renamed = !QFileInfo::exists(readable) && hooks.rename(replaced, readable);
+        if (!hooks.trashPath(renamed ? readable : replaced)) {
+            // Keep the leftover hidden (".zero-*", like an interrupted restore) instead of showing up as an extra world.
+            const QString left = renamed && !hooks.rename(readable, replaced) ? readable : replaced;
+            qWarning() << "ZERO restore: could not remove the replaced world folder" << left << "(left in place, safe to delete)";
+        }
+    }
 
     result.ok = true;
     return result;

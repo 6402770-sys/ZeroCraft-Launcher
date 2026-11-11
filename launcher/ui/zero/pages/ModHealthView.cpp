@@ -297,7 +297,8 @@ void ModHealthView::rebuild()
         top->setSpacing(Tokens::spaceMd);
 
         QString iconName, headline;
-        int toneIndex = 2;  // 0 danger, 1 warning, 2 success
+        int toneIndex = 2;  // 0 danger, 1 warning, 2 success, 3 neutral
+        const int readable = std::max(0, r.modsScanned - r.unknown);  // Unknown findings are unreadable jars, one per file
         if (r.confirmed > 0) {
             iconName = QStringLiteral("circle-x");
             headline = r.confirmed == 1 ? tr("1 problem will stop the game") : tr("%1 problems will stop the game").arg(r.confirmed);
@@ -307,6 +308,11 @@ void ModHealthView::rebuild()
             const int n = r.likely + r.possible;
             headline = n == 1 ? tr("1 thing to check") : tr("%1 things to check").arg(n);
             toneIndex = 1;
+        } else if (r.unknown > 0 && readable == 0) {
+            // Nothing could be read, so nothing was really checked: a green "No problems found" would be a guess.
+            iconName = QStringLiteral("info");
+            headline = r.unknown == 1 ? tr("Couldn't read this mod") : tr("Couldn't read any of the %1 mods").arg(r.unknown);
+            toneIndex = 3;
         } else {
             iconName = QStringLiteral("circle-check");
             headline = tr("No problems found");
@@ -316,7 +322,7 @@ void ModHealthView::rebuild()
         icon->setAlignment(Qt::AlignCenter);
         auto applyIcon = [icon, iconName, toneIndex]() {
             const auto& t = Theme::current();
-            const QColor color = toneIndex == 0 ? t.danger : toneIndex == 1 ? t.warning : t.success;
+            const QColor color = toneIndex == 0 ? t.danger : toneIndex == 1 ? t.warning : toneIndex == 2 ? t.success : t.textSecondary;
             icon->setPixmap(Icons::pixmap(iconName, color, 28, icon->devicePixelRatioF()));
         };
         applyIcon();
@@ -328,7 +334,12 @@ void ModHealthView::rebuild()
         texts->setSpacing(2);
         texts->addWidget(makeLabel(headline, Role::Title, card));
         QStringList parts;
-        parts << (r.modsScanned == 1 ? tr("Checked 1 mod") : tr("Checked %1 mods").arg(r.modsScanned));
+        if (r.unknown > 0 && readable == 0)
+            parts << (r.modsScanned == 1 ? tr("1 mod") : tr("%1 mods").arg(r.modsScanned));
+        else if (r.unknown > 0)
+            parts << tr("Checked %1 of %2 mods").arg(readable).arg(r.modsScanned);
+        else
+            parts << (r.modsScanned == 1 ? tr("Checked 1 mod") : tr("Checked %1 mods").arg(r.modsScanned));
         const QString loader = (loaderName(m_context.loader) + QLatin1Char(' ') + m_context.loaderVersion).trimmed();
         if (!loader.isEmpty())
             parts << loader;

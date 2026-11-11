@@ -51,6 +51,7 @@
 
 #include "Application.h"
 #include "settings/SettingsObject.h"
+#include "zero/ZeroLanguage.h"
 
 static constexpr QLatin1String g_defaultLangCode("en_US");
 
@@ -435,11 +436,18 @@ std::optional<Language> TranslationsModel::findLanguageAsOptional(const QString&
 void TranslationsModel::setUseSystemLocale(const bool useSystemLocale) const
 {
     APPLICATION->settings()->set("UseSystemLocale", useSystemLocale);
+    if (Zero::Language::kEnglishOnly) {
+        QLocale::setDefault(QLocale(Zero::Language::kEnglishCode));
+        return;
+    }
     QLocale::setDefault(useSystemLocale ? QLocale::system() : QLocale(selectedLanguage()));
 }
 
 bool TranslationsModel::selectLanguage(QString key) const
 {
+    // ZERO: English only until ZERO has its own translations (see zero/ZeroLanguage.h).
+    if (Zero::Language::kEnglishOnly)
+        key = Zero::Language::kEnglishCode;
     QString& langCode = key;
     auto langPtr = findLanguageAsOptional(key);
 
@@ -469,7 +477,7 @@ bool TranslationsModel::selectLanguage(QString key) const
      * In a multithreaded application, the default locale should be set at application startup, before any non-GUI threads are created.
      * This function is not reentrant.
      */
-    const bool useSystemLocale = APPLICATION->settings()->get("UseSystemLocale").toBool();
+    const bool useSystemLocale = !Zero::Language::kEnglishOnly && APPLICATION->settings()->get("UseSystemLocale").toBool();
     QLocale::setDefault(useSystemLocale ? QLocale::system() : QLocale(langCode));
 
     // if it's the default UI language, finish

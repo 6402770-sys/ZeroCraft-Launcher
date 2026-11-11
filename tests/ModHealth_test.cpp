@@ -541,6 +541,16 @@ class ModHealthTest : public QObject {
         QVERIFY(run({ jarOf("legacy.jar", { legacy }), jarOf("api.jar", { api }) }, fabricCtx()).isClean());
     }
 
+    void findingsUseNaturalOrder()
+    {
+        const Report r = run({ brokenJar("mod10.jar"), brokenJar("Mod2.jar"), brokenJar("mod1.jar") }, fabricCtx());
+        QCOMPARE(r.unknown, 3);
+        QStringList order;
+        for (const Finding& f : r.findings)
+            order << f.fileNames.value(0);
+        QCOMPARE(order, (QStringList{ "mod1.jar", "Mod2.jar", "mod10.jar" }));
+    }
+
     void brokenJarLowersMissing()
     {
         ModEntry a = mod(LoaderFormat::Fabric, "a");

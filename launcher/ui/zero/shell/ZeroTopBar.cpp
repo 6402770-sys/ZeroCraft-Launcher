@@ -25,6 +25,7 @@ constexpr int kTitleGap = 10;  // title to subtitle
 constexpr int kCrumbGap = 6;   // crumb to chevron to title
 constexpr int kChevron = 12;
 constexpr int kMinTitleWidth = 120;
+constexpr int kMaxFullTitleWidth = 320;
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -141,7 +142,13 @@ QSize ChromeTitle::sizeHint() const
 
 QSize ChromeTitle::minimumSizeHint() const
 {
-    return { kMinTitleWidth, QFontMetrics(Style::font(Role::Title)).height() };
+    // Keep the breadcrumb and the whole title while the row can: the search pill (down to its minimum) and the subtitle
+    // give way first. Very long titles still elide past kMaxFullTitleWidth.
+    const QFontMetrics tm(Style::font(Role::Title));
+    int w = tm.horizontalAdvance(m_title);
+    if (!m_crumb.isEmpty())
+        w += tm.horizontalAdvance(m_crumb) + 2 * kCrumbGap + kChevron;
+    return { qBound(kMinTitleWidth, w + 2, kMaxFullTitleWidth), tm.height() };
 }
 
 void ChromeTitle::paintEvent(QPaintEvent*)

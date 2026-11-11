@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-11 (session 4, Mission 002) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-11 (session 5, Mission 002) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -41,10 +41,26 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   instance grouped by address, status ping (`launcher/zero/servers/`), details panel, Play on server (quick join).
   Downloads/Update center was skipped for now: it hooks into Prism's network/task engine (higher regression risk on a
   core path); Storage Manager and Java Doctor are self-contained and came first.
+- **Session 5 (owner present)**: real-app test of the dev build against a temp data dir (rail navigation, Back up now,
+  Restore incl. confirm dialog + safety row + Recycle Bin, palette query, theme Apply + restart persistence, servers
+  ping against a local fake status server) driven through Windows UI Automation and posted mouse messages. Fixes from
+  that run (owner chose "English for now" over translating ZERO): **English-only UI** (`zero/ZeroLanguage.h`; Prism/Qt
+  translations no longer mix in, dates en_US, Language settings hidden), Mod Health headline "Couldn't read any of the
+  N mods" (neutral) instead of a green "No problems found" when nothing was readable + "Checked X of Y mods" + natural
+  sort, search-field icon centred on every page (qss `QLineEdit QToolButton`), accessible clickable cards and palette
+  rows, restored-over world goes to the Recycle Bin as `<folder> (replaced <date>)`, Crash Detective no-logs caption
+  removed and the top-bar title keeps "Tools › Crash Detective" (search pill shrinks first).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
 - Result at end of session 4: **45/45 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.
+  Session 5: same (45/45 + 25/25), with new cases `findingsUseNaturalOrder`, `rowsAreAccessible`,
+  `clickableCardIsAnAccessibleButton`, `restoreTrashesTheOldWorldUnderAReadableName`.
+- Driving the real app without stealing focus (session 5): Windows UI Automation from PowerShell (`AutomationElement`,
+  Invoke / SelectionItem / Value patterns; Qt exposes rail buttons, list items, the palette field and rows, cards) plus
+  `PostMessage` WM_LBUTTONDOWN/UP for plain mouse clicks, and `PrintWindow` for captures. Modal dialogs (QMessageBox)
+  are separate top-level windows: find them with `EnumWindows` by process id; a UIA call into the main window blocks
+  while one is open. Status pings: a tiny local fake status server on 127.0.0.1 answers handshake/status/ping.
 - `FileSystem` investigation: 12 of its 19 functions pass and now run in `build.sh test`. The 7 `test_link*` symlink
   cases are not run: on Windows without Developer Mode, symlinks need privileges, so `FS::create_link` launches
   `zerolauncher_filelink.exe` elevated (UAC prompt); the elevated process doesn't inherit the MSYS2 PATH (missing-DLL
@@ -130,7 +146,9 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
   Release blockers in `docs/zero/CREDENTIALS.md`. `curseforge:`/`modrinth:` handlers shared with Prism.
 - No updater, installer not built (NSIS template rebranded only; windeployqt not set up).
 - Library details panel: its own "● Running" badge also shows while Preparing (LaunchTask sets running early).
-- Library search field's leading icon sits ~8 px low (pre-existing).
+- **English only**: ZERO has no translations yet, so every language setting is ignored (see `docs/zero/ARCHITECTURE.md`,
+  "English only for now"). Native Windows dialogs (file pickers) still follow the OS language.
+- Without a Microsoft account the Quick Setup wizard (login page) shows on every start (upstream Prism behaviour).
 - At 1100×700 the Library details panel scrolls ("Delete" below the fold); Appearance page scrolls at 1280×800.
 - `ZeroCard` hover shadow is drawn inside the card (a widget can't paint outside its rect); grid cards get a real lift.
 - Crash Detective regexes are validated only on self-authored fixtures (see session-1 notes in git history).

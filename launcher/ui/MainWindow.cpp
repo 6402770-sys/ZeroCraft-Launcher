@@ -110,6 +110,7 @@
 #include "ui/dialogs/skins/SkinManageDialog.h"
 #include "ui/instanceview/InstanceDelegate.h"
 #include "ui/zero/ZeroToast.h"
+#include "zero/ZeroLanguage.h"  // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackup.h"  // ZERO
 #include "ui/zero/ZeroTheme.h"
@@ -2541,8 +2542,10 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         { "proxy-settings", tr("Proxy"), { tr("network"), tr("http"), tr("socks"), tr("connection") } },
     };
     for (const SettingsPage& s : settingsPages) {
-        PaletteCommand c;
         const QString pageId = QString::fromLatin1(s.id);
+        if (Zero::Language::kEnglishOnly && pageId == QLatin1String("language-settings"))
+            continue;  // the Language page is hidden while ZERO is English only
+        PaletteCommand c;
         c.id = QStringLiteral("settings:") + pageId;
         c.kind = Kind::Setting;
         c.title = tr("Settings: %1").arg(s.title);

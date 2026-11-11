@@ -896,6 +896,7 @@ SET(LAUNCHER_SOURCES
     zero/palette/CommandMatcher.cpp
     zero/palette/CommandMatcher.h
     zero/profiles/InstanceProfile.cpp
+    zero/ZeroLanguage.h
     zero/profiles/InstanceProfile.h
     zero/profiles/LibraryFilter.cpp
     zero/profiles/LibraryFilter.h

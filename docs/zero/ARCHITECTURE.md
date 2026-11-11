@@ -24,6 +24,15 @@ install/launch, auth, mod platforms, tasks, networking) is kept and only changed
 - **Shared upstream infrastructure** (meta server, Prism MSA client ID, CurseForge key) is reused for dev builds only;
   `-DZERO_RELEASE_BUILD=ON` refuses to build with upstream credentials. See `docs/zero/CREDENTIALS.md`.
 - **No mock UI.** Navigation entries appear only when their feature works.
+- **English only for now** (`launcher/zero/ZeroLanguage.h`, `Zero::Language::kEnglishOnly`). ZERO's own strings have no
+  translations, so loading Prism's/Qt's translations mixed languages ("Cuentas" next to "Accounts", Spanish dates in
+  English sentences). `TranslationsModel::selectLanguage` always picks `en_US` (no translator, `QLocale` default en_US,
+  `UseSystemLocale` ignored), the translation index is not downloaded, and the Language settings page, its palette entry
+  and the setup wizard's language page are hidden. The saved `Language` setting is left untouched. To add translations
+  later: ship ZERO `.qm` files, install them next to Prism's translator, and flip the flag.
+- **Accessibility of painted widgets.** `ZeroCard` gets a factory interface (clickable = Button with a "press" action that
+  emits `clicked()`, name falls back to its first label); `PaletteResults` exposes one ListItem per row (StaticText for
+  headers, "press" runs the command) whose interfaces are invalidated by a generation counter on every `setRows()`.
 
 ## Build
 MSYS2 UCRT64 (GCC, Qt 6.12, CMake, Ninja) — `scripts/zero/build.sh`. Helper Java jars target `--release 8`.
@@ -100,7 +109,7 @@ The first ZERO feature that writes inside user worlds. Rule: never silently over
 - **Restore order** (`restoreBackup`, stops at the first failure with the original world untouched): (a) `verifyBackup`; (b) if the world exists, a verified `safety` backup of it; (c) extract into
   the sibling `<saves>/.zero-restore-<folder>-<ts>` (same volume, so renames are cheap) and re-hash the staged files from disk against the manifest; (d) rename the world to
   `<saves>/.zero-replaced-<folder>-<ts>`, rename staging to `<folder>`; if the second rename fails the first is rolled back (and if that fails too the error names the `.zero-replaced-*` folder);
-  (e) only after success trash the replaced folder (Recycle Bin, fallback delete): a failure there is logged and the restore still succeeds, the old world is also in the safety backup;
+  (e) only after success trash the replaced folder (Recycle Bin, fallback delete), first renamed to `<folder> (replaced yyyy-MM-dd HH.mm.ss)` so the Recycle Bin shows which world it was and its "Restore" brings it back as a separate world; if the trash fails it is renamed back to the hidden `.zero-replaced-*` name; a failure there is logged and the restore still succeeds, the old world is also in the safety backup;
   (f) any failure after (c) started deletes the staging folder. Folder renames retry a few times (antivirus / indexer handles on Windows) but never into an existing destination.
 - **Leftover folders**: an interrupted restore (crash, power loss) can leave `.zero-restore-*` or `.zero-replaced-*` next to the worlds. They are never auto-deleted (a `.zero-replaced-*` may be the only
   copy of a world), and `scanWorldsDir` ignores every folder starting with `.zero-`, so they do not show up as worlds. The user can delete or rename them by hand.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ModHealth.h"
 
+#include <QCollator>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -8,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QMap>
 #include <QSet>
 #include <algorithm>
@@ -204,10 +206,14 @@ class Analyzer {
         Report report;
         report.modsScanned = int(enabled.size());
         report.findings = m_findings;
-        std::stable_sort(report.findings.begin(), report.findings.end(), [](const Finding& a, const Finding& b) {
+        // Natural order ("mod2" before "mod10"), the same for every UI language.
+        QCollator collator{ QLocale(QLocale::English) };
+        collator.setNumericMode(true);
+        collator.setCaseSensitivity(Qt::CaseInsensitive);
+        std::stable_sort(report.findings.begin(), report.findings.end(), [&collator](const Finding& a, const Finding& b) {
             if (a.confidence != b.confidence)
                 return int(a.confidence) < int(b.confidence);
-            const int n = a.args.value(0).compare(b.args.value(0), Qt::CaseInsensitive);
+            const int n = collator.compare(a.args.value(0), b.args.value(0));
             if (n != 0)
                 return n < 0;
             if (a.kind != b.kind)

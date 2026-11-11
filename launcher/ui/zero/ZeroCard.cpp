@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ZeroCard.h"
 
+#include <QAccessible>
+#include <QAccessibleWidget>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
@@ -11,8 +14,56 @@
 
 namespace Zero {
 
+namespace {
+// Clickable cards are buttons for screen readers and UI Automation: "press" does what a click does.
+class CardAccessible : public QAccessibleWidget {
+   public:
+    explicit CardAccessible(ZeroCard* card) : QAccessibleWidget(card, QAccessible::Grouping) {}
+
+    QAccessible::Role role() const override { return card()->isClickable() ? QAccessible::Button : QAccessible::Grouping; }
+    QString text(QAccessible::Text t) const override
+    {
+        QString s = QAccessibleWidget::text(t);
+        if (t == QAccessible::Name && s.isEmpty() && card()->isClickable()) {
+            // No accessible name set: a button is announced by its first visible text (the card's title).
+            for (const QLabel* label : card()->findChildren<QLabel*>())
+                if (!label->text().isEmpty())
+                    return label->text();
+        }
+        return s;
+    }
+    QStringList actionNames() const override
+    {
+        QStringList names = QAccessibleWidget::actionNames();
+        if (card()->isClickable() && !names.contains(pressAction()))
+            names.prepend(pressAction());
+        return names;
+    }
+    void doAction(const QString& name) override
+    {
+        if (name == pressAction() && card()->isClickable() && card()->isEnabled()) {
+            emit card()->clicked();
+            return;
+        }
+        QAccessibleWidget::doAction(name);
+    }
+
+   private:
+    ZeroCard* card() const { return static_cast<ZeroCard*>(widget()); }
+};
+
+QAccessibleInterface* cardAccessibleFactory(const QString& className, QObject* object)
+{
+    if (className == QLatin1String("Zero::ZeroCard") && object && object->isWidgetType())
+        return new CardAccessible(static_cast<ZeroCard*>(object));
+    return nullptr;
+}
+}  // namespace
+
 ZeroCard::ZeroCard(QWidget* parent) : QFrame(parent), m_hover(new Motion::StateAnimator(this))
 {
+    static const bool accessibleFactoryInstalled = (QAccessible::installFactory(cardAccessibleFactory), true);
+    Q_UNUSED(accessibleFactoryInstalled)
     setFrameShape(QFrame::NoFrame);
     setAttribute(Qt::WA_Hover, true);
     setContentsMargins(Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg);

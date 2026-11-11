@@ -530,8 +530,8 @@ void CrashDetectiveView::showResult(const Result& result)
     }
 
     if (result.sources.isEmpty()) {
-        m_caption->setText(tr("No log files were found for this instance."));
-        m_caption->setVisible(true);
+        m_caption->clear();  // the empty state below already says it
+        m_caption->setVisible(false);
         m_stack->setCurrentWidget(m_noLogs);
         emit analysisFinished();
         return;

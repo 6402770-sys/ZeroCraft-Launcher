@@ -81,6 +81,8 @@ class ServerRowDelegate : public QStyledItemDelegate {
 
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+    /// The favorite star at the right end of the row (click toggles it without selecting the row).
+    bool editorEvent(QEvent* event, QAbstractItemModel* model, const QStyleOptionViewItem& option, const QModelIndex& index) override;
 };
 
 /// "123 / 500 players", "123 players", or empty when the server did not report players.

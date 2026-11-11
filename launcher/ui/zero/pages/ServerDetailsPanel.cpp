@@ -21,6 +21,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
+#include "FavoriteStar.h"
 
 namespace Zero {
 
@@ -89,6 +90,7 @@ ServerDetailsPanel::ServerDetailsPanel(QWidget* parent) : ZeroCard(parent)
     m_name->setAlignment(Qt::AlignCenter);
     lay->addWidget(m_name);
     lay->addSpacing(2);
+    m_favorite = new FavoriteButton(Favorites::Kind::Server, content);
 
     // address (monospace in every theme: no role) + copy
     m_address = new ElidedLabel(content);
@@ -121,7 +123,9 @@ ServerDetailsPanel::ServerDetailsPanel(QWidget* parent) : ZeroCard(parent)
     m_disclaimer = makeWrapped(Role::Caption, Qt::AlignHCenter | Qt::AlignTop, content);
     m_disclaimer->setText(serverStatusDisclaimer());
     lay->addWidget(m_disclaimer);
-    lay->addSpacing(Tokens::spaceLg);
+    lay->addSpacing(Tokens::spaceSm);
+    lay->addWidget(m_favorite, 0, Qt::AlignHCenter);
+    lay->addSpacing(Tokens::spaceMd);
 
     // stats rows (same grid as the other details panels)
     auto* stats = new QGridLayout;
@@ -223,6 +227,7 @@ void ServerDetailsPanel::setServer(const Servers::VaultServer& server, const Ser
     m_icon->setIcon(server.iconPng);
     m_name->setFullText(server.displayName());
     m_address->setFullText(server.address);
+    m_favorite->setKey(server.address);
 
     using State = Servers::PingResult::State;
     if (result) {

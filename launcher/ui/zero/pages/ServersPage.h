@@ -72,6 +72,7 @@ class ServersPage : public ShellPage {
     void rebuildInstanceCombo();
     QString effectiveInstanceFilter() const;
     void applyFilters();
+    void refreshFavoriteIcon();
     void updateState();
     void syncDetails();
     void syncBusy();
@@ -109,6 +110,7 @@ class ServersPage : public ShellPage {
     QString m_instanceFilter;  // instance id, empty = all (kept even while that instance has no servers)
     Servers::SortMode m_sort = Servers::SortMode::Name;
     Motion::ItemReveal* m_reveal = nullptr;
+    QPushButton* m_favoritesOnly = nullptr;
 };
 
 }  // namespace Zero

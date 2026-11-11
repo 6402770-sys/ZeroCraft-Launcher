@@ -72,6 +72,7 @@ class WorldsPage : public ShellPage {
     void rebuildInstanceCombo();
     QString effectiveInstanceFilter() const;
     void applyFilters();
+    void refreshFavoriteIcon();
     void updateState();
     void syncDetails();
     void syncRunning();
@@ -106,6 +107,7 @@ class WorldsPage : public ShellPage {
     QString m_instanceFilter;  // instance id, empty = all (kept even while that instance has no worlds)
     Worlds::SortMode m_sort = Worlds::SortMode::Recent;
     Motion::ItemReveal* m_reveal = nullptr;
+    QPushButton* m_favoritesOnly = nullptr;
 };
 
 }  // namespace Zero

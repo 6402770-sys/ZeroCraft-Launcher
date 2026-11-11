@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ServersPage.h"
 
+#include <algorithm>
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QDeadlineTimer>
@@ -32,6 +33,7 @@
 #include "ui/zero/ZeroToast.h"
 #include "ui/zero/ZeroReveal.h"
 #include "ui/zero/ZeroSkeleton.h"
+#include "zero/favorites/FavoriteStore.h"
 
 namespace Zero {
 
@@ -93,6 +95,13 @@ ServersPage::ServersPage(QWidget* parent)
     toolbarRow->setSpacing(Tokens::spaceLg);
     toolbarRow->addWidget(m_search);
     toolbarRow->addStretch(1);
+    m_favoritesOnly = new QPushButton(tr("Favorites"), this);
+    Style::setProperty(m_favoritesOnly, "zeroVariant", "ghost");
+    m_favoritesOnly->setCheckable(true);
+    m_favoritesOnly->setIconSize(QSize(16, 16));
+    m_favoritesOnly->setToolTip(tr("Show only your favorites. Click the star on a row to add one."));
+    m_favoritesOnly->setVisible(Favorites::FavoriteStore::instance() != nullptr);
+    toolbarRow->addWidget(m_favoritesOnly);
     toolbarRow->addWidget(m_instanceCombo);
     toolbarRow->addWidget(m_sortCombo);
     toolbarColumn->addLayout(toolbarRow);
@@ -188,6 +197,20 @@ ServersPage::ServersPage(QWidget* parent)
         applyFilters();
         m_reveal->start();
     });
+    m_favoritesOnly->setChecked(APPLICATION->settings()->get("ZeroServersFavoritesOnly").toBool());
+    connect(m_favoritesOnly, &QPushButton::toggled, this, [this](bool on) {
+        APPLICATION->settings()->set("ZeroServersFavoritesOnly", on);
+        refreshFavoriteIcon();
+        applyFilters();
+        m_reveal->start();
+    });
+    if (auto* store = Favorites::FavoriteStore::instance()) {
+        // a star clicked on a row or in the details panel: favorites move to the top (or out of the favorites-only view)
+        connect(store, &Favorites::FavoriteStore::changed, this, [this](Favorites::Kind kind, const QString&, bool) {
+            if (kind == Favorites::Kind::Server)
+                applyFilters();
+        });
+    }
 
     connect(m_scanner, &Servers::ServerVaultScanner::listChanged, this, &ServersPage::onListChanged);
     connect(m_scanner, &Servers::ServerVaultScanner::scanningChanged, this, [this](bool scanning) { m_refresh->setEnabled(!scanning); });
@@ -229,8 +252,16 @@ ServersPage::ServersPage(QWidget* parent)
     updateState();
 }
 
+void ServersPage::refreshFavoriteIcon()
+{
+    const auto& t = Theme::current();
+    m_favoritesOnly->setIcon(m_favoritesOnly->isChecked() ? Icons::filledIcon(QStringLiteral("star"), t.highlight)
+                                                          : Icons::icon(QStringLiteral("star"), t.textSecondary));
+}
+
 void ServersPage::refreshIcons()
 {
+    refreshFavoriteIcon();
     const auto& t = Theme::current();
     m_refresh->setIcon(Icons::icon(QStringLiteral("refresh-cw"), t.textSecondary));
     const QIcon searchIcon = Icons::icon(QStringLiteral("search"), t.textTertiary);
@@ -359,17 +390,23 @@ QString ServersPage::effectiveInstanceFilter() const
 
 void ServersPage::applyFilters()
 {
+    const auto* store = Favorites::FavoriteStore::instance();
+    const bool favoritesOnly = m_favoritesOnly->isChecked();
     const QString instance = effectiveInstanceFilter();
     const QString text = m_search->text();
     QList<Servers::VaultServer> rows;
     for (const auto& s : m_scanner->servers()) {
         if (!instance.isEmpty() && !s.inInstance(instance))
             continue;
+        if (favoritesOnly && !(store && store->contains(Favorites::Kind::Server, s.address)))
+            continue;
         if (!Servers::matchesSearch(s, text))
             continue;
         rows.append(s);
     }
     Servers::sortServers(rows, m_sort, m_pinger->results());
+    if (store)  // favorites first, each group in the chosen order
+        std::stable_partition(rows.begin(), rows.end(), [store](const auto& r) { return store->contains(Favorites::Kind::Server, r.address); });
 
     // Same servers in the same order (a rescan, a ping that did not change the sort): no reset, no blink.
     if (rows == m_model->servers()) {
@@ -414,7 +451,7 @@ void ServersPage::updateState()
 {
     const int total = static_cast<int>(m_scanner->servers().size());
     const int shown = m_model->rowCount();
-    const bool filtering = !m_search->text().trimmed().isEmpty() || !effectiveInstanceFilter().isEmpty();
+    const bool filtering = !m_search->text().trimmed().isEmpty() || !effectiveInstanceFilter().isEmpty() || m_favoritesOnly->isChecked();
 
     QString subtitle;
     if (!m_scanner->hasScanned()) {
@@ -479,6 +516,11 @@ void ServersPage::playOn(const QString& address, const QString& instanceId)
 
 void ServersPage::clearFilters()
 {
+    {
+        const QSignalBlocker blocker(m_favoritesOnly);
+        m_favoritesOnly->setChecked(false);
+        APPLICATION->settings()->set("ZeroServersFavoritesOnly", false);
+    }
     {
         const QSignalBlocker blocker(m_search);
         m_search->clear();

@@ -672,6 +672,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // legacy ZeroReduceMotion=true keeps meaning "off" (Zero::Motion::resolveEnabled).
         m_settings->registerSetting("ZeroMotion", QString());
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
+        m_settings->registerSetting("ZeroWorldsFavoritesOnly", false);  // Worlds page: show only favorite worlds
+        m_settings->registerSetting("ZeroServersFavoritesOnly", false);  // Servers page: show only favorite servers
         m_settings->registerSetting("ZeroWorldsSort", QString("recent"));  // Worlds page: "recent" | "name" | "size" | "instance"
         m_settings->registerSetting("ZeroScreenshotsSort", QString("newest"));  // Screenshots page: "newest" | "oldest" | "instance"
         m_settings->registerSetting("ZeroScreenshotsInstance", QString());  // Screenshots page: instance id filter, empty = all instances

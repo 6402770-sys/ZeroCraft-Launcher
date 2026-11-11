@@ -15,6 +15,7 @@ class QStackedLayout;
 class QToolButton;
 
 namespace Zero {
+class FavoriteButton;
 
 class ElidedLabel;
 class WorldIconTile;
@@ -59,6 +60,7 @@ class WorldDetailsPanel : public ZeroCard {
     QStackedLayout* m_stack;
     WorldIconTile* m_icon;
     ElidedLabel* m_name;
+    FavoriteButton* m_favorite;
     ElidedLabel* m_folder;
     ElidedLabel* m_instance;
     ElidedLabel* m_mode;

@@ -14,6 +14,8 @@
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "FavoriteStar.h"
+#include "zero/favorites/FavoriteStore.h"
 
 namespace Zero {
 
@@ -229,7 +231,7 @@ void ServerRowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     }
 
     const int centerY = row.center().y();
-    const QRect inner = row.adjusted(kPadding, 0, -kPadding, 0);
+    const QRect inner = row.adjusted(kPadding, 0, -kPadding - FavoriteStar::kColumn, 0);  // star column at the right
 
     // icon tile
     const QRectF tile(inner.left(), centerY - kIconSize / 2.0 + 0.5, kIconSize, kIconSize);
@@ -318,7 +320,25 @@ void ServerRowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     painter->setPen(t.textTertiary);
     painter->drawText(QRect(nameLeft, y, textWidth, lineHeight), Qt::AlignLeft | Qt::AlignVCenter,
                       captionMetrics.elidedText(instancesText(s), Qt::ElideRight, textWidth));
+    if (const auto* store = Favorites::FavoriteStore::instance())
+        FavoriteStar::paint(painter, FavoriteStar::rect(row, kPadding), store->contains(Favorites::Kind::Server, s.address), hovered);
+    else
+        FavoriteStar::paint(painter, FavoriteStar::rect(row, kPadding), false, false);
     painter->restore();
 }
+
+bool ServerRowDelegate::editorEvent(QEvent* event, QAbstractItemModel* model, const QStyleOptionViewItem& option, const QModelIndex& index)
+{
+    const auto* rowsModel = qobject_cast<const ServerRowModel*>(index.model());
+    if (rowsModel && index.row() < rowsModel->rowCount() && Favorites::FavoriteStore::instance()) {
+        const QRect row = QRect(option.rect.left(), option.rect.top() + kRowGap / 2, option.rect.width(), kRowHeight);
+        const QString key = rowsModel->server(index.row()).address;
+        if (FavoriteStar::handleMouse(event, FavoriteStar::rect(row, kPadding),
+                                      [key]() { Favorites::FavoriteStore::instance()->toggle(Favorites::Kind::Server, key); }))
+            return true;
+    }
+    return QStyledItemDelegate::editorEvent(event, model, option, index);
+}
+
 
 }  // namespace Zero

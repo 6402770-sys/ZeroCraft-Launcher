@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "WorldsPage.h"
 
+#include <algorithm>
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QDeadlineTimer>
@@ -31,6 +32,7 @@
 #include "ui/zero/ZeroToast.h"
 #include "zero/backup/WorldBackupJobs.h"
 #include "ui/zero/ZeroReveal.h"
+#include "zero/favorites/FavoriteStore.h"
 
 namespace Zero {
 
@@ -77,6 +79,13 @@ WorldsPage::WorldsPage(QWidget* parent)
     toolbarRow->setSpacing(Tokens::spaceLg);
     toolbarRow->addWidget(m_search);
     toolbarRow->addStretch(1);
+    m_favoritesOnly = new QPushButton(tr("Favorites"), this);
+    Style::setProperty(m_favoritesOnly, "zeroVariant", "ghost");
+    m_favoritesOnly->setCheckable(true);
+    m_favoritesOnly->setIconSize(QSize(16, 16));
+    m_favoritesOnly->setToolTip(tr("Show only your favorites. Click the star on a row to add one."));
+    m_favoritesOnly->setVisible(Favorites::FavoriteStore::instance() != nullptr);
+    toolbarRow->addWidget(m_favoritesOnly);
     toolbarRow->addWidget(m_instanceCombo);
     toolbarRow->addWidget(m_sortCombo);
 
@@ -177,6 +186,20 @@ WorldsPage::WorldsPage(QWidget* parent)
         applyFilters();
         m_reveal->start();
     });
+    m_favoritesOnly->setChecked(APPLICATION->settings()->get("ZeroWorldsFavoritesOnly").toBool());
+    connect(m_favoritesOnly, &QPushButton::toggled, this, [this](bool on) {
+        APPLICATION->settings()->set("ZeroWorldsFavoritesOnly", on);
+        refreshFavoriteIcon();
+        applyFilters();
+        m_reveal->start();
+    });
+    if (auto* store = Favorites::FavoriteStore::instance()) {
+        // a star clicked on a row or in the details panel: favorites move to the top (or out of the favorites-only view)
+        connect(store, &Favorites::FavoriteStore::changed, this, [this](Favorites::Kind kind, const QString&, bool) {
+            if (kind == Favorites::Kind::World)
+                applyFilters();
+        });
+    }
 
     connect(m_scanner, &Worlds::WorldScanner::worldsChanged, this, &WorldsPage::onWorldsChanged);
     connect(m_scanner, &Worlds::WorldScanner::sizeReady, this, [this](const QString& key, qint64 bytes) {
@@ -212,8 +235,16 @@ WorldsPage::WorldsPage(QWidget* parent)
     updateState();
 }
 
+void WorldsPage::refreshFavoriteIcon()
+{
+    const auto& t = Theme::current();
+    m_favoritesOnly->setIcon(m_favoritesOnly->isChecked() ? Icons::filledIcon(QStringLiteral("star"), t.highlight)
+                                                          : Icons::icon(QStringLiteral("star"), t.textSecondary));
+}
+
 void WorldsPage::refreshIcons()
 {
+    refreshFavoriteIcon();
     const auto& t = Theme::current();
     m_refresh->setIcon(Icons::icon(QStringLiteral("refresh-cw"), t.textSecondary));
     const QIcon searchIcon = Icons::icon(QStringLiteral("search"), t.textTertiary);
@@ -321,17 +352,23 @@ QString WorldsPage::effectiveInstanceFilter() const
 
 void WorldsPage::applyFilters()
 {
+    const auto* store = Favorites::FavoriteStore::instance();
+    const bool favoritesOnly = m_favoritesOnly->isChecked();
     const QString instance = effectiveInstanceFilter();
     const QString text = m_search->text();
     QList<Worlds::WorldEntry> rows;
     for (const auto& e : m_scanner->entries()) {
         if (!instance.isEmpty() && e.instanceId != instance)
             continue;
+        if (favoritesOnly && !(store && store->contains(Favorites::Kind::World, e.key())))
+            continue;
         if (!Worlds::matchesSearch(e, text))
             continue;
         rows.append(e);
     }
     Worlds::sortWorlds(rows, m_sort);
+    if (store)  // favorites first, each group in the chosen order
+        std::stable_partition(rows.begin(), rows.end(), [store](const auto& r) { return store->contains(Favorites::Kind::World, r.key()); });
 
     // A rescan that found the same worlds must not reset the view (a reset paints one empty frame: the list blinks).
     if (rows == m_model->entries()) {
@@ -375,7 +412,7 @@ void WorldsPage::updateState()
 {
     const int total = static_cast<int>(m_scanner->entries().size());
     const int shown = m_model->rowCount();
-    const bool filtering = !m_search->text().trimmed().isEmpty() || !effectiveInstanceFilter().isEmpty();
+    const bool filtering = !m_search->text().trimmed().isEmpty() || !effectiveInstanceFilter().isEmpty() || m_favoritesOnly->isChecked();
 
     QString subtitle;
     if (!m_scanner->hasScanned()) {
@@ -430,6 +467,11 @@ void WorldsPage::syncRunning()
 
 void WorldsPage::clearFilters()
 {
+    {
+        const QSignalBlocker blocker(m_favoritesOnly);
+        m_favoritesOnly->setChecked(false);
+        APPLICATION->settings()->set("ZeroWorldsFavoritesOnly", false);
+    }
     {
         const QSignalBlocker blocker(m_search);
         m_search->clear();

@@ -26,6 +26,7 @@
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
 #include "zero/backup/WorldBackupJobs.h"
+#include "FavoriteStar.h"
 
 namespace Zero {
 
@@ -96,7 +97,10 @@ WorldDetailsPanel::WorldDetailsPanel(QWidget* parent) : ZeroCard(parent)
     m_folder->setAlignment(Qt::AlignCenter);
     lay->addSpacing(2);
     lay->addWidget(m_folder);
-    lay->addSpacing(Tokens::spaceLg);
+    lay->addSpacing(Tokens::spaceSm);
+    m_favorite = new FavoriteButton(Favorites::Kind::World, content);
+    lay->addWidget(m_favorite, 0, Qt::AlignHCenter);
+    lay->addSpacing(Tokens::spaceMd);
 
     // stats rows (same grid as the Library details panel)
     auto* stats = new QGridLayout;
@@ -221,6 +225,7 @@ void WorldDetailsPanel::setWorld(const Worlds::WorldEntry& entry)
     m_icon->setIconPath(entry.iconPath);
     m_name->setFullText(entry.name);
     m_folder->setFullText(entry.folderName);
+    m_favorite->setKey(entry.key());
     m_instance->setFullText(entry.instanceName);
     QString mode = entry.gameMode.isEmpty() ? tr("Unknown") : entry.gameMode;
     if (entry.hardcore)

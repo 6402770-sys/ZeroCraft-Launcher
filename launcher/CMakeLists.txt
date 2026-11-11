@@ -897,6 +897,8 @@ SET(LAUNCHER_SOURCES
     zero/palette/CommandMatcher.h
     zero/profiles/InstanceProfile.cpp
     zero/ZeroLanguage.h
+    zero/favorites/FavoriteStore.cpp
+    zero/favorites/FavoriteStore.h
     zero/profiles/InstanceProfile.h
     zero/profiles/LibraryFilter.cpp
     zero/profiles/LibraryFilter.h
@@ -983,6 +985,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/WorldDetailsPanel.h
     ui/zero/pages/WorldIcon.cpp
     ui/zero/pages/WorldIcon.h
+    ui/zero/pages/FavoriteStar.cpp
+    ui/zero/pages/FavoriteStar.h
     ui/zero/pages/WorldRows.cpp
     ui/zero/pages/WorldRows.h
     ui/zero/pages/WorldsPage.cpp

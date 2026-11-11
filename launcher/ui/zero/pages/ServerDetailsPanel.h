@@ -15,6 +15,7 @@ class QToolButton;
 class QVBoxLayout;
 
 namespace Zero {
+class FavoriteButton;
 
 class ElidedLabel;
 class PillTag;
@@ -56,6 +57,7 @@ class ServerDetailsPanel : public ZeroCard {
     QStackedLayout* m_stack;
     ServerIconTile* m_icon;
     ElidedLabel* m_name;
+    FavoriteButton* m_favorite;
     ElidedLabel* m_address;
     QToolButton* m_copy;
     PillTag* m_status;

@@ -285,7 +285,7 @@ void ruleJavaVersion(const Ctx& c, QList<Finding>& out)
                                 : T("The game or one of its mods was built for Java %1, but an older Java is being used to run it.").arg(needed);
     f.suggestions = { T("Open the instance settings, go to the Java section and pick a Java %1 (or newer) installation.").arg(needed),
                       T("If none is listed, use the auto-detect or download option there, or install Java %1 and detect again.").arg(needed) };
-    f.actions = { Action::OpenInstanceSettings };
+    f.actions = { Action::OpenJavaDoctor, Action::OpenInstanceSettings };
     out.append(f);
 }
 

@@ -125,6 +125,7 @@
 #include "zero/profiles/InstanceProfile.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
 #include "ui/zero/pages/AppearancePage.h"
+#include "ui/zero/pages/JavaDoctorView.h"
 #include "ui/zero/pages/StorageView.h"
 #include "ui/zero/pages/ToolsPage.h"
 #include "ui/zero/pages/ZeroInstanceDelegate.h"
@@ -1983,6 +1984,8 @@ void MainWindow::setupZeroShell()
     // Worlds (read-only hub): "Show instance in Library" is the only way out
     connect(m_worlds, &Zero::WorldsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
     connect(m_tools, &Zero::ToolsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
+    connect(m_tools, &Zero::ToolsPage::javaSettingsRequested, this,
+            [this]() { QTimer::singleShot(0, this, [this]() { APPLICATION->ShowGlobalSettings(this, QStringLiteral("java-settings")); }); });
 
     // Home
     auto withInstance = [](const QString& id, auto&& fn) {
@@ -2367,6 +2370,20 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         c.primaryLabel = tr("Open");
         c.run = [this]() {
             m_tools->openStorage();
+            m_shell->setCurrentPage(QStringLiteral("tools"));
+        };
+        out.append(c);
+    }
+    {
+        PaletteCommand c;
+        c.id = QStringLiteral("nav:java-doctor");
+        c.kind = Kind::Navigation;
+        c.title = tr("Open Java Doctor");
+        c.keywords = { tr("java"), tr("jdk"), tr("jre"), tr("runtime") };
+        c.iconName = QStringLiteral("cpu");
+        c.primaryLabel = tr("Open");
+        c.run = [this]() {
+            m_tools->openJavaDoctor();
             m_shell->setCurrentPage(QStringLiteral("tools"));
         };
         out.append(c);
@@ -2782,6 +2799,13 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         waitForStorage = m_tools->storage()->scanner()->isScanning();
     }
 
+    // Dev aid: ZERO_SCREENSHOT_TOOL=java opens Tools > Java Doctor; the grab waits for the first evaluation (8 s max).
+    bool waitForJava = false;
+    if (qEnvironmentVariable("ZERO_SCREENSHOT_TOOL") == QLatin1String("java")) {
+        m_tools->openJavaDoctor();
+        waitForJava = !m_tools->javaDoctor()->hasEvaluated();
+    }
+
     // Dev aids: ZERO_SCREENSHOT_PALETTE=<query> opens the command palette with that query ("empty" = no query),
     // ZERO_SCREENSHOT_SHORTCUTS=1 opens the keyboard shortcut sheet.
     if (const QString paletteQuery = qEnvironmentVariable("ZERO_SCREENSHOT_PALETTE"); !paletteQuery.isEmpty()) {
@@ -2836,7 +2860,18 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     // ZERO: the Worlds page scans asynchronously: wait for the scan (sizes included), 3 s at most
     if (page == QLatin1String("worlds"))
         m_worlds->callWhenIdle([this, grabAndFinish]() { QTimer::singleShot(600, this, grabAndFinish); }, 3000);
-    else if (waitForStorage) {
+    else if (waitForJava) {
+        // ZERO: Java Doctor detects runtimes asynchronously: grab once the first evaluation is on screen (8 s at most)
+        auto done = std::make_shared<bool>(false);
+        auto fire = [this, grabAndFinish, done]() {
+            if (*done)
+                return;
+            *done = true;
+            QTimer::singleShot(600, this, grabAndFinish);
+        };
+        connect(m_tools->javaDoctor(), &Zero::JavaDoctorView::evaluationFinished, this, fire);
+        QTimer::singleShot(8000, this, fire);
+    } else if (waitForStorage) {
         // ZERO: Storage scans asynchronously: grab once the report is in (5 s at most)
         auto* scanner = m_tools->storage()->scanner();
         auto done = std::make_shared<bool>(false);

@@ -45,6 +45,8 @@ class CrashDetectiveView : public QWidget {
 
    signals:
     void instanceSettingsRequested(const QString& instanceId);
+    /// A Java related finding asks for the Java Doctor.
+    void javaDoctorRequested();
     /// Emitted when an analysis has finished and the result is on screen (used by tests / screenshots).
     void analysisFinished();
 

@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 #include "CrashDetectiveView.h"
 #include "ElidedLabel.h"
+#include "JavaDoctorView.h"
 #include "StorageView.h"
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroIcons.h"
@@ -86,6 +87,9 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     auto* storageCard = makeToolCard(1, QStringLiteral("hard-drive"), tr("Storage"),
                                      tr("See what uses disk space across instances, worlds, backups and caches, and clean up safely."));
     connect(storageCard, &ZeroCard::clicked, this, &ToolsPage::openStorage);
+    auto* javaCard = makeToolCard(2, QStringLiteral("cpu"), tr("Java Doctor"),
+                                  tr("Checks which Java each instance will use, catches problems before you launch and suggests a fix."));
+    connect(javaCard, &ZeroCard::clicked, this, &ToolsPage::openJavaDoctor);
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
     grid->setColumnStretch(2, 1);
@@ -96,12 +100,19 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     // ----- Crash Detective -----
     m_detective = new CrashDetectiveView(this);
     connect(m_detective, &CrashDetectiveView::instanceSettingsRequested, this, &ToolsPage::instanceSettingsRequested);
+    connect(m_detective, &CrashDetectiveView::javaDoctorRequested, this, &ToolsPage::openJavaDoctor);
     m_stack->addWidget(centered(m_detective, this));
 
     // ----- Storage -----
     m_storage = new StorageView(this);
     connect(m_storage, &StorageView::showInstanceRequested, this, &ToolsPage::showInstanceRequested);
     m_stack->addWidget(centered(m_storage, this));
+
+    // ----- Java Doctor -----
+    m_java = new JavaDoctorView(this);
+    connect(m_java, &JavaDoctorView::showInstanceRequested, this, &ToolsPage::showInstanceRequested);
+    connect(m_java, &JavaDoctorView::javaSettingsRequested, this, &ToolsPage::javaSettingsRequested);
+    m_stack->addWidget(centered(m_java, this));
 }
 
 void ToolsPage::showEvent(QShowEvent* event)
@@ -121,6 +132,7 @@ QString ToolsPage::title() const
     switch (m_stack->currentIndex()) {
         case 1: return tr("Crash Detective");
         case 2: return tr("Storage");
+        case 3: return tr("Java Doctor");
         default: return tr("Tools");
     }
 }
@@ -130,6 +142,7 @@ QString ToolsPage::subtitle() const
     switch (m_stack->currentIndex()) {
         case 1: return CrashDetectiveView::description();
         case 2: return StorageView::description();
+        case 3: return JavaDoctorView::description();
         default: return tr("Utilities for keeping your instances healthy");
     }
 }
@@ -144,6 +157,7 @@ QWidget* ToolsPage::topBarActions() const
     switch (m_stack->currentIndex()) {
         case 1: return m_detective->controlsWidget();  // spinner, instance combo, Analyze
         case 2: return m_storage->controlsWidget();    // Rescan
+        case 3: return m_java->controlsWidget();       // Rescan
         default: return nullptr;
     }
 }
@@ -178,6 +192,13 @@ void ToolsPage::openStorage()
     m_stack->setCurrentIndex(2);
     emit chromeChanged();
     m_storage->open();
+}
+
+void ToolsPage::openJavaDoctor()
+{
+    m_stack->setCurrentIndex(3);
+    emit chromeChanged();
+    m_java->open();
 }
 
 }  // namespace Zero

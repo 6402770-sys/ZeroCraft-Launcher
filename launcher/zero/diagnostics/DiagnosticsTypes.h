@@ -30,7 +30,7 @@ enum class Severity { Critical = 0, Warning = 1, Info = 2 };
 /// Confirmed is reserved for causes the log states explicitly.
 enum class Confidence { Confirmed = 0, Likely = 1, Possible = 2 };
 
-enum class Action { OpenInstanceSettings, OpenModsFolder, OpenLogsFolder, OpenCrashReport, OpenGameFolder };
+enum class Action { OpenInstanceSettings, OpenModsFolder, OpenLogsFolder, OpenCrashReport, OpenGameFolder, OpenJavaDoctor };
 
 struct Finding {
     QString ruleId;

@@ -881,6 +881,8 @@ SET(LAUNCHER_SOURCES
     zero/diagnostics/DiagnosticsTypes.h
     zero/history/SessionHistory.cpp
     zero/history/SessionHistory.h
+    zero/java/JavaDoctor.cpp
+    zero/java/JavaDoctor.h
     zero/palette/CommandMatcher.cpp
     zero/palette/CommandMatcher.h
     zero/profiles/InstanceProfile.cpp
@@ -893,6 +895,8 @@ SET(LAUNCHER_SOURCES
     zero/worlds/WorldScanner.h
 
     # ZERO design system
+    ui/zero/PillTag.cpp
+    ui/zero/PillTag.h
     ui/zero/ZeroCard.cpp
     ui/zero/ZeroCard.h
     ui/zero/ZeroEmptyState.cpp
@@ -962,6 +966,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/WorldRows.h
     ui/zero/pages/WorldsPage.cpp
     ui/zero/pages/WorldsPage.h
+    ui/zero/pages/JavaDoctorView.cpp
+    ui/zero/pages/JavaDoctorView.h
     ui/zero/pages/StorageView.cpp
     ui/zero/pages/StorageView.h
     ui/zero/pages/ToolsPage.cpp

@@ -15,6 +15,7 @@
 #include <QVBoxLayout>
 #include "Application.h"
 #include "ElidedLabel.h"
+#include "ui/zero/PillTag.h"
 #include "ui/zero/ZeroFormat.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroPaint.h"
@@ -34,39 +35,6 @@ QString fullDate(qint64 ms)
     const QLocale locale;
     return locale.toString(dt.date(), QLocale::LongFormat) + QLatin1Char(' ') + locale.toString(dt.time(), QLocale::ShortFormat);
 }
-
-/// Small bordered label in the style of the badges of the world rows ("Safety", "Damaged").
-class PillTag : public QWidget {
-   public:
-    PillTag(const QString& text, bool danger, QWidget* parent) : QWidget(parent), m_text(text), m_danger(danger)
-    {
-        setFixedHeight(Tokens::badgeHeight);
-        connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
-    }
-    QSize sizeHint() const override
-    {
-        return { QFontMetrics(Style::font(Role::Caption)).horizontalAdvance(m_text) + 2 * Tokens::spaceSm, Tokens::badgeHeight };
-    }
-    QSize minimumSizeHint() const override { return sizeHint(); }
-
-   protected:
-    void paintEvent(QPaintEvent*) override
-    {
-        const auto& t = Theme::current();
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        p.setPen(QPen(t.border, 1));
-        p.setBrush(t.surface);
-        p.drawPath(Paint::panelPath(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), t.radiusSm));
-        p.setFont(Style::font(Role::Caption));
-        p.setPen(m_danger ? t.danger : t.textSecondary);
-        p.drawText(rect(), Qt::AlignCenter, m_text);
-    }
-
-   private:
-    QString m_text;
-    bool m_danger;
-};
 
 /// One backup: date + size on the left, pill, then the two icon buttons. A hairline under every row but the last.
 class BackupRowWidget : public QWidget {

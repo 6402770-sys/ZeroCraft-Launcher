@@ -11,6 +11,7 @@ class QStackedLayout;
 namespace Zero {
 
 class CrashDetectiveView;
+class JavaDoctorView;
 class StorageView;
 
 class ToolsPage : public ShellPage {
@@ -30,19 +31,24 @@ class ToolsPage : public ShellPage {
     void openCrashDetective(const QString& instanceId, bool analyzeNow, std::optional<int> exitCode = std::nullopt);
     /// Opens Storage and starts a scan.
     void openStorage();
+    /// Opens Java Doctor and looks for Java runtimes.
+    void openJavaDoctor();
     /// Default instance for Crash Detective (the Library selection). Ignored while a result is showing.
     void setPreferredInstance(const QString& instanceId);
     /// Back to the grid of tools.
     void showOverview();
-    /// True while a tool (Crash Detective or Storage) is open.
+    /// True while a tool (Crash Detective, Storage or Java Doctor) is open.
     bool isToolOpen() const;
 
     CrashDetectiveView* crashDetective() const { return m_detective; }
     StorageView* storage() const { return m_storage; }
+    JavaDoctorView* javaDoctor() const { return m_java; }
 
    signals:
     void instanceSettingsRequested(const QString& instanceId);
     void showInstanceRequested(const QString& instanceId);
+    /// Java Doctor: open the launcher settings on the Java page.
+    void javaSettingsRequested();
 
    protected:
     void showEvent(QShowEvent* event) override;
@@ -51,6 +57,7 @@ class ToolsPage : public ShellPage {
     QStackedLayout* m_stack;
     CrashDetectiveView* m_detective;
     StorageView* m_storage;
+    JavaDoctorView* m_java;
 };
 
 }  // namespace Zero

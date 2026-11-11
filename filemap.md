@@ -26,6 +26,9 @@
 - `launcher/zero/profiles/` — instance profiles: `InstanceProfile` (favorite, tags, description = `notes`, artwork file, mod count, `Notifier`) and `LibraryFilter` (filter chips + search, pure logic)
 - `launcher/zero/worlds/` — Worlds Hub scanner: `WorldScanner` (read-only `scanWorldsDir`, `folderSize`, sort / search, async scanner with generations; no widgets)
 - `launcher/ui/zero/pages/StorageView.{h,cpp}` — Tools > Storage UI (summary, category and instance breakdown, clean up, interrupted restores) on top of `StorageScanner`
+- `launcher/zero/java/` — Java Doctor core: `JavaDoctor` (pure `diagnose` predicting which Java a launch uses and whether it works, mirroring AutoInstallJava / CheckJava / VerifyJavaInstall; recommendation; read-only `readRequirements`; no widgets)
+- `launcher/ui/zero/pages/JavaDoctorView.{h,cpp}` — Tools > Java Doctor UI (automatic Java card, instances with status pills and "Use Java N", runtimes)
+- `launcher/ui/zero/PillTag.{h,cpp}` — shared bordered pill label (plain / status tones)
 - `launcher/zero/storage/` — Storage Manager core: `StorageScanner` (per-category / per-instance disk usage, old log / crash report cleanup candidates, restore leftovers, validated Recycle Bin trash, async scanner; no widgets)
 - `launcher/zero/backup/` — Smart Backup: `WorldBackup` (create / verify / list / restore / retention / delete of world backups; no widgets), `WorldBackupJobs` (app-level runner: one job per world on the pool, launch lock), `AutoBackup` (automatic backups of the played worlds after a session)
 - `launcher/ui/zero/pages/` (Worlds Hub) — `WorldsPage` (toolbar, list, empty states), `WorldRows` (`WorldRowModel` + painted `WorldRowDelegate`), `WorldDetailsPanel`, `WorldBackupsSection` (Backups block of the details panel), `WorldIcon` (pixel-crisp world icon tiles)
@@ -42,6 +45,7 @@
 - `tests/InstanceProfile_test.cpp`, `tests/LibraryFilter_test.cpp`, `tests/ZeroLibrary_test.cpp` — profile data (tags, artwork atomic write, mod count), filter chips, chip bar / flow layout / artwork crop / card star click
 - `tests/WorldBackup_test.cpp` — Smart Backup: round trip, verify, zip-slip, restore + failure paths, retention (manual / safety / auto), listing, free space, job runner / launch lock
 - `tests/AutoBackup_test.cpp` — automatic backups: world selection (mtime, slack, size cap) and the service queue with real temp worlds
+- `tests/JavaDoctor_test.cpp` — Java Doctor prediction table (pinned / detected / download / override / missing path / ignore / 32-bit), recommendation ordering, requirement reader
 - `tests/StorageScanner_test.cpp` — storage report math (no double counting, junctions, nested / duplicate dirs), cleanup detection, trash validation + failure paths, async scanner
 - `tests/WorldScanner_test.cpp` — world scan of real folder layouts, skipped entries, read-only guarantee, folder size (links / junctions), search / sort, scanner generations
 - `tests/SessionHistory_test.cpp` — launch classification, recorder sequences with injected clock, persistence, cap, corrupt / malformed files

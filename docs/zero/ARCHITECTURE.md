@@ -136,6 +136,24 @@ instance list (like `sourcesFromApplication()` in `WorldsPage`). Rule: measure e
   `trashFinished` whose `error` is set. The UI rescans after a trash.
 - Tests: `tests/StorageScanner_test.cpp` (temp trees, junction cases, injected trash hook).
 
+## Java Doctor (Mission 002)
+Core without widgets / `APPLICATION` / Prism instance classes: `launcher/zero/java/JavaDoctor` (namespace `Zero::Java`). Rule (MISSION): never change a Java selection without permission; the core never writes anything.
+- **Inputs** are plain structs: `Runtime` (path, version, major, 64-bit, managed), `GlobalJava` (`AutomaticJavaSwitch`, `AutomaticJavaDownload`, pinned paths per major + the ones that do not resolve, download support), `InstanceJava` (effective settings of one
+  instance + what its version needs: compatible majors, Mojang runtime name, the downloaded runtime path when it exists).
+- **`diagnose(instance, runtimes, global)`** is pure and predicts the launch in Prism's order: `AutoInstallJava` (skipped when automatic switching is off or the instance has its own Java path that exists; else pinned path of a
+  compatible major in the order of the majors, then with downloads off the first detected runtime of a compatible major, with downloads on the managed runtime / "will be downloaded"; falling through = use the configured Java),
+  `CheckJava` (the configured Java must resolve) and `VerifyJavaInstall` (32-bit with more than 2048 MB warns; a major the version does not support fails unless `IgnoreJavaCompatibility`, then it warns; empty majors = unknown, no verdict).
+  `Diagnosis` = status (Ready / Warning / WillFail / Unknown), source (Configured / AutomaticPinned / AutomaticDetected / AutomaticDownload), reason code, effective runtime, and a recommendation (only for Warning / WillFail:
+  a compatible installed runtime other than the one in use, 64-bit first, then the highest version; only 64-bit ones for the 32-bit warning). An unknown requirement with no configured Java gives Unknown, not WillFail: the
+  requirement is read at launch, where automatic Java may still find a Java.
+- **`readRequirements(instanceRoot, metaDir)`**: read-only look at `mmc-pack.json` and the version files (custom `patches/<uid>.json`, else the local metadata cache `meta/<uid>/<version>.json`) for the compatible majors and the runtime
+  name. Used instead of loading the `PackProfile` of every instance (loading resolves metadata and may rewrite files); for instances whose component list is already loaded (selected / launched) the loaded launch profile wins.
+- **UI gathering** (`JavaDoctorView`): runtimes from `APPLICATION->javalist()` after its load task (PATH entries resolved to the real file, duplicates dropped), globals from the settings, one `InstanceJava` per instance (effective values
+  through `settings()->get`). Applying a suggestion writes exactly what the instance Java settings page saves for a manual path (`OverrideJavaLocation`, `JavaPath`, `AutomaticJava` = false); the stored version / architecture /
+  signature stay untouched (the signature contains the path, so the next launch re-checks the Java: `CheckJava`).
+- `PillTag` (`ui/zero/PillTag`) is the shared bordered label (backup rows, Java Doctor status): plain look or a status tone (`Tokens::statusTint` of success / warning / danger / info).
+- Tests: `tests/JavaDoctor_test.cpp` (data-driven table over every branch, recommendation ordering, requirement reader).
+
 ## Additions in session 2 (Mission 002)
 - **Themes**: `Zero::ThemeSpec` v2; one `ITheme` per spec (`ZeroTheme` = `zero-obsidian`, `ZeroMinecraftTheme` =
   `zero-minecraft`) registered first in `ThemeManager`; stylesheet = `obsidian.qss` + optional `<id>.qss` overlay.

@@ -183,6 +183,8 @@ ActionInfo actionInfo(Action a)
             return { QObject::tr("Open crash report"), QStringLiteral("file-text") };
         case Action::OpenGameFolder:
             return { QObject::tr("Open game folder"), QStringLiteral("folder-open") };
+        case Action::OpenJavaDoctor:
+            return { QObject::tr("Open Java Doctor"), QStringLiteral("cpu") };
     }
     return {};
 }
@@ -601,6 +603,9 @@ void CrashDetectiveView::runAction(Action action)
         }
         case Action::OpenGameFolder:
             DesktopServices::openPath(QFileInfo(instance->gameRoot()), true);
+            break;
+        case Action::OpenJavaDoctor:
+            emit javaDoctorRequested();
             break;
     }
 }

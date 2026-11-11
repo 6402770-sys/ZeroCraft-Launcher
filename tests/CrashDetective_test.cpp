@@ -67,6 +67,7 @@ class CrashDetectiveTest : public QObject {
         QVERIFY2(f->title.contains("Java 21"), qPrintable(f->title));
         QVERIFY(f->explanation.contains("Java 17"));
         QVERIFY(f->actions.contains(Action::OpenInstanceSettings));
+        QVERIFY(f->actions.contains(Action::OpenJavaDoctor));
         QVERIFY(!f->evidence.isEmpty());
         QCOMPARE(f->evidence.first().line, 3);
         QCOMPARE(f->evidence.first().source, QString("latest.log"));

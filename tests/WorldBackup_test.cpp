@@ -19,7 +19,10 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <functional>
+#include <latch>
 #include <sstream>
+#include <thread>
+#include <vector>
 
 #include <io/stream_writer.h>
 #include <tag_compound.h>
@@ -308,6 +311,34 @@ class WorldBackupTest : public QObject {
             paths.insert(r.zipPath);
         }
         QCOMPARE(QDir(dir).entryList({ "*.zip" }).size(), 4);
+    }
+
+    void concurrentFirstBackupsShareNewParents()
+    {
+        // Worlds backed up at once all create zero/backups/<instance>/...: the threads that lost the race to make a
+        // shared parent failed with "Could not create the backup folder" (QDir::mkpath on Windows gives up there).
+        constexpr int kWorlds = 8;
+        for (int round = 0; round < 5; ++round) {
+            QTemporaryDir root;
+            QStringList worlds;
+            for (int i = 0; i < kWorlds; ++i)
+                worlds << makeWorld(root.filePath("saves"), QStringLiteral("W%1").arg(i), worldTree(i + 1));
+            std::latch go(kWorlds);
+            std::vector<BackupResult> results(kWorlds);
+            std::vector<std::thread> threads;
+            for (int i = 0; i < kWorlds; ++i) {
+                threads.emplace_back([&, i]() {
+                    const QString name = QStringLiteral("W%1").arg(i);
+                    const QString dir = root.filePath("zero/backups/inst/" + name);
+                    go.arrive_and_wait();
+                    results[i] = createBackup(worlds.at(i), dir, Kind::Manual, metaFor(name));
+                });
+            }
+            for (auto& t : threads)
+                t.join();
+            for (const BackupResult& r : results)
+                QVERIFY2(r.ok, qPrintable(r.error));
+        }
     }
 
     void backupOfMissingWorldFails()
@@ -1011,7 +1042,8 @@ class WorldBackupTest : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(!jobs.isBusy(v.key()) && !jobs.isBusy(w.key()), 20000);
         QVERIFY(!WorldBackupJobs::isInstanceLocked("inst"));
         QCOMPARE(changed.size(), 2);
-        QVERIFY(finished.at(1).at(1).toBool() && finished.at(2).at(1).toBool());
+        QVERIFY2(finished.at(1).at(1).toBool() && finished.at(2).at(1).toBool(),
+                 qPrintable(finished.at(1).at(2).toString() + " | " + finished.at(2).at(2).toString()));
         QCOMPARE(finished.at(1).at(2).toString(), QString("Backup created"));
         QCOMPARE(listBackups(jobs.backupDir(w)).size(), 1);
         QCOMPARE(listBackups(jobs.backupDir(v)).size(), 1);

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "PaletteOverlay.h"
 
-#include <QApplication>
 #include <QEasingCurve>
 #include <QKeyEvent>
 #include <QLayout>
@@ -81,7 +80,10 @@ void PaletteOverlay::open()
         m_anim.stop();
         finishClose();
     }
-    m_previousFocus = QApplication::focusWidget();
+    // The host window's focus widget, not QApplication's: that one is null while the window is inactive and belongs to
+    // another window when one is active. A widget inside this overlay (left from the last open) is not worth restoring.
+    QWidget* previous = m_host->window()->focusWidget();
+    m_previousFocus = (previous && previous != this && !isAncestorOf(previous)) ? previous : nullptr;
     aboutToOpen();
     setGeometry(m_host->rect());
     raise();

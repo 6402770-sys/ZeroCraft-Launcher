@@ -39,6 +39,19 @@ QString tr(const char* text)
     return QCoreApplication::translate("Zero::Backup", text);
 }
 
+// QDir::mkpath that survives a concurrent mkpath of a shared parent. On Windows Qt creates missing parents one by one
+// and a thread that loses the race to create one (ERROR_ALREADY_EXISTS) gives up, so the first backups of two worlds
+// (zero/backups/<instance>/... created by two pool threads) failed with "Could not create the backup folder" at random.
+// Each lost race means another thread made that level, so a few retries always get past it.
+bool makePath(const QString& path)
+{
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        if (QDir().mkpath(path))
+            return true;
+    }
+    return QFileInfo(path).isDir();
+}
+
 // ---------------------------------------------------------------- hooks
 
 bool defaultRename(const QString& from, const QString& to)
@@ -447,7 +460,7 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
 
     if (!QFileInfo(worldFolderPath).isDir())
         return fail(tr("The world folder does not exist."));
-    if (!QDir().mkpath(backupDir))
+    if (!makePath(backupDir))
         return fail(tr("Could not create the backup folder."));
 
     QList<FileItem> files = collectFiles(worldFolderPath);
@@ -606,7 +619,7 @@ bool extractAndVerify(const QString& zipPath, const Manifest& manifest, const QS
         const QString target = QDir::cleanPath(stagingClean + QLatin1Char('/') + rel);
         if (!target.startsWith(stagingClean + QLatin1Char('/')))  // belt and braces after isSafeRelativePath
             return std::unexpected{ tr("The backup contains an unsafe file path and was rejected: %1").arg(name) };
-        if (!QDir().mkpath(QFileInfo(target).absolutePath()))
+        if (!makePath(QFileInfo(target).absolutePath()))
             return std::unexpected{ tr("Could not create a folder for %1").arg(rel) };
         QFile out(target);
         if (!out.open(QIODevice::WriteOnly))
@@ -673,7 +686,7 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
     const QString folder = world.fileName();
     if (folder.isEmpty() || folder.startsWith(QStringLiteral(".zero-")))
         return fail(tr("Invalid world folder."));
-    if (!QDir().mkpath(saves))
+    if (!makePath(saves))
         return fail(tr("Could not open the saves folder."));
 
     const QString stamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddHHmmsszzz"));
@@ -698,7 +711,7 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
 
     // c. extract into a sibling staging folder and verify what landed on disk
     auto dropStaging = [&]() { QDir(staging).removeRecursively(); };
-    if (!QDir().mkpath(staging))
+    if (!makePath(staging))
         return fail(tr("Could not create a temporary folder next to the world."));
     if (!extractAndVerify(zipPath, manifest, staging, &error)) {
         dropStaging();

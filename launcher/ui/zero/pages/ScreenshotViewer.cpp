@@ -188,8 +188,11 @@ void ScreenshotViewer::openPath(const QString& path)
     if (index < 0)
         return;
     const bool wasOpen = m_open;
-    if (!wasOpen)
-        m_previousFocus = QApplication::focusWidget();
+    if (!wasOpen) {
+        // This window's focus widget (QApplication's is null while the window is inactive, or in another window).
+        QWidget* previous = window()->focusWidget();
+        m_previousFocus = (previous && previous != this && !isAncestorOf(previous)) ? previous : nullptr;
+    }
     m_open = true;
     setGeometry(parentWidget()->rect());
     layoutBar();

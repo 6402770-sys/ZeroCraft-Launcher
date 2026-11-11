@@ -164,6 +164,12 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 - [ ] Instance window: header card, sections with summaries, help strip in its Settings page, Play / Stop / Close
 
 ## Known limitations / open issues
+- Parallel-test flakes (session 6) fixed in session 7, both reproduced with 6 parallel copies of one test:
+  `ZeroCommandPalette` checked `hasFocus()`, which needs the OS to activate the window (refused under parallel GUI
+  tests); it now checks the window's focus widget, and the overlays remember the host window's focus, not the app's.
+  `WorldBackup`: `QDir::mkpath` on Windows fails for the thread that loses the race to create a shared parent, so two
+  first backups at once failed ("Could not create the backup folder"); `makePath` retries, with a regression test.
+  QTest prints nothing to stdout here: pass `-o file,txt` to see why a case failed (the exit code = failed cases).
 - The instance window's section list scrolls a little with the header card (12 sections × 60 px).
 - The test data dir of session 6 (`scratchpad/data`) got a real `accounts.json` (a sign-in happened in a test window);
   the owner was asked about deleting it. Runs after that used an account-free copy.

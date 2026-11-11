@@ -28,6 +28,13 @@ PaletteCommand command(const QString& id, Palette::Kind kind, const QString& tit
 
 constexpr qint64 kNow = 1'800'000'000'000;
 
+// Focus inside the host window. hasFocus() also needs the OS to activate the window, which it often refuses while
+// other GUI tests run in parallel (ctest -j), so it failed at random; the overlays only control the window's focus.
+bool focused(QWidget* w)
+{
+    return w->window()->focusWidget() == w;
+}
+
 struct Fixture {
     QWidget host;
     QLineEdit* other = new QLineEdit(&host);
@@ -93,7 +100,7 @@ class ZeroCommandPaletteTest : public QObject {
         QVERIFY(f.palette->isOpen());
         QVERIFY(f.palette->isVisible());
         QCOMPARE(f.palette->geometry(), f.host.rect());
-        QVERIFY(f.palette->input()->hasFocus());
+        QVERIFY(focused(f.palette->input()));
         // Panel: 640 px wide, centred, top edge at 14 % of the window height.
         QCOMPARE(f.palette->panelRect().width(), 640);
         QCOMPARE(f.palette->panelRect().top(), int(700 * 0.14));
@@ -276,12 +283,12 @@ class ZeroCommandPaletteTest : public QObject {
     void escapeClosesAndRestoresFocus()
     {
         Fixture f;
-        QVERIFY(f.other->hasFocus());
+        QVERIFY(focused(f.other));
         f.palette->open();
-        QVERIFY(f.palette->input()->hasFocus());
+        QVERIFY(focused(f.palette->input()));
         QTest::keyClick(f.palette->input(), Qt::Key_Escape);
         QVERIFY(!f.palette->isOpen());
-        QVERIFY(f.other->hasFocus());
+        QVERIFY(focused(f.other));
     }
 
     void backdropClickClosesButPanelClickDoesNot()
@@ -292,7 +299,7 @@ class ZeroCommandPaletteTest : public QObject {
         QVERIFY(f.palette->isOpen());
         QTest::mouseClick(f.palette.get(), Qt::LeftButton, {}, QPoint(5, 690));
         QVERIFY(!f.palette->isOpen());
-        QVERIFY(f.other->hasFocus());
+        QVERIFY(focused(f.other));
     }
 
     void resultViewShowsAtMostEightRowsAndScrolls()
@@ -331,7 +338,7 @@ class ZeroCommandPaletteTest : public QObject {
         QCOMPARE(sheet.groups().size(), 2);
         QTest::keyClick(&sheet, Qt::Key_Escape);
         QVERIFY(!sheet.isOpen());
-        QVERIFY(f.other->hasFocus());
+        QVERIFY(focused(f.other));
     }
 
     void keyCapsSplitSequences()

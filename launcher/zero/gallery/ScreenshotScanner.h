@@ -19,6 +19,8 @@ struct ScreenshotEntry {
     QString fileName;  ///< file name with extension
     qint64 modifiedMs = 0;
     qint64 sizeBytes = 0;
+
+    bool operator==(const ScreenshotEntry&) const = default;
 };
 
 /// One instance to scan (`screenshotsDir` = `<gameRoot>/screenshots`; it may not exist).

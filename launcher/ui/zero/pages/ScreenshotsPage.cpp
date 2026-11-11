@@ -15,6 +15,7 @@
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <QStackedWidget>
+#include <QDebug>
 #include <QTimer>
 #include <QVBoxLayout>
 #include "Application.h"
@@ -224,6 +225,7 @@ void ScreenshotsPage::setSearchText(const QString& text)
 
 void ScreenshotsPage::rescan()
 {
+    qDebug() << "ZERO screenshots: rescan";
     m_scanRequested = true;
     m_stale = false;
     m_sinceScan.start();
@@ -365,9 +367,19 @@ void ScreenshotsPage::applyFilters()
     }
     Gallery::sortScreenshots(rows, m_sort);
 
+    // A rescan that found the same files (instance list signals, coming back to the page) must not reset the view: every reset
+    // made the whole grid blink.
+    if (rows == m_model->entries()) {
+        updateState();
+        return;
+    }
+
     const int scroll = m_list->verticalScrollBar()->value();
     const QString current = m_list->currentIndex().isValid() ? m_list->currentIndex().data(ScreenshotModel::PathRole).toString() : QString();
     m_model->setEntries(rows);
+    // Lay the tiles out now: QListView's delayed layout paints one empty frame after a reset, and the scroll position below
+    // would be clamped to the empty range.
+    m_list->doItemsLayout();
     const int row = current.isEmpty() ? -1 : m_model->rowForPath(current);
     if (row >= 0)
         m_list->selectionModel()->setCurrentIndex(m_model->index(row), QItemSelectionModel::ClearAndSelect);

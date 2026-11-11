@@ -30,6 +30,9 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   Then **Smart Backup** (manual world backups + verified restore with a safety snapshot, in the Worlds details panel).
 - **Session 4 (Mission 002, Phase C)**: owner asleep, autonomous run following this file's priority order.
   `acaf9c883` **automatic world backups** after playing (`launcher/zero/backup/AutoBackup`; job runner now app-level).
+  `5b89db256` + `fdcd3fdd0` **Storage Manager** (`launcher/zero/storage/StorageScanner`, `ui/zero/pages/StorageView`, Tools › Storage).
+  Downloads/Update center was skipped for now: it hooks into Prism's network/task engine (higher regression risk on a
+  core path); Storage Manager and Java Doctor are self-contained and came first.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
@@ -68,6 +71,7 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
 | **Worlds Hub** | ✅ read-only page: every world of every instance (`launcher/zero/worlds/WorldScanner`: level.dat via Prism `World` + `versionName()`/`isHardcore()`, async sizes on QThreadPool with generations, no link/junction following), search, instance filter, sort, details panel (seed copy, open folder, show instance) | `WorldScanner` test (symlink sub-case skipped: needs privileges; junction case runs), screenshots `build/zero-v2-m8-worlds-*.png`, fake worlds' files hashed unchanged after runs; **not tried with real input** |
 | **Smart Backup** (worlds) | ✅ `launcher/zero/backup/` (`WorldBackup` pure functions, `WorldBackupJobs` runner): zips in `<data>/zero/backups/<instance>/<world>/` with a SHA-256 manifest, written as `.part` and verified before rename; restore = verify → safety snapshot → extract to `saves/.zero-restore-*` + verify → rename swap with rollback → old world to Recycle Bin; zip-slip rejected; retention 10 manual + 3 safety; refused while the instance runs and launch blocked during a job | `WorldBackup` test (66 rows incl. corruption, zip-slip, failed swap rollback, retention, free space), screenshots `build/zero-v2-m9-backups-*.png`; **restore/delete dialogs, toasts, Recycle Bin and the launch block never clicked through in the app** |
 | **Auto backups** | ✅ `Kind::Auto` (keep 5/world): when a session where the game ran ends, worlds whose `level.dat` changed since the game started are backed up one at a time (>2 GB skipped + warned); instance launch-locked meanwhile; global toggle `ZeroAutoBackupWorlds` (default on) at the bottom of the Worlds backups section; one toast per outcome | `AutoBackup` test (real temp worlds + real jobs), `WorldBackup` test, screenshot `build/zero-v2-m10-autobackup.png`; **never triggered by a real game session** |
+| **Storage Manager** | ✅ Tools › Storage: total + drive free space, 11 categories (no double counting, links/junctions not followed), per-instance rows (click → Library), Clean up: logs/crash reports > 30 days → Recycle Bin after confirmation, each file re-validated, never a permanent delete; world backups + interrupted-restore folders info only | `StorageScanner` test (28 cases), screenshots `build/zero-v2-m11-*.png`; **confirm dialog / real Recycle Bin move / toasts never clicked through** |
 | Crash Detective | ✅ (session 1) 13 rules; now opened under the Tools breadcrumb | `CrashDetective` test |
 
 ## Manual QA checklist (owner, real input needed)
@@ -96,6 +100,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
       Play blocked with a message while a backup runs (large world); leftover `saves/.zero-*` folders only after a crash
 - [ ] Auto backups: play a world, quit → toast "Backed up 1 world(s) of …", an **Auto** row in Worlds; untouched worlds get
       none; Play is blocked while it runs; unticking "Back up automatically after playing" stops it
+- [ ] Storage (Tools › Storage or Ctrl+K "Open Storage"): numbers look plausible vs Explorer; instance row opens Library;
+      Move old logs to Recycle Bin → confirm → toast, files in the Recycle Bin, list rescans; Rescan button
 - [ ] Window < 1200 px collapses the rail; 1100×700 minimum
 
 ## Known limitations / open issues
@@ -117,7 +123,7 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
 3. ~~Worlds Hub~~ and ~~Smart Backup (manual + restore)~~ done in session 3, ~~automatic after playing~~ session 4.
    Smart Backup left: scheduled backups, per-instance auto opt-out, instance backup/restore, pre-update snapshots, restore preview, import/export of worlds;
    backup rows show only relative time (several "Just now" look alike; full date in the tooltip). Empty folders are not stored.
-4. Downloads/Update center, Storage Manager, Java Doctor, Mod Intelligence, Repair Center, Discover, Server Vault,
+4. ~~Storage Manager~~ (session 4; left: "find large files", scan progress). Downloads/Update center, Java Doctor, Mod Intelligence, Repair Center, Discover, Server Vault,
    Screenshot Gallery (Phases C–E in MISSION.md).
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 

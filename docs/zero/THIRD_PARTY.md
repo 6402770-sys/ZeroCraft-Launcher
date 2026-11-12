@@ -13,7 +13,10 @@
 Icons shipped: arrow-left, file-text, stethoscope, house, library-big, compass, earth, wrench, download, palette, settings, search, play, square, plus,
 star, folder-open, ellipsis, pencil, trash-2, copy, x, check, triangle-alert, info, circle-check, circle-x,
 layout-grid, list, list-filter, clock, user, chevron-down, chevron-right, chevron-up, chevron-left, minus,
-refresh-cw, archive, hard-drive, cpu, stethoscope, terminal, command, package, box.
+refresh-cw, archive, hard-drive, cpu, stethoscope, terminal, command, package, box,
+sparkles, sliders-horizontal, blocks, layers, sun, mountain-snow, gauge, external-link, heart, users, calendar, tag, git-branch,
+scroll-text, puzzle, shield-check, power, grip-vertical, arrow-up-down, file-archive, link, eye, wand-sparkles, cuboid, upload,
+loader-circle, arrow-down-wide-narrow, funnel-x, images, hammer.
 
 To update: change the pinned version above and in this file, re-download the same names, and replace `LICENSE`.
 

@@ -5,6 +5,36 @@
         <file>minecraft.qss</file>
         <file alias="zero-logo.svg">../../../program_info/zero-logo.svg</file>
         <file alias="zero-logo-minecraft.svg">../../../program_info/zero-logo-minecraft.svg</file>
+        <file>icons/sparkles.svg</file>
+        <file>icons/sliders-horizontal.svg</file>
+        <file>icons/blocks.svg</file>
+        <file>icons/layers.svg</file>
+        <file>icons/sun.svg</file>
+        <file>icons/mountain-snow.svg</file>
+        <file>icons/gauge.svg</file>
+        <file>icons/external-link.svg</file>
+        <file>icons/heart.svg</file>
+        <file>icons/users.svg</file>
+        <file>icons/calendar.svg</file>
+        <file>icons/tag.svg</file>
+        <file>icons/git-branch.svg</file>
+        <file>icons/scroll-text.svg</file>
+        <file>icons/puzzle.svg</file>
+        <file>icons/shield-check.svg</file>
+        <file>icons/power.svg</file>
+        <file>icons/grip-vertical.svg</file>
+        <file>icons/arrow-up-down.svg</file>
+        <file>icons/file-archive.svg</file>
+        <file>icons/link.svg</file>
+        <file>icons/eye.svg</file>
+        <file>icons/wand-sparkles.svg</file>
+        <file>icons/cuboid.svg</file>
+        <file>icons/upload.svg</file>
+        <file>icons/loader-circle.svg</file>
+        <file>icons/arrow-down-wide-narrow.svg</file>
+        <file>icons/funnel-x.svg</file>
+        <file>icons/images.svg</file>
+        <file>icons/hammer.svg</file>
         <file>icons/archive.svg</file>
         <file>icons/arrow-left.svg</file>
         <file>icons/box.svg</file>

@@ -22,6 +22,9 @@
 #include <QCryptographicHash>
 #include <QDebug>
 #include <QIODevice>
+#include <QJsonValue>
+
+#include <cmath>
 
 namespace ModPlatform {
 
@@ -142,6 +145,72 @@ auto getModLoaderFromString(QString type) -> ModLoaderType
     if (type == "rift")
         return Rift;
     return {};
+}
+
+// ZERO: keeps search-hit fields the details response does not carry (see ModIndex.h).
+void mergeProjectDetails(IndexedPack& into, const IndexedPack& details)
+{
+    IndexedPack merged = details;
+    if (merged.authors.isEmpty()) {
+        merged.authors = into.authors;
+    }
+    if (merged.downloads < 0) {
+        merged.downloads = into.downloads;
+    }
+    if (merged.follows < 0) {
+        merged.follows = into.follows;
+    }
+    if (merged.categories.isEmpty()) {
+        merged.categories = into.categories;
+    }
+    if (merged.categoryIds.isEmpty()) {
+        merged.categoryIds = into.categoryIds;
+    }
+    if (merged.gameVersions.isEmpty()) {
+        merged.gameVersions = into.gameVersions;
+    }
+    if (merged.loaderNames.isEmpty()) {
+        merged.loaderNames = into.loaderNames;
+    }
+    if (merged.gallery.isEmpty()) {
+        merged.gallery = into.gallery;
+    }
+    if (merged.featuredImageUrl.isEmpty()) {
+        merged.featuredImageUrl = into.featuredImageUrl;
+    }
+    if (!merged.dateCreated.isValid()) {
+        merged.dateCreated = into.dateCreated;
+    }
+    if (!merged.dateModified.isValid()) {
+        merged.dateModified = into.dateModified;
+    }
+    if (merged.license.isEmpty()) {
+        merged.license = into.license;
+    }
+    into = std::move(merged);
+}
+
+// ZERO: lenient readers for the presentation fields.
+qint64 countFromJson(const QJsonValue& value)
+{
+    if (!value.isDouble()) {
+        return -1;
+    }
+    const double d = value.toDouble();
+    // 2^53: every integer below it is exact in a double; beyond it a count is not meaningful anyway.
+    if (!std::isfinite(d) || d < 0 || d > 9007199254740992.0) {
+        return -1;
+    }
+    return static_cast<qint64>(d);
+}
+
+QDateTime dateFromJson(const QJsonValue& value)
+{
+    if (!value.isString()) {
+        return {};
+    }
+    auto date = QDateTime::fromString(value.toString(), Qt::ISODateWithMs);
+    return date.isValid() ? date : QDateTime();
 }
 
 }  // namespace ModPlatform

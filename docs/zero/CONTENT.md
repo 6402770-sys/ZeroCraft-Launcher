@@ -47,6 +47,13 @@ Added to `ModPlatform::IndexedPack` (all optional; "unknown" values below mean "
 - CurseForge (`/mods/search`, `/mods/<id>`): `downloadCount`, `categories[].name` (+ `slug`), `screenshots[]`
   (`url`, `thumbnailUrl`, `title`, `description`), `dateModified`, `dateCreated`, `latestFilesIndexes[]` (`gameVersion`
   → gameVersions, `modLoader` int → loaderNames), `thumbsUpCount` is not shown. No license on CurseForge.
+- `categoryIds` (as built): filter values. Modrinth = the category slugs (same as `categories`); CurseForge = numeric
+  ids as strings while `categories` holds the display names. `ItemFacts.categories` is filled from `categoryIds`.
+- `ResourceAPI::SearchArgs::categoryGroups` (as built): OR inside a group, AND across groups; Modrinth only.
+  `Zero::Content::toSearchArgs` puts category / feature / resolution / platform / performance there. CurseForge takes one
+  `gameVersion`: with several versions selected none is sent and `matchesClient` filters the loaded rows.
+- `ModPlatform::mergeProjectDetails(into, details)`: every place that merges `/project` details into a search hit uses
+  it (keeps authors and presentation fields the details lack).
 - Version-level (`IndexedVersion`): add `qint64 fileSize = -1` (Modrinth primary file `size`, CurseForge `fileLength`)
   and `qint64 downloads = -1` (Modrinth version `downloads`, CurseForge `downloadCount`).
 - Categories with groups: `ModPlatform::Category` gains `QString header` (Modrinth `header`: `categories`,
@@ -76,8 +83,8 @@ Facet = `{ id, label, kind (Multi | Single | Toggle), side (Server | Client), op
 ### Facets per section
 | Section | Server facets | Client facets |
 |---|---|---|
-| Modpacks | Provider (Modrinth / CurseForge / Technic; which sources are queried), Minecraft version, Loader (Fabric, Forge, NeoForge, Quilt), Category (provider categories, `header = categories`) | Installed (instances whose managed pack id matches) |
-| Mods | Provider, Minecraft version, Loader, Category, Environment (Modrinth only) | Installed in target, Update available (from installed metadata), Hide installed |
+| Modpacks | Provider (single choice: Modrinth (default) / CurseForge / Technic — one source at a time, so sort and paging stay honest; Technic can only be searched by name, its other facets show "Technic can only be searched by name"), Minecraft version, Loader (Fabric, Forge, NeoForge, Quilt), Category (provider categories, `header = categories`) | Installed (instances whose managed pack id matches) |
+| Mods | Provider (single choice), Minecraft version, Loader, Category, Environment (Modrinth only) | Installed in target, Update available (from installed metadata), Hide installed |
 | Resource packs | Provider, Minecraft version, Resolution (Modrinth `resolutions` header), Category / Features | Installed in target |
 | Shaders | Minecraft version, Platform (Iris / OptiFine / Canvas / Vanilla, Modrinth loaders), Performance impact (Modrinth `performance impact`: potato / low / medium / high), Features / Category | Installed in target |
 A facet whose provider cannot apply it is shown disabled with the reason in its tooltip ("CurseForge has no

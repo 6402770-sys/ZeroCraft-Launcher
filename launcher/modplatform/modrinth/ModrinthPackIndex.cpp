@@ -20,6 +20,9 @@
 #include "ModrinthPackIndex.h"
 #include "FileSystem.h"
 
+#include <QSet>
+#include <algorithm>
+
 #include "Json.h"
 #include "modplatform/ModIndex.h"
 #include "modplatform/ResourceType.h"
@@ -111,6 +114,102 @@ QString getAuthorURL(const QString& name)
     return "https://modrinth.com/user/" + name;
 };
 
+// ZERO: appends the strings of a JSON array to `out`, skipping non-strings, empty strings and duplicates.
+void appendUniqueStrings(QStringList& out, const QJsonValue& value)
+{
+    for (const auto& v : value.toArray()) {
+        if (const auto str = v.toString(); !str.isEmpty() && !out.contains(str)) {
+            out.append(str);
+        }
+    }
+}
+
+// ZERO: Modrinth search hits mix category slugs and loader names in `categories` / `display_categories`; these are the
+// /tag/loader names (mods, plugins, packs, shaders, resource packs) used to split them.
+bool isModrinthLoaderName(const QString& name)
+{
+    static const QSet<QString> s_loaders = {
+        "babric",     "bta-babric", "bukkit",    "bungeecord", "canvas",   "datapack", "fabric",    "folia",
+        "forge",      "geyser",     "iris",      "java-agent", "legacy-fabric",        "liteloader", "minecraft",
+        "modloader",  "neoforge",   "nilloader", "optifine",   "ornithe",  "paper",    "purpur",    "quilt",
+        "rift",       "spigot",     "sponge",    "vanilla",    "velocity", "waterfall",
+    };
+    return s_loaders.contains(name);
+}
+
+// ZERO: presentation fields of a search hit (`/search` `hits[]`).
+void loadHitPresentation(ModPlatform::IndexedPack& pack, const QJsonObject& obj)
+{
+    pack.downloads = ModPlatform::countFromJson(obj["downloads"]);
+    pack.follows = ModPlatform::countFromJson(obj["follows"]);
+
+    QStringList tags;
+    appendUniqueStrings(tags, obj["categories"]);
+    appendUniqueStrings(tags, obj["display_categories"]);
+    for (const auto& tag : tags) {
+        (isModrinthLoaderName(tag) ? pack.loaderNames : pack.categories).append(tag);
+    }
+
+    appendUniqueStrings(pack.gameVersions, obj["versions"]);
+
+    pack.featuredImageUrl = obj["featured_gallery"].toString();
+    for (const auto& v : obj["gallery"].toArray()) {
+        const auto url = v.toString();
+        if (url.isEmpty()) {
+            continue;
+        }
+        pack.gallery.append({ .url = url, .thumbnailUrl = url, .title = {}, .description = {},
+                              .featured = !pack.featuredImageUrl.isEmpty() && url == pack.featuredImageUrl });
+    }
+
+    pack.dateCreated = ModPlatform::dateFromJson(obj["date_created"]);
+    pack.dateModified = ModPlatform::dateFromJson(obj["date_modified"]);
+    pack.license = obj["license"].toString();
+}
+
+// ZERO: presentation fields of a project (`/project/<id>`, `/projects?ids=`).
+void loadProjectPresentation(ModPlatform::IndexedPack& pack, const QJsonObject& obj)
+{
+    pack.downloads = ModPlatform::countFromJson(obj["downloads"]);
+    pack.follows = ModPlatform::countFromJson(obj["followers"]);
+
+    appendUniqueStrings(pack.categories, obj["categories"]);
+    appendUniqueStrings(pack.categories, obj["additional_categories"]);
+    appendUniqueStrings(pack.loaderNames, obj["loaders"]);
+    appendUniqueStrings(pack.gameVersions, obj["game_versions"]);
+
+    struct Entry {
+        ModPlatform::GalleryImage image;
+        int ordering = 0;
+    };
+    QList<Entry> entries;
+    for (const auto& v : obj["gallery"].toArray()) {
+        const auto g = v.toObject();
+        const auto url = g["url"].toString();
+        if (url.isEmpty()) {
+            continue;
+        }
+        entries.append({ .image = { .url = url,
+                                    .thumbnailUrl = url,
+                                    .title = g["title"].toString(),
+                                    .description = g["description"].toString(),
+                                    .featured = g["featured"].toBool(false) },
+                         .ordering = g["ordering"].toInt(0) });
+    }
+    std::ranges::stable_sort(entries, {}, &Entry::ordering);
+    std::ranges::stable_partition(entries, [](const Entry& e) { return e.image.featured; });
+    for (const auto& e : entries) {
+        pack.gallery.append(e.image);
+        if (e.image.featured && pack.featuredImageUrl.isEmpty()) {
+            pack.featuredImageUrl = e.image.url;
+        }
+    }
+
+    pack.dateCreated = ModPlatform::dateFromJson(obj["published"]);
+    pack.dateModified = ModPlatform::dateFromJson(obj["updated"]);
+    pack.license = obj["license"].toObject()["id"].toString();
+}
+
 }  // namespace
 
 namespace Modrinth::Parse {
@@ -160,6 +259,19 @@ Result<> loadIndexedPack(ModPlatform::IndexedPack& pack, const QJsonObject& obj)
     } else if (client) {
         pack.side = ModPlatform::SideType::ClientSide;
     }
+
+    // ZERO: presentation fields. A search hit carries `project_id`; a project object (`/project`, `/projects`) only `id`.
+    pack.categories.clear();
+    pack.loaderNames.clear();
+    pack.gameVersions.clear();
+    pack.gallery.clear();
+    pack.featuredImageUrl.clear();
+    if (obj.contains("project_id")) {
+        loadHitPresentation(pack, obj);
+    } else {
+        loadProjectPresentation(pack, obj);
+    }
+    pack.categoryIds = pack.categories;
 
     // Modrinth can have more data than what's provided by the basic search :)
     pack.extraDataLoaded = false;
@@ -280,6 +392,8 @@ Result<ModPlatform::IndexedVersion> Modrinth::loadIndexedPackVersion(const QJson
         TRY_INTO(file.downloadUrl, Json::requireString(parent, "url"))
         TRY_INTO(file.fileName, Json::requireString(parent, "filename"))
         file.fileName = FS::RemoveInvalidPathChars(file.fileName);
+        file.fileSize = ModPlatform::countFromJson(parent["size"]);  // ZERO: shown in the version list
+        file.downloads = ModPlatform::countFromJson(obj["downloads"]);  // ZERO: shown in the version list
         TRY_INTO(const auto& primary, Json::requireBoolean(parent, "primary"))
         file.isPreferred = primary || (files.count() == 1);
         auto hashList = Json::requireObject(parent, "hashes");

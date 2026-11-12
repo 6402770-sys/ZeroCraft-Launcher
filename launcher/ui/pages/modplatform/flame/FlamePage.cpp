@@ -215,7 +215,7 @@ void FlamePage::onSelectionChanged(QModelIndex curr, [[maybe_unused]] QModelInde
             // Preserve any version data already loaded into the pack, since the project request only carries the pack info
             auto versions = std::move(m_current->versions);
             auto versionsLoaded = m_current->versionsLoaded;
-            *m_current = *response;
+            ModPlatform::mergeProjectDetails(*m_current, *response);  // ZERO: keeps the search hit's authors
             m_current->versions = std::move(versions);
             m_current->versionsLoaded = versionsLoaded;
 

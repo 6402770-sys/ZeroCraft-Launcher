@@ -87,6 +87,8 @@ Result<ModPlatform::IndexedVersion> FlameMod::loadIndexedPackVersion(const QJson
     file.downloadUrl = obj["downloadUrl"].toString();
     TRY_INTO(file.fileName, Json::requireString(obj, "fileName"))
     file.fileName = FS::RemoveInvalidPathChars(file.fileName);
+    file.fileSize = ModPlatform::countFromJson(obj["fileLength"]);      // ZERO: shown in the version list
+    file.downloads = ModPlatform::countFromJson(obj["downloadCount"]);  // ZERO: shown in the version list
 
     TRY_INTO(const auto& releaseType, Json::requireInteger(obj, "releaseType"))
     ModPlatform::IndexedVersionType verType;

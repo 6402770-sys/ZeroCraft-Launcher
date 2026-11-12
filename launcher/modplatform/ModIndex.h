@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <QDateTime>
 #include <QList>
 #include <QMetaType>
 #include <QString>
@@ -31,6 +32,7 @@
 #include "modplatform/ResourceType.h"
 
 class QIODevice;
+class QJsonValue;
 
 namespace ModPlatform {
 
@@ -254,6 +256,9 @@ struct IndexedVersion {
     QString changelog;
     QList<Dependency> dependencies;
     SideType side = SideType::NoSide;  // this is for flame API
+    // ZERO: size and download count shown in the content details' version list; -1 = the provider did not send it.
+    qint64 fileSize = -1;   // Modrinth: the chosen file's `size`; CurseForge: `fileLength`
+    qint64 downloads = -1;  // Modrinth: `downloads`; CurseForge: `downloadCount`
 
     // For internal use, not provided by APIs
     bool isCurrentlySelected = false;
@@ -289,6 +294,15 @@ struct ExtraPackData {
     QString body;
 };
 
+// ZERO: one screenshot / gallery image of a project (Modrinth `gallery`, CurseForge `screenshots`).
+struct GalleryImage {
+    QString url;
+    QString thumbnailUrl;
+    QString title;
+    QString description;
+    bool featured = false;
+};
+
 struct IndexedPack {
     using Ptr = std::shared_ptr<IndexedPack>;
 
@@ -311,6 +325,20 @@ struct IndexedPack {
     ExtraPackData extraData;
 
     ResourceType resourceType = ResourceType::Unknown;
+
+    // ZERO: presentation fields for the Discover UI (docs/zero/CONTENT.md). All optional: -1 / empty / null means
+    // "the provider did not send it" and the UI hides it.
+    qint64 downloads = -1;
+    qint64 follows = -1;  // Modrinth `follows` / `followers`; CurseForge has none
+    QStringList categories;   // Modrinth category slugs (loader names split out); CurseForge category display names
+    QStringList categoryIds;  // filter ids of `categories`: Modrinth = the same slugs, CurseForge = numeric ids as strings
+    QStringList gameVersions;  // project-level Minecraft versions, in the provider's order
+    QStringList loaderNames;   // lower-case provider loader names (fabric, forge, neoforge, quilt, iris, optifine, ...)
+    QList<GalleryImage> gallery;
+    QString featuredImageUrl;
+    QDateTime dateCreated;
+    QDateTime dateModified;
+    QString license;  // Modrinth license id (SPDX or LicenseRef-...); CurseForge has none
 
     // For internal use, not provided by APIs
     bool isVersionSelected(int index) const
@@ -363,7 +391,18 @@ constexpr bool hasSingleModLoaderSelected(ModLoaderTypes l) noexcept
 struct Category {
     QString name;
     QString id;
+    QString header;  // ZERO: Modrinth tag group (`categories`, `features`, `resolutions`, `performance impact`); empty elsewhere
 };
+
+// ZERO: merges a project-details response into a pack that came from a search hit. `into` takes every field of
+// `details`, except that the authors and the ZERO presentation fields `details` lacks keep their current values
+// (Modrinth's /project endpoint has no `author`). Versions are left to the caller.
+void mergeProjectDetails(IndexedPack& into, const IndexedPack& details);
+
+// ZERO: lenient JSON readers for the presentation fields: a missing, null, negative or wrongly typed value gives -1 /
+// a null QDateTime instead of an error, so a provider change never breaks the existing parsers.
+qint64 countFromJson(const QJsonValue& value);
+QDateTime dateFromJson(const QJsonValue& value);
 
 }  // namespace ModPlatform
 

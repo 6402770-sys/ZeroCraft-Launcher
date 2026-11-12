@@ -22,6 +22,75 @@
 #include "modplatform/ModIndex.h"
 #include "modplatform/flame/FlameAPI.h"
 
+namespace {
+// ZERO: CurseForge `ModLoaderType` (docs.curseforge.com, tocS_ModLoaderType) to the lower-case loader names ZERO uses.
+QString loaderNameFromFlame(int modLoader)
+{
+    switch (modLoader) {
+        case 1:
+            return QStringLiteral("forge");
+        case 4:
+            return QStringLiteral("fabric");
+        case 5:
+            return QStringLiteral("quilt");
+        case 6:
+            return QStringLiteral("neoforge");
+        default:
+            return {};  // 0 = any, 2 = Cauldron, 3 = LiteLoader: not shown
+    }
+}
+
+// ZERO: presentation fields of a CurseForge mod (`/mods/search` `data[]`, `/mods/<id>` `data`, `/mods` POST).
+void loadPresentation(ModPlatform::IndexedPack& pack, const QJsonObject& obj)
+{
+    pack.downloads = ModPlatform::countFromJson(obj["downloadCount"]);
+
+    pack.categories.clear();
+    pack.categoryIds.clear();
+    for (const auto& v : obj["categories"].toArray()) {
+        const auto cat = v.toObject();
+        const auto name = cat["name"].toString();
+        const auto id = ModPlatform::countFromJson(cat["id"]);
+        if (name.isEmpty() || id < 0 || pack.categoryIds.contains(QString::number(id))) {
+            continue;
+        }
+        pack.categories.append(name);
+        pack.categoryIds.append(QString::number(id));
+    }
+
+    pack.gallery.clear();
+    for (const auto& v : obj["screenshots"].toArray()) {
+        const auto shot = v.toObject();
+        const auto url = shot["url"].toString();
+        if (url.isEmpty()) {
+            continue;
+        }
+        const auto thumbnail = shot["thumbnailUrl"].toString();
+        pack.gallery.append({ .url = url,
+                              .thumbnailUrl = thumbnail.isEmpty() ? url : thumbnail,
+                              .title = shot["title"].toString(),
+                              .description = shot["description"].toString(),
+                              .featured = false });
+    }
+    pack.featuredImageUrl.clear();  // CurseForge has no featured screenshot
+
+    pack.gameVersions.clear();
+    pack.loaderNames.clear();
+    for (const auto& v : obj["latestFilesIndexes"].toArray()) {
+        const auto index = v.toObject();
+        if (const auto gameVersion = index["gameVersion"].toString(); !gameVersion.isEmpty() && !pack.gameVersions.contains(gameVersion)) {
+            pack.gameVersions.append(gameVersion);
+        }
+        if (const auto loader = loaderNameFromFlame(index["modLoader"].toInt(0)); !loader.isEmpty() && !pack.loaderNames.contains(loader)) {
+            pack.loaderNames.append(loader);
+        }
+    }
+
+    pack.dateCreated = ModPlatform::dateFromJson(obj["dateCreated"]);
+    pack.dateModified = ModPlatform::dateFromJson(obj["dateModified"]);
+}
+}  // namespace
+
 namespace Flame::Parse {
 Result<> loadIndexedPack(ModPlatform::IndexedPack& pack, const QJsonObject& obj)
 {
@@ -74,6 +143,8 @@ Result<> loadIndexedPack(ModPlatform::IndexedPack& pack, const QJsonObject& obj)
     if (!pack.extraData.body.isEmpty()) {
         pack.extraDataLoaded = true;
     }
+
+    loadPresentation(pack, obj);  // ZERO: Discover cards and details
     return {};
 }
 }  // namespace Flame::Parse

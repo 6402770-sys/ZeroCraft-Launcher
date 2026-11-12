@@ -290,7 +290,7 @@ void ResourceModel::loadEntry(const QModelIndex& entry)
             // Preserve any version data already loaded into the pack, since the project request only carries the pack info
             auto versions = std::move(project->versions);
             auto versionsLoaded = project->versionsLoaded;
-            *project = *response;
+            ModPlatform::mergeProjectDetails(*project, *response);  // ZERO: keeps the search hit's authors
             project->versions = std::move(versions);
             project->versionsLoaded = versionsLoaded;
             if (!s_runningModels.constFind(this).value()) {

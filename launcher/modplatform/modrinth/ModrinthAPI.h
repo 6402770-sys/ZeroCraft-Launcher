@@ -48,7 +48,11 @@ class ModrinthAPI final : public ResourceAPI {
     static QString getModpackIdFromUrl(const QUrl& url);
 
     std::pair<Task::Ptr, QByteArray*> getModCategories() const override;
+    // ZERO: the full /tag/category list (every project type); filter it with loadCategories(response, type).
+    static std::pair<Task::Ptr, QByteArray*> getCategories();
     static QList<ModPlatform::Category> loadCategories(const QByteArray& response, const QString& projectType);
+    // ZERO: categories of one project type (Modpack, Mod, ResourcePack, ShaderPack), with their `header`.
+    static QList<ModPlatform::Category> loadCategories(const QByteArray& response, ModPlatform::ResourceType type);
     QList<ModPlatform::Category> loadModCategories(const QByteArray& response) const override;
 
    public:

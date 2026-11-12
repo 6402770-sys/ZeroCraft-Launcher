@@ -1,0 +1,17 @@
+{
+  "id": "IZskON6d",
+  "project_id": "AANobbMI",
+  "name": "Sodium 0.5.3",
+  "version_number": "mc1.20.1-0.5.3",
+  "changelog": "Fixes",
+  "date_published": "2023-09-20T21:30:12.512Z",
+  "downloads": 1234567,
+  "version_type": "release",
+  "game_versions": ["1.20.1"],
+  "loaders": ["fabric", "quilt"],
+  "dependencies": [],
+  "files": [
+    { "hashes": { "sha512": "aaa", "sha1": "bbb" }, "url": "https://cdn.modrinth.com/sources.jar", "filename": "sodium-sources.jar", "primary": false, "size": 1000 },
+    { "hashes": { "sha512": "ccc", "sha1": "ddd" }, "url": "https://cdn.modrinth.com/sodium.jar", "filename": "sodium.jar", "primary": true, "size": 1032147 }
+  ]
+}

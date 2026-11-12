@@ -129,6 +129,18 @@ QString createFacets(const ResourceAPI::SearchArgs& args)
             facetsList.append(QString(R"(["categories:%1"])").arg(category));
         }
     }
+    // ZERO: OR-groups of category tags (one facet array per group, groups AND-ed); absent for every existing caller.
+    if (args.categoryGroups.has_value()) {
+        for (const auto& group : args.categoryGroups.value()) {
+            QStringList tags;
+            for (const auto& category : group) {
+                tags.append(QString(R"("categories:%1")").arg(category));
+            }
+            if (!tags.isEmpty()) {
+                facetsList.append(QString("[%1]").arg(tags.join(',')));
+            }
+        }
+    }
     if (!args.excludeDisclosureTypes.empty()) {
         for (const auto& d : args.excludeDisclosureTypes) {
             facetsList.append(QString("[\"disclosure_types!=%1\"]").arg(d.toString()));
@@ -357,6 +369,11 @@ QUrl ModrinthAPI::searchProjectsURL(const SearchArgs& args)
 
 std::pair<Task::Ptr, QByteArray*> ModrinthAPI::getModCategories() const
 {
+    return getCategories();  // ZERO: the same request, also reachable without an instance (static)
+}
+
+std::pair<Task::Ptr, QByteArray*> ModrinthAPI::getCategories()
+{
     auto netJob = makeShared<NetJob>(QString("Modrinth::GetCategories"), APPLICATION->network());
     auto [action, response] = Net::ApiRequest::makeByteArray(QUrl(BuildConfig.MODRINTH_PROD_URL + "/tag/category"));
     netJob->addNetAction(action);
@@ -376,7 +393,7 @@ QList<ModPlatform::Category> ModrinthAPI::loadCategories(const QByteArray& respo
             TRY_INTO(const auto& cat, Json::requireObject(val))
             TRY_INTO(const auto& name, Json::requireString(cat, "name"))
             if (cat["project_type"].toString() == projectType) {
-                categories.push_back({ .name = name, .id = name });
+                categories.push_back({ .name = name, .id = name, .header = cat["header"].toString() });  // ZERO: keep the group
             }
         }
         return {};
@@ -386,6 +403,15 @@ QList<ModPlatform::Category> ModrinthAPI::loadCategories(const QByteArray& respo
         qWarning() << response;
     }
     return categories;
+}
+
+QList<ModPlatform::Category> ModrinthAPI::loadCategories(const QByteArray& response, ModPlatform::ResourceType type)
+{
+    const auto projectType = Modrinth::Parse::resourceTypeParameter(type);
+    if (projectType.isEmpty()) {
+        return {};
+    }
+    return loadCategories(response, projectType);
 }
 
 QList<ModPlatform::Category> ModrinthAPI::loadModCategories(const QByteArray& response) const

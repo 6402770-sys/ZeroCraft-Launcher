@@ -86,6 +86,9 @@ class ResourceAPI {
         std::optional<QStringList> categoryIds;
         bool openSource{};
         std::vector<ModPlatform::DisclosureType> excludeDisclosureTypes;
+        // ZERO: category tags as groups: tags inside a group are OR-ed, groups are AND-ed (resolution 16x OR 32x, AND a
+        // feature). Used by Modrinth only, in addition to `categoryIds` (each of which stays its own AND-ed group).
+        std::optional<QList<QStringList>> categoryGroups;
     };
 
     struct VersionSearchArgs {

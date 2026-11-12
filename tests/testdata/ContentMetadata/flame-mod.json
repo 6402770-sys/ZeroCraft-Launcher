@@ -1,0 +1,19 @@
+{
+  "data": {
+    "id": 238222,
+    "gameId": 432,
+    "name": "Just Enough Items (JEI)",
+    "slug": "jei",
+    "links": { "websiteUrl": "https://www.curseforge.com/minecraft/mc-mods/jei" },
+    "summary": "View Items and Recipes",
+    "downloadCount": 345678902,
+    "categories": [ { "id": 423, "name": "Map and Information", "slug": "map-information" } ],
+    "classId": 6,
+    "authors": [ { "id": 32358, "name": "mezz", "url": "https://www.curseforge.com/members/mezz" } ],
+    "logo": { "thumbnailUrl": "https://media.forgecdn.net/thumb.png", "url": "https://media.forgecdn.net/logo.png" },
+    "screenshots": [],
+    "latestFilesIndexes": [ { "gameVersion": "1.21.1", "fileId": 9, "filename": "jei.jar", "releaseType": 1, "modLoader": 5 } ],
+    "dateCreated": "2015-11-23T19:58:58.743Z",
+    "dateModified": "not a date"
+  }
+}

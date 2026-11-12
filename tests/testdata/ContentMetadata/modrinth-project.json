@@ -1,0 +1,29 @@
+{
+  "id": "AANobbMI",
+  "slug": "sodium",
+  "project_type": "mod",
+  "team": "4reLOAKe",
+  "title": "Sodium",
+  "description": "The fastest rendering engine for Minecraft",
+  "body": "Sodium is a powerful rendering engine.",
+  "published": "2020-11-04T00:53:12.383416Z",
+  "updated": "2026-10-30T18:22:07Z",
+  "status": "approved",
+  "license": { "id": "LicenseRef-Polyform-Shield-1.0.0", "name": "Polyform Shield", "url": "https://polyformproject.org/licenses/shield/1.0.0/" },
+  "client_side": "required",
+  "server_side": "unsupported",
+  "downloads": 98765433,
+  "followers": 34568,
+  "categories": ["optimization", "utility"],
+  "additional_categories": ["utility", "decoration"],
+  "game_versions": ["1.20.1", "1.20.4", "1.21"],
+  "loaders": ["fabric", "neoforge", "quilt"],
+  "versions": ["ver1", "ver2"],
+  "icon_url": "https://cdn.modrinth.com/data/AANobbMI/icon.png",
+  "gallery": [
+    { "url": "https://cdn.modrinth.com/a.webp", "raw_url": "https://cdn.modrinth.com/a.png", "featured": false, "title": "A", "description": "First", "created": "2021-01-01T00:00:00Z", "ordering": 2 },
+    { "url": "https://cdn.modrinth.com/b.webp", "raw_url": "https://cdn.modrinth.com/b.png", "featured": false, "title": null, "description": null, "created": "2021-01-01T00:00:00Z", "ordering": 0 },
+    { "url": "https://cdn.modrinth.com/c.webp", "raw_url": "https://cdn.modrinth.com/c.png", "featured": true, "title": "Hero", "description": "The featured one", "created": "2021-01-01T00:00:00Z", "ordering": 5 },
+    { "url": "https://cdn.modrinth.com/d.webp", "raw_url": "https://cdn.modrinth.com/d.png", "featured": false, "title": "D", "description": "", "created": "2021-01-01T00:00:00Z", "ordering": 1 }
+  ]
+}

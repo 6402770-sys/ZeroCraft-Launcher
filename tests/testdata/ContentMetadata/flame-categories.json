@@ -1,0 +1,6 @@
+{
+  "data": [
+    { "id": 4475, "gameId": 432, "name": "Adventure and RPG", "slug": "adventure-and-rpg", "url": "https://www.curseforge.com/minecraft/modpacks/adventure-and-rpg", "iconUrl": "https://media.forgecdn.net/a.png", "dateModified": "2014-05-08T17:44:39.057Z", "isClass": false, "classId": 4471, "parentCategoryId": 4471 },
+    { "id": 4484, "gameId": 432, "name": "Multiplayer", "slug": "multiplayer", "classId": 4471, "parentCategoryId": 4471 }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "hits": [
+    {
+      "project_id": "AANobbMI",
+      "project_type": "mod",
+      "slug": "sodium",
+      "author": "jellysquid3",
+      "title": "Sodium",
+      "description": "The fastest rendering engine for Minecraft",
+      "categories": ["fabric", "neoforge", "optimization", "quilt", "iris"],
+      "display_categories": ["optimization", "fabric", "utility"],
+      "versions": ["1.20.1", "1.20.4", "1.21"],
+      "downloads": 98765432,
+      "follows": 34567,
+      "icon_url": "https://cdn.modrinth.com/data/AANobbMI/icon.png",
+      "date_created": "2020-11-04T00:53:12.383416Z",
+      "date_modified": "2026-10-30T18:22:07.123Z",
+      "latest_version": "abcd1234",
+      "license": "LicenseRef-Polyform-Shield-1.0.0",
+      "client_side": "required",
+      "server_side": "unsupported",
+      "gallery": [
+        "https://cdn.modrinth.com/data/AANobbMI/images/one_350.webp",
+        "https://cdn.modrinth.com/data/AANobbMI/images/two_350.webp"
+      ],
+      "featured_gallery": "https://cdn.modrinth.com/data/AANobbMI/images/two_350.webp",
+      "color": 8703084
+    },
+    {
+      "project_id": "minimal1",
+      "project_type": "modpack",
+      "slug": "minimal",
+      "title": "Minimal pack"
+    },
+    {
+      "project_id": "badtypes",
+      "project_type": "shader",
+      "slug": "bad-types",
+      "author": "someone",
+      "title": "Bad types",
+      "categories": "iris",
+      "display_categories": null,
+      "versions": [1, null, "1.20.1"],
+      "downloads": "12",
+      "follows": -5,
+      "date_created": "yesterday",
+      "date_modified": null,
+      "license": { "id": "MIT" },
+      "gallery": [null, 3, ""],
+      "featured_gallery": null
+    }
+  ],
+  "offset": 0,
+  "limit": 25,
+  "total_hits": 3
+}

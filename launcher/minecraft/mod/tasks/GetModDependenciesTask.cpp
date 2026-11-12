@@ -185,7 +185,9 @@ Task::Ptr GetModDependenciesTask::getProjectInfoTask(const std::shared_ptr<PackD
 {
     auto provider = pDep->pack->provider;
     auto [info, responseInfo] = getAPI(provider)->getProjectTask(pDep->pack->addonId.toString());
-    connect(info.get(), &NetJob::succeeded, this, [responseInfo, pDep] { *pDep->pack = *responseInfo; });
+    connect(info.get(), &NetJob::succeeded, this, [responseInfo, pDep] {
+        ModPlatform::mergeProjectDetails(*pDep->pack, *responseInfo);  // ZERO: one merge rule for project details
+    });
     QObject::connect(info.get(), &NetJob::failed, this, [this, info, pDep] {
         removePack(pDep->pack->addonId);
         m_failed.remove(info.get());

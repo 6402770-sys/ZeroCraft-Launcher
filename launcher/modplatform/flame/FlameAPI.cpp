@@ -340,6 +340,11 @@ std::pair<Task::Ptr, QByteArray*> FlameAPI::getModCategories() const
 
 QList<ModPlatform::Category> FlameAPI::loadModCategories(const QByteArray& response) const
 {
+    return loadCategories(response);  // ZERO: the parser is static now, for categories of any class
+}
+
+QList<ModPlatform::Category> FlameAPI::loadCategories(const QByteArray& response)
+{
     QList<ModPlatform::Category> categories;
     auto parse = [&response, &categories] -> Result<> {
         TRY_INTO(const auto& doc, Json::requireObject(response).and_then([](const auto& v) { return Json::requireArray(v, "data"); }))

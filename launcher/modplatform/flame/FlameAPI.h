@@ -38,6 +38,8 @@ class FlameAPI final : public ResourceAPI {
     static std::pair<Task::Ptr, QByteArray*> getCategories(ModPlatform::ResourceType type);
     std::pair<Task::Ptr, QByteArray*> getModCategories() const override;
     QList<ModPlatform::Category> loadModCategories(const QByteArray& response) const override;
+    // ZERO: parses a /categories answer of any class (getCategories(type)); CurseForge categories have no header.
+    static QList<ModPlatform::Category> loadCategories(const QByteArray& response);
 
     QList<ResourceAPI::SortingMethod> getSortingMethods() const override;
 

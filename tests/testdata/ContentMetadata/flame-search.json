@@ -1,0 +1,63 @@
+{
+  "data": [
+    {
+      "id": 238222,
+      "gameId": 432,
+      "name": "Just Enough Items (JEI)",
+      "slug": "jei",
+      "links": { "websiteUrl": "https://www.curseforge.com/minecraft/mc-mods/jei", "wikiUrl": "", "issuesUrl": "https://github.com/mezz/JustEnoughItems/issues", "sourceUrl": "https://github.com/mezz/JustEnoughItems" },
+      "summary": "View Items and Recipes",
+      "status": 4,
+      "downloadCount": 345678901.0,
+      "isFeatured": false,
+      "primaryCategoryId": 423,
+      "categories": [
+        { "id": 423, "gameId": 432, "name": "Map and Information", "slug": "map-information", "url": "https://www.curseforge.com/minecraft/mc-mods/map-information", "iconUrl": "https://media.forgecdn.net/a.png", "dateModified": "2014-05-08T17:44:39.057Z", "isClass": false, "classId": 6, "parentCategoryId": 6 },
+        { "id": 421, "gameId": 432, "name": "API and Library", "slug": "library-api", "classId": 6, "parentCategoryId": 6 },
+        { "id": 423, "gameId": 432, "name": "Map and Information", "slug": "map-information", "classId": 6, "parentCategoryId": 6 }
+      ],
+      "classId": 6,
+      "authors": [ { "id": 32358, "name": "mezz", "url": "https://www.curseforge.com/members/mezz" } ],
+      "logo": { "id": 1, "modId": 238222, "title": "jei.png", "description": "", "thumbnailUrl": "https://media.forgecdn.net/thumb.png", "url": "https://media.forgecdn.net/logo.png" },
+      "screenshots": [
+        { "id": 11, "modId": 238222, "title": "Recipes", "description": "The recipe view", "thumbnailUrl": "https://media.forgecdn.net/s1_thumb.png", "url": "https://media.forgecdn.net/s1.png" },
+        { "id": 12, "modId": 238222, "title": "", "description": "", "thumbnailUrl": "", "url": "https://media.forgecdn.net/s2.png" }
+      ],
+      "mainFileId": 5,
+      "latestFiles": [],
+      "latestFilesIndexes": [
+        { "gameVersion": "1.21.1", "fileId": 9, "filename": "jei-1.21.1-neoforge.jar", "releaseType": 1, "gameVersionTypeId": 77784, "modLoader": 6 },
+        { "gameVersion": "1.21.1", "fileId": 8, "filename": "jei-1.21.1-fabric.jar", "releaseType": 1, "gameVersionTypeId": 77784, "modLoader": 4 },
+        { "gameVersion": "1.20.1", "fileId": 7, "filename": "jei-1.20.1-forge.jar", "releaseType": 1, "gameVersionTypeId": 75125, "modLoader": 1 },
+        { "gameVersion": "1.12.2", "fileId": 6, "filename": "jei-1.12.2.jar", "releaseType": 1, "gameVersionTypeId": 628, "modLoader": 0 },
+        { "gameVersion": "1.7.10", "fileId": 5, "filename": "jei-1.7.10.jar", "releaseType": 1, "gameVersionTypeId": 4, "modLoader": null }
+      ],
+      "dateCreated": "2015-11-23T19:58:58.743Z",
+      "dateModified": "2026-10-21T05:40:12Z",
+      "dateReleased": "2026-10-21T05:39:12.11Z",
+      "allowModDistribution": true,
+      "gamePopularityRank": 3,
+      "isAvailable": true,
+      "thumbsUpCount": 120
+    },
+    {
+      "id": 1000,
+      "name": "Bare",
+      "slug": "bare",
+      "classId": 4471
+    },
+    {
+      "id": 1001,
+      "name": "Wrong types",
+      "slug": "wrong-types",
+      "classId": 12,
+      "downloadCount": "many",
+      "categories": [ { "id": "x", "name": "No numeric id" }, { "id": 5, "name": null }, 7 ],
+      "screenshots": "none",
+      "latestFilesIndexes": [ { "gameVersion": 1, "modLoader": "fabric" }, null ],
+      "dateCreated": 12345,
+      "dateModified": ""
+    }
+  ],
+  "pagination": { "index": 0, "pageSize": 25, "resultCount": 3, "totalCount": 3 }
+}

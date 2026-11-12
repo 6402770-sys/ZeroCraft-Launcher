@@ -1,0 +1,17 @@
+[
+  { "icon": "<svg/>", "name": "adventure", "project_type": "modpack", "header": "categories" },
+  { "icon": "<svg/>", "name": "kitchen-sink", "project_type": "modpack", "header": "categories" },
+  { "icon": "<svg/>", "name": "game-mechanics", "project_type": "mod", "header": "categories" },
+  { "icon": "<svg/>", "name": "optimization", "project_type": "mod", "header": "categories" },
+  { "icon": "<svg/>", "name": "16x", "project_type": "resourcepack", "header": "resolutions" },
+  { "icon": "<svg/>", "name": "8x-", "project_type": "resourcepack", "header": "resolutions" },
+  { "icon": "<svg/>", "name": "audio", "project_type": "resourcepack", "header": "features" },
+  { "icon": "<svg/>", "name": "vanilla-like", "project_type": "resourcepack", "header": "categories" },
+  { "icon": "<svg/>", "name": "atmosphere", "project_type": "shader", "header": "features" },
+  { "icon": "<svg/>", "name": "pbr", "project_type": "shader", "header": "features" },
+  { "icon": "<svg/>", "name": "cartoon", "project_type": "shader", "header": "categories" },
+  { "icon": "<svg/>", "name": "potato", "project_type": "shader", "header": "performance impact" },
+  { "icon": "<svg/>", "name": "high", "project_type": "shader", "header": "performance impact" },
+  { "icon": "<svg/>", "name": "screenshot", "project_type": "shader", "header": "performance impact" },
+  { "icon": "<svg/>", "name": "magic", "project_type": "datapack", "header": "categories" }
+]

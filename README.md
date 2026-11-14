@@ -20,7 +20,7 @@
 ## Download
 
 1. Go to the [latest release](https://github.com/6402770-sys/ZeroCraft-Launcher/releases/latest).
-2. Download **`ZEROLauncher-1.0.0-Windows-Setup.exe`** and run it. Prefer no installation? Grab the **Portable** zip instead, unzip it anywhere and open `zerolauncher.exe`.
+2. Download **`ZEROLauncher-1.0.1-Windows-Setup.exe`** and run it. Prefer no installation? Grab the **Portable** zip instead, unzip it anywhere and open `zerolauncher.exe`.
 3. The first time, ZERO greets you with a short intro, helps you sign in and shows you around.
 
 > **"Windows protected your PC"?** ZERO is not code-signed yet, so SmartScreen asks once. Click **More info › Run anyway**. Every release lists SHA-256 checksums so you can check your download.

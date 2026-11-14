@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-13 (session 13: Ely.by password + client ID `zerocraft-launcher` done, owner QA pending; see "Session 13" inside Mission 003 › item 9 Release) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-13 (session 13: release 1.0.0 built, waiting for owner OK to publish; see "Session 13" inside Mission 003 › item 9 Release) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -572,6 +572,12 @@ remove them with `git worktree remove --force <path>` once the owner agrees.
        Ely skin shows) and Microsoft sign-in completion in the installed build: **all OK**.
        🧪 Owner QA (session 13): theme editor (colour dialog solid, custom icon, custom font, video sound), mixed install cart (deps
        check finishes) and mod Roll back → Check for updates offers the update again: **all OK**. Session 12/13 QA list closed.
+       ✅ **Session 13 release prep**: commits `9a9079f70` (sessions 8-13), `240d7142a` (1.0.0, ZERO issue templates, Prism CI removed,
+       bug tracker → repo issues), `0e41cd110` (first-run intro + guided tour, 80/80 + 25/25), `f472db9b6` (README + `docs/readme/`).
+       Owner: publish 1.0.0 with Prism's MSA client ID (own one for 1.0.1). `package.sh --release` → `dist/` Setup 132 MB + zip 96 MB +
+       SHA256SUMS, smoke OK, silent install 144 files identical. GitHub repo `6402770-sys/ZeroCraft-Launcher` is a fork of Prism at
+       `00f216ce5` (our base) → publishing = fast-forward push of `zero-development` to its `develop` + tag `v1.0.0` + Release with the
+       three files (`gh`), ONLY on the owner's explicit OK. Intro/tour not yet clicked by a human on a real desktop.
        (was: owner QA of the earlier list (colour dialog, icon, sound,
        font, cart, mod roll back).)
      🔴 **Session 12 RESUME HERE** (session hit its limit while a worker ran; nothing committed — owner commits):

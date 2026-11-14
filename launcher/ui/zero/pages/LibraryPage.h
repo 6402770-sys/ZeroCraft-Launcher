@@ -50,6 +50,8 @@ class LibraryPage : public ShellPage {
     /// Starts inline renaming of the current instance (on the card in grid mode, in the details panel in list mode).
     void beginRename();
     void focusSearch();
+    /// The "New instance" button of the top bar actions (visible while Library is the current page): the guided tour highlights it.
+    QWidget* newInstanceButton() const { return m_newButton; }
     void setSearchText(const QString& text);
     /// Re-reads the sort mode from the settings (the settings dialog may have changed it).
     void syncSortFromSettings();

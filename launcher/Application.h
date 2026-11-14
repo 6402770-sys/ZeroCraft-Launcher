@@ -51,6 +51,7 @@
 #include "QObjectPtr.h"
 
 #include "minecraft/auth/MinecraftAccount.h"
+#include "ui/zero/onboarding/IntroGate.h"
 
 class LaunchController;
 class LocalPeer;
@@ -206,6 +207,9 @@ class Application : public QApplication {
     GenericPageProvider* globalSettingsPages() { return m_globalSettingsProvider.get(); }
 
     bool updaterEnabled();
+
+    /// ZERO: no valid account and a sign-in method exists: the Add account dialog should open (MainWindow::addAccountZero).
+    bool zeroShouldAskForAccount() const;
     static QString updaterBinaryName();
 
     static QUrl normalizeImportUrl(const QString& url);
@@ -254,6 +258,8 @@ class Application : public QApplication {
     static bool handleDataMigration(const QString& currentData, const QString& oldData, const QString& name, const QString& configFile);
     bool createSetupWizard();
     void performMainStartupAction();
+    /// ZERO: first-run intro gating for this start (Zero::Onboarding::decideIntro with what the data dir and the command line say).
+    Zero::Onboarding::IntroDecision zeroIntroDecision() const;
 
     // sets the fatal error message and m_status to Failed.
     void showFatalErrorMessage(const QString& title, const QString& content);
@@ -329,6 +335,7 @@ class Application : public QApplication {
     bool m_showMainWindow = false;
     QString m_zeroScreenshotPath;  // --zero-screenshot
     QString m_zeroScreenshotPage;  // --zero-page
+    bool m_zeroDataImported = false;  // this run copied the data dir from Prism / PolyMC / MultiMC
     std::unique_ptr<QFile> logFile;
     std::unique_ptr<LogModel> logModel;
 

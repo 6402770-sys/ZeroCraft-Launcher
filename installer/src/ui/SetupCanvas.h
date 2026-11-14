@@ -3,6 +3,8 @@
 // built from blocks that drop in, the wordmark and the tagline. Pages (buttons, bar ...) are children of this widget.
 #pragma once
 
+#include "ZeroScene.h"
+
 #include <QPixmap>
 #include <QVector>
 #include <QWidget>
@@ -28,7 +30,7 @@ class SetupCanvas : public QWidget
     void setMarkVisible(bool on);
     /// Screenshots: finish the tagline cross-fade.
     void settleTagline() { m_tagChangeMs = -100000; update(); }
-    int markBlockCount() const { return m_blocks.size(); }
+    int markBlockCount() const { return int(Zero::Scene::markBlocks().size()); }
 
    signals:
     void dragRequested();
@@ -38,16 +40,6 @@ class SetupCanvas : public QWidget
     void mousePressEvent(QMouseEvent*) override;
 
    private:
-    struct Star
-    {
-        QPointF pos;
-        double phase;
-    };
-    struct Block
-    {
-        QPoint cell;
-        QRgb color;
-    };
     void rebuildBackground();
     void tick();
     void paintHero(QPainter& p);
@@ -56,8 +48,7 @@ class SetupCanvas : public QWidget
 
     QPixmap m_bg;
     qreal m_bgDpr = 0;
-    QVector<Star> m_stars;
-    QVector<Block> m_blocks;
+    QVector<Zero::Scene::Star> m_stars;
     QString m_caption, m_tagline, m_prevTagline;
     qint64 m_tagChangeMs = -100000;
     qint64 m_markStart = 0;

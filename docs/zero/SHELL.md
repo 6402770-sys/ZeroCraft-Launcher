@@ -314,7 +314,69 @@ Rail item "Appearance" (`palette`, bottom group, Alt+8); top bar title "Appearan
 - **Kill instance moved to Ctrl+Shift+K** (`MainWindow.ui`): Ctrl+K belongs to the palette (two actions on one shortcut would both stop working).
 - Opening a page (Alt+N, rail) closes any open overlay.
 
+## First-run intro (Mission 003) - as built
+The first time ZERO opens on a data dir, a full-window intro plays over the main window (`ui/zero/onboarding/IntroOverlay`, a child of `MainWindow`
+that follows its size, takes the focus and blocks the shell: mouse events stop at it, Tab cycles only Get started / Skip intro, and the shell's
+shortcuts such as Ctrl+K stay quiet while it is up). Then the Add account dialog opens (when there is no valid account, as on any start).
+- **Scene**: the installer's night scene (shared `ui/zero/ZeroScene`, see ARCHITECTURE "Shared brand scene"), the same in every theme (a brand moment, painted with the
+  Minecraft palette of `ZeroTokens.h`). The mark cell is a whole number of pixels (`floor(6 * min(w / 760, h / 460))`, 3..14) and everything the installer draws scales with it; the
+  content block is centred above the ground, below the Skip row, and moves up in very small windows so Get started is never clipped.
+- **Timeline** (ms, one clock that starts when the overlay is created): 0-1800 sky fades in, stars twinkle, the mark builds block by block (drop-in with a small OutBack);
+  1200-2400 the ground rises from the bottom; 1800-2800 the "ZERO" wordmark (pixel font) fades in and rises 12 px; 2600-3400 the caption "Welcome to ZERO Launcher"
+  (Body role, secondary colour) fades in; 3200-3800 the primary **Get started** button (theme accent / onAccent, trailing `arrow-right`) fades in and gets the
+  focus. The scene then idles (stars twinkle, the mark bobs 2 px at design size) until the user acts. All fades are OutCubic.
+- **Skip**: top right, always, a tertiary text button "Skip intro" + an "Esc" key hint (painted with the scene colours, so it reads in every theme). Esc, Skip intro or a click anywhere
+  **before the button appeared** (before 3200 ms) jumps to the final frame (button fully in); once the button has appeared Esc / Skip intro do what Get started does. Enter or Space
+  on the overlay before the button exists also jump to the final frame; on the focused Get started button they press it.
+- **Get started** (button, Enter, Space): `ZeroIntroSeen = true` is written at once, the overlay fades out over 300 ms (OutCubic, a snapshot of the last frame) revealing the shell, hides, deletes itself and
+  emits `finished()`, which calls the single hook `MainWindow::onboardingIntroFinished()`: today it opens the Add account dialog when `Application::zeroShouldAskForAccount()` (the next onboarding
+  step, the guided tour, attaches there).
+- **Reduced motion** (`Theme::reduceMotion()`): no drops, slides, bobbing or twinkle; the final frame comes in with one 200 ms fade, Get started is there at once, and Get started ends the intro
+  without a fade-out.
+- **Gating** (`Zero::Onboarding::decideIntro`, pure, `IntroGate.h`; `Application::zeroIntroDecision()` feeds it): never in a `--zero-screenshot` run and never when the start launches an
+  instance or shows an instance window directly (`--launch` / `--show`): nothing is written then. Otherwise it plays while the setting `ZeroIntroSeen` (bool, default false) is false.
+  **Existing users never see it**: when the data dir already has instances or accounts and `ZeroIntroSeen` is still false (a data dir from before the intro existed), `ZeroIntroSeen` is set
+  silently at startup. A data dir that this run filled by importing Prism / PolyMC / MultiMC (`Application::m_zeroDataImported`) counts as a new ZERO user and gets the intro.
+  `ZERO_FORCE_INTRO=1` plays it regardless of the setting and of existing data (not in screenshot / direct-launch runs).
+- **Startup order**: Prism's setup wizard (`createSetupWizard`, Java / paste / theme pages) runs before the main window exists, so before the intro. With ZERO's defaults on Windows it does not
+  appear on a fresh data dir (Java auto-download is on, the theme is valid, the language fixed), so the intro is the first ZERO screen; a data dir imported from Prism with an unusual Java /
+  paste-bin setup can still show the wizard first. The Prism data-import question and the temp-folder warning (modal message boxes in `Application` / `showMainWindow`) also come first; the intro
+  starts when they are closed.
+- Tests: `tests/ZeroIntro_test.cpp` (gating table, Esc twice, Skip button, click before / after the button, Get started once + setting + self-delete, Enter / Space, reduced motion, parent resize down to
+  480 x 340, staying above the shell and later children, Tab confinement, frozen frames for screenshots; ZeroScene stars / mark / pixel sizes).
+
+## Guided tour (Mission 003) - as built
+Right after the first-run intro (and the Add account dialog, when there is one) a short tour walks through six places of the shell
+(`ui/zero/onboarding/TourOverlay` + `TourSteps`). It is a child of `MainWindow` like the intro: it covers the window, follows its size, takes the keys and blocks the
+shell (mouse events stop at it; Tab cycles only Skip tour / Back / Next; Ctrl+K, Alt+N and the other shortcuts stay quiet). The page does **not** change while touring, only
+the spotlight moves; one step shows Library for its own sake and goes back (see step 3).
+- **Look**: a dim layer (the theme's `bg` at 55 %) over everything with a **spotlight** cut out around the step's control (8 px padding, corner style and radius from the theme through
+  `Paint::panelPath`), plus a 2 px `accent` ring just outside the cut-out. A **callout card** (300 px, `elevated` surface, 1 px `border`, `radiusXl`, 16 px padding, shadow, an 8 px
+  pointer toward the control) sits beside it: overline "STEP n OF N" (tertiary), title (Heading role), text (Body, secondary, wraps, never more than 3 lines),
+  footer "Skip tour" (ghost) left, "Back" (secondary, hidden on step 1) and "Next" (primary, "Finish" on the last step) right. Right of rail items (vertically centred on the item), below
+  top-bar controls (horizontally centred), always clamped inside the window (16 px margin; `TourSteps::placeCard`, pure and tested). Colours, radii, spacing and fonts all come from the theme.
+- **Steps** (`tourStepInfos()`): 1 rail Home; 2 rail Library; 3 **New instance** (the Library top-bar button: Home has no such control in its top bar, so this step shows Library
+  and goes back to the page the tour started on when it ends or moves on); 4 rail Discover; 5 the search pill ("Press Ctrl+K ..."); 6 rail Appearance. A step whose target is
+  missing or hidden is dropped when the tour starts (the "n of N" count adjusts) and skipped if it disappears while the tour runs.
+- **Motion**: moving to another step glides the spotlight (220 ms OutCubic) while the old card fades out and the new one fades in and rises 8 px (220 ms OutCubic). The target's
+  geometry is re-read on window resize, on its move / resize / show / hide and every 100 ms as a safety net (a page change takes a moment to lay out). Reduced motion: everything is instant.
+- **Keys**: Right or Enter = Next (Enter on a focused Skip tour / Back button presses that button), Left = Back, Esc = Skip tour; focus starts on Next; key repeat is ignored.
+- **End**: Finish and Skip write `ZeroTourDone = true` (once), fade the overlay out (200 ms), delete it and emit `finished(completed)`. Finish also shows the toast "You're all set";
+  Skip shows nothing. The page the tour started on is restored.
+- **When it starts**: `MainWindow::onboardingIntroFinished()` runs the Add account dialog when needed (the same condition as a normal start) and starts the tour when that dialog returns
+  (account added or not), or straight away when no dialog is needed, only while `ZeroTourDone` is false. It never starts by itself on a later run, and never in a `--zero-screenshot` run
+  (those have no intro). A data dir that was silently marked intro-seen at startup (an older ZERO data dir) is marked `ZeroTourDone` silently too, so existing users never see it by themselves.
+- **Replay**: the command palette entry "Take the tour" (`action:take-tour`, icon `compass`, keywords tour / help / guide / tutorial / welcome / intro) starts it from step 1 on Home
+  whatever the setting says (`MainWindow::startGuidedTour`).
+- Tests: `tests/ZeroTour_test.cpp` (step list and skipping, keys, Finish / Skip once + setting + self-delete, fade-out, enter / leave callbacks, the card inside the window at 1100x700 / 1280x800 /
+  1920x1080 for every step and never over the spotlight, the spotlight following a moved target after a resize and gliding with motion, pure card placement, the palette entry).
+
 ## Dev aids
+- First-run intro: `ZERO_FORCE_INTRO=1` (normal run) plays the intro on any data dir, whatever `ZeroIntroSeen` says. `ZERO_SCREENSHOT_INTRO=<ms>` (with `--zero-screenshot <file>`, `ZERO_SCREENSHOT_SIZE`,
+  `ZERO_SCREENSHOT_THEME`) saves the main window with the intro frozen at that time (no timer, no idle motion; 600 = mid-build, 1500 = ground rising, 2600 = wordmark, 4500 = final frame).
+  The main window is never smaller than 1100 x 700, so `ZERO_SCREENSHOT_SIZE=900x600` yields 1100 x 700; the small-window layout is covered by `tests/ZeroIntro_test.cpp`.
+- Guided tour: `ZERO_FORCE_TOUR=1` (normal run) starts the tour once the main window shows, whatever `ZeroTourDone` says (not in screenshot runs; with `ZERO_FORCE_INTRO=1` too it starts after the intro).
+  `ZERO_SCREENSHOT_TOUR=<1-6>` (with `--zero-screenshot <file>`, `ZERO_SCREENSHOT_SIZE`, `ZERO_SCREENSHOT_THEME`) saves the main window with the tour settled on that step (no glide; nothing is written).
 - `--zero-screenshot <file.png>` (+ optional `--zero-page <home|library|discover|worlds|screenshots|servers|tools|appearance>`): show main window, wait for layout, `grab()` to PNG,
   quit. Skips the setup wizard. Always combine with `-d <temp dir>` (never the real data dir).
 - Screenshot-mode environment variables (dev only, read by `MainWindow::zeroScreenshot`): `ZERO_SCREENSHOT_SIZE=<w>x<h>`

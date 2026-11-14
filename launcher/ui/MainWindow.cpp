@@ -127,6 +127,8 @@
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/pages/ZeroSettingsPage.h"
 #include "ui/zero/ZeroFormat.h"
+#include "ui/zero/onboarding/IntroOverlay.h"
+#include "ui/zero/onboarding/TourOverlay.h"
 #include "ui/zero/palette/ZeroCommandPalette.h"
 #include "ui/zero/palette/ZeroShortcutSheet.h"
 #include "ui/zero/pages/InstanceInfo.h"
@@ -2337,6 +2339,73 @@ void MainWindow::addAccountZero()
         accounts->setDefaultAccount(account);
 }
 
+void MainWindow::startOnboardingIntro()
+{
+    if (m_intro)
+        return;
+    m_intro = new Zero::Onboarding::IntroOverlay(this, APPLICATION->settings());
+    connect(m_intro, &Zero::Onboarding::IntroOverlay::finished, this, &MainWindow::onboardingIntroFinished);
+}
+
+void MainWindow::onboardingIntroFinished()
+{
+    // ZERO: the next onboarding steps. No valid account yet -> the Add account dialog first (the same condition as a normal start); the guided
+    // tour starts when that dialog returns (account added or not), or right away when there is no dialog. Only until it was finished or skipped
+    // once (ZeroTourDone), unless ZERO_FORCE_TOUR=1.
+    const bool askForAccount = APPLICATION->zeroShouldAskForAccount();
+    QTimer::singleShot(0, this, [this, askForAccount]() {
+        if (askForAccount)
+            addAccountZero();  // modal: returns when the dialog is closed
+        if (!APPLICATION->settings()->get("ZeroTourDone").toBool() || qEnvironmentVariableIntValue("ZERO_FORCE_TOUR") == 1)
+            startGuidedTour();
+    });
+}
+
+namespace {
+/// The tour's steps for the shell: each one's text from TourSteps, its target from the rail / top bar / Library.
+QList<Zero::Onboarding::TourStep> guidedTourSteps(Zero::ZeroShell* shell, Zero::LibraryPage* library, const QString& originPage)
+{
+    using Zero::Onboarding::TourStep;
+    QList<TourStep> steps;
+    for (const Zero::Onboarding::TourStepInfo& info : Zero::Onboarding::tourStepInfos()) {
+        TourStep step;
+        step.id = info.id;
+        step.title = info.title;
+        step.body = info.body;
+        step.side = info.side;
+        const QString id = info.id;
+        if (id == QLatin1String("new-instance")) {
+            // Home has no New instance control in the top bar, so this step shows Library for its own sake (and goes back after it).
+            step.available = [shell, library]() { return shell->page(QStringLiteral("library")) && library && library->newInstanceButton(); };
+            step.target = [library]() -> QWidget* { return library ? library->newInstanceButton() : nullptr; };
+            step.enter = [shell]() { shell->setCurrentPage(QStringLiteral("library")); };
+            step.leave = [shell, originPage]() { shell->setCurrentPage(originPage); };
+        } else if (id == QLatin1String("search")) {
+            step.target = [shell]() -> QWidget* { return shell->topBar()->centerWidget(); };
+        } else {
+            step.target = [shell, id]() -> QWidget* { return shell->rail()->itemWidget(id); };  // home, library, discover, appearance
+        }
+        steps.append(step);
+    }
+    return steps;
+}
+}  // namespace
+
+void MainWindow::startGuidedTour()
+{
+    if (m_tour || (m_intro && !m_intro->isFinishing()))
+        return;
+    m_palette->closeOverlay();
+    m_shortcutSheet->closeOverlay();
+    const QString origin = QStringLiteral("home");
+    m_shell->setCurrentPage(origin);
+    m_tour = new Zero::Onboarding::TourOverlay(this, guidedTourSteps(m_shell, m_library, origin), APPLICATION->settings());
+    connect(m_tour, &Zero::Onboarding::TourOverlay::finished, this, [this](bool completed) {
+        if (completed)
+            Zero::ZeroToast::show(this, tr("You're all set"), Zero::ZeroToast::Kind::Success);
+    });
+}
+
 void MainWindow::on_actionReportBug_triggered()
 {
     DesktopServices::openUrl(QUrl(BuildConfig.BUG_TRACKER_URL));
@@ -3547,6 +3616,7 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         c.run = [this]() { QTimer::singleShot(0, this, &MainWindow::toggleShortcutSheet); };
         out.append(c);
     }
+    out.append(Zero::Onboarding::tourPaletteCommand([this]() { QTimer::singleShot(0, this, &MainWindow::startGuidedTour); }));  // "Take the tour"
     // The selected instance.
     if (m_selectedInstance) {
         const QString name = m_selectedInstance->name();
@@ -3817,6 +3887,49 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     if (dims.size() == 2 && dims[0].toInt() > 0 && dims[1].toInt() > 0)
         size = QSize(dims[0].toInt(), dims[1].toInt());
     resize(size);
+    // ZERO: Dev aid ZERO_SCREENSHOT_INTRO=<ms> grabs the first-run intro frozen at that time (docs/zero/SHELL.md, "First-run intro").
+    if (const QString introMs = qEnvironmentVariable("ZERO_SCREENSHOT_INTRO"); !introMs.isEmpty()) {
+        bool ok = false;
+        const qint64 at = introMs.toLongLong(&ok);
+        if (!ok || at < 0) {
+            qWarning() << "ZERO_SCREENSHOT_INTRO: not a time in ms:" << introMs;
+            APPLICATION->exit(1);
+            return;
+        }
+        auto* intro = new Zero::Onboarding::IntroOverlay(this, nullptr);
+        intro->freezeAt(at);
+        QTimer::singleShot(600, this, [this, intro, path]() {
+            QApplication::processEvents();
+            const bool saved = grab().save(path);
+            qInfo() << "ZERO screenshot" << (saved ? "saved to" : "FAILED for") << path;
+            intro->deleteLater();
+            APPLICATION->exit(saved ? 0 : 1);
+        });
+        return;
+    }
+    // ZERO: Dev aid ZERO_SCREENSHOT_TOUR=<1-6> grabs the guided tour settled on that step (docs/zero/SHELL.md, "Guided tour").
+    if (const QString tourStep = qEnvironmentVariable("ZERO_SCREENSHOT_TOUR"); !tourStep.isEmpty()) {
+        bool ok = false;
+        const int n = tourStep.toInt(&ok);
+        if (!ok || n < 1 || n > int(Zero::Onboarding::tourStepInfos().size())) {
+            qWarning() << "ZERO_SCREENSHOT_TOUR: not a step number (1-6):" << tourStep;
+            APPLICATION->exit(1);
+            return;
+        }
+        QTimer::singleShot(400, this, [this, n, path]() {
+            m_shell->setCurrentPage(QStringLiteral("home"));
+            auto* tour = new Zero::Onboarding::TourOverlay(this, guidedTourSteps(m_shell, m_library, QStringLiteral("home")), nullptr);
+            tour->showStep(n - 1, false);
+            QTimer::singleShot(900, this, [this, tour, path]() {
+                QApplication::processEvents();
+                const bool saved = grab().save(path);
+                qInfo() << "ZERO screenshot" << (saved ? "saved to" : "FAILED for") << path;
+                tour->deleteLater();
+                APPLICATION->exit(saved ? 0 : 1);
+            });
+        });
+        return;
+    }
     // ZERO: Dev aid ZERO_SCREENSHOT_ADD_ACCOUNT=<choose|microsoft|ely|offline|error|success|ely-password|ely-2fa|ely-wrong> grabs the Add account dialog in that state instead.
     if (const QString addAccount = qEnvironmentVariable("ZERO_SCREENSHOT_ADD_ACCOUNT"); !addAccount.isEmpty()) {
         QTimer::singleShot(300, this, [this, path, addAccount]() {

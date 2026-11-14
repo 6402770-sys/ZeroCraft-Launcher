@@ -1028,6 +1028,16 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroPageHeader.h
     ui/zero/ZeroPixelFont.cpp
     ui/zero/ZeroPixelFont.h
+    ui/zero/ZeroScene.cpp
+    ui/zero/ZeroScene.h
+    ui/zero/ZeroMarkData.h
+    ui/zero/onboarding/IntroGate.h
+    ui/zero/onboarding/IntroOverlay.cpp
+    ui/zero/onboarding/IntroOverlay.h
+    ui/zero/onboarding/TourOverlay.cpp
+    ui/zero/onboarding/TourOverlay.h
+    ui/zero/onboarding/TourSteps.cpp
+    ui/zero/onboarding/TourSteps.h
     ui/zero/ZeroPlayButton.cpp
     ui/zero/ZeroPlayButton.h
     ui/zero/ZeroSpinner.cpp

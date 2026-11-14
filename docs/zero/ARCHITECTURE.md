@@ -90,6 +90,14 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
   to the stub; the stub reproduces the NSIS footprint above exactly (same keys, paths, handlers, `/S` `/D=` switches) and copies itself
   without payload as `uninstall.exe`. Uninstall moves user data to the Recycle Bin only when asked. Details, switches, payload format,
   test switches (`--target`, `--no-system`, `--screenshot`, `--demo`): `installer/README.md`.
+- **Shared brand scene** (`launcher/ui/zero/ZeroScene.{h,cpp}` + generated `ZeroMarkData.h`): the night sky with twinkling stars, the stone ground
+  with its grass edge, the pixel ZERO mark built from 252 blocks that drop in, and the wordmark are painted by one Qt-only file that both
+  `installer/` (`SetupCanvas`, fixed 760 x 460 window; the installer's CMake compiles the three files from the repo root next to `ZeroPixelFont.cpp`) and the launcher's
+  first-run intro (`ui/zero/onboarding/IntroOverlay`, scales with the window) use, so the intro continues the installer's look. The file has no Application,
+  theme or motion dependency: colours come in as a `Scene::Palette` (the Minecraft palette of `ZeroTokens.h` / `SetupTokens.h`), time as plain
+  milliseconds, geometry as arguments. Design lengths (drop distance, bob, wordmark size and spacing) are given for a 6 px mark cell and scaled
+  by the caller. `ZeroMarkData.h` is regenerated with `installer/tools/gen_mark.py` (namespace `Zero::Scene::MarkData`). The installer renders byte-identical
+  screenshots (welcome, drop, options, installing) before and after the move.
 
 ## Instance profiles (Mission 002, milestone 6)
 - **Data**: everything lives with the instance, no parallel store. `BaseInstance` registers `ZeroFavorite` (bool), `ZeroTags` (JSON array in a

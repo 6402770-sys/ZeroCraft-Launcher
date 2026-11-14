@@ -3,7 +3,7 @@
 #pragma once
 #include <QtGlobal>
 
-namespace ZeroSetup::MarkData {
+namespace Zero::Scene::MarkData {
 inline constexpr int kCells = 16;
 // '.' = transparent, a..p index kPalette (the colours of the app mark, which is artwork, not a UI token).
 inline constexpr const char* kRows[16] = {
@@ -39,4 +39,4 @@ inline constexpr quint32 kPalette[] = {
     0xFFE6B83E,
     0xFF2E9AA0,
 };
-}  // namespace ZeroSetup::MarkData
+}  // namespace Zero::Scene::MarkData

@@ -44,6 +44,8 @@ class ZeroNavRail : public QWidget {
     void setCurrent(const QString& id);
     QString current() const { return m_current; }
     void setItemVisible(const QString& id, bool visible);
+    /// The rail item of a page (null when there is none): what the guided tour highlights.
+    QWidget* itemWidget(const QString& id) const;
 
     void setCollapsed(bool collapsed);
     bool isCollapsed() const { return m_collapsed; }

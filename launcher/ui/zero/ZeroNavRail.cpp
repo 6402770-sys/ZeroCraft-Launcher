@@ -445,6 +445,11 @@ void ZeroNavRail::setItemVisible(const QString& id, bool visible)
         item->setVisible(visible);
 }
 
+QWidget* ZeroNavRail::itemWidget(const QString& id) const
+{
+    return m_items.value(id);
+}
+
 void ZeroNavRail::setCollapsed(bool collapsed)
 {
     if (m_collapsed == collapsed)

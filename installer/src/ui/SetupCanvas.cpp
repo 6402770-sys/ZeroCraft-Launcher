@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "SetupCanvas.h"
 
-#include "MarkData.h"
 #include "Motion.h"
 #include "PixelWidgets.h"
 #include "SetupTokens.h"
 #include "ZeroPixelFont.h"
+#include "ZeroScene.h"
 
 #include <QFontMetricsF>
 #include <QMouseEvent>
@@ -19,22 +19,10 @@ namespace T = Tok;
 
 namespace {
 
-// Pixel sizes of the ZERO Pixel font that are a multiple of 10 *device* pixels draw each font pixel as a whole number
-// of screen pixels. Pick the one nearest to the design size for this scale factor.
-int wordmarkPixelSize(double dpr)
+// The scene's six colours: the Minecraft Theme (SetupTokens.h)
+Zero::Scene::Palette scenePalette()
 {
-    int best = T::pxWordmark;
-    double bestScore = 1e9;
-    for (int px = 36; px <= 64; ++px) {
-        const double dev = px * dpr;
-        const double off = std::abs(dev / 10.0 - std::round(dev / 10.0)) * 10.0;
-        const double score = off + std::abs(px - T::pxWordmark) * 0.05;
-        if (score <= bestScore) {
-            bestScore = score;
-            best = px;
-        }
-    }
-    return best;
+    return { T::bg, T::surfaceHover, T::accentPressed, T::accent, T::bevelDark, T::text };
 }
 
 }  // namespace
@@ -46,27 +34,7 @@ SetupCanvas::SetupCanvas(QWidget* parent) : QWidget(parent), m_timer(new QTimer(
     setAttribute(Qt::WA_OpaquePaintEvent);
 
     // deterministic stars (same sky on every run), kept out of the box where the hero and tagline are
-    quint32 state = 0x2E50C0DEu;
-    auto next = [&state]() {
-        state = state * 1664525u + 1013904223u;
-        return (state >> 8) & 0xFFFF;
-    };
-    const QRectF keepOut(230, 30, 300, 240);
-    const double skyBottom = T::winH * T::starSkyFraction;
-    while (m_stars.size() < T::starCount) {
-        const QPointF pt(12 + next() / 65535.0 * (T::winW - 24 - T::starSize), 8 + next() / 65535.0 * (skyBottom - 8 - T::starSize));
-        const double phase = next() / 65535.0;
-        if (keepOut.contains(pt))
-            continue;
-        m_stars.push_back({ QPointF(std::floor(pt.x()), std::floor(pt.y())), phase });
-    }
-
-    for (int y = 0; y < MarkData::kCells; ++y)
-        for (int x = 0; x < MarkData::kCells; ++x) {
-            const char ch = MarkData::kRows[y][x];
-            if (ch != '.')
-                m_blocks.push_back({ QPoint(x, y), MarkData::kPalette[ch - 'a'] });
-        }
+    m_stars = Zero::Scene::makeStars(T::winW, T::winH, T::starCount, QRectF(230, 30, 300, 240), T::starSkyFraction, T::starSize);
 
     m_markStart = Motion::now();
     m_timer->setInterval(T::frameMs);
@@ -122,12 +90,11 @@ void SetupCanvas::tick()
     // stars: every other frame (about 30 fps)
     if ((m_tickCount & 1) == 0) {
         QRegion r;
-        for (const Star& s : std::as_const(m_stars))
+        for (const Zero::Scene::Star& s : std::as_const(m_stars))
             r += QRect(int(s.pos.x()) - 1, int(s.pos.y()) - 1, T::starSize + 2, T::starSize + 2);
         update(r);
     }
-    const double buildMs = double(m_blocks.size()) * std::min<double>(T::dropStaggerMs, double(T::dropMaxBuildMs) / std::max<qsizetype>(1, m_blocks.size()));
-    const bool dropping = now - m_markStart < buildMs + T::dropMs + 50;
+    const bool dropping = now - m_markStart < Zero::Scene::markBuildMs(markBlockCount()) + 50;
     const bool fading = now - m_tagChangeMs < T::fadeMs + 50;
     if (dropping || m_bob || fading || m_shift > 0)
         update(QRect(100, 0, 560, T::taglineTop + 40));
@@ -150,79 +117,22 @@ void SetupCanvas::rebuildBackground()
     p.setRenderHint(QPainter::Antialiasing, false);
     p.fillRect(QRect(0, 0, T::winW, T::winH), T::c(T::bg));
 
-    // stone strip: 4 px blocks with +-1.6 % luminance noise from a seeded LCG, a 16 x 16 block tile (DESIGN.md "Texture")
-    const int tileBlocks = T::stoneTile / T::stoneBlock;
-    double noise[16][16];
-    quint32 state = T::stoneSeed;
-    for (int by = 0; by < tileBlocks; ++by)
-        for (int bx = 0; bx < tileBlocks; ++bx) {
-            state = state * 1664525u + 1013904223u;
-            noise[by][bx] = (((state >> 8) & 0xFFFF) / 65535.0 * 2.0 - 1.0) * T::stoneNoise;
-        }
-    const QColor base = T::c(T::surfaceHover);
-    const int top = T::winH - T::groundH;
-    for (int by = 0; top + by * T::stoneBlock < T::winH; ++by)
-        for (int bx = 0; bx * T::stoneBlock < T::winW; ++bx) {
-            const double d = noise[by % tileBlocks][bx % tileBlocks];
-            const QColor c = QColor::fromRgbF(std::clamp(base.redF() + d, 0.0, 1.0), std::clamp(base.greenF() + d, 0.0, 1.0),
-                                              std::clamp(base.blueF() + d, 0.0, 1.0));
-            p.fillRect(QRect(bx * T::stoneBlock, top + by * T::stoneBlock, T::stoneBlock, T::stoneBlock), c);
-        }
-    p.fillRect(QRect(0, top, T::winW, T::grassH), T::c(T::accentPressed));
-    p.fillRect(QRect(0, top + T::grassH, T::winW, 2), T::withAlpha(T::bevelDark, 0.45));  // soil shadow under the grass
-    // a few lighter grass pixels on the edge, on a 4 px grid
-    state = T::stoneSeed ^ 0xA5A5u;
-    for (int bx = 0; bx * T::stoneBlock < T::winW; ++bx) {
-        state = state * 1664525u + 1013904223u;
-        if (((state >> 8) & 7) == 0)
-            p.fillRect(QRect(bx * T::stoneBlock, top, T::stoneBlock, 2), T::c(T::accent));
-    }
+    // stone strip with its grass edge (DESIGN.md "Texture"): the shared scene
+    Zero::Scene::paintGround(p, T::winW, T::winH - T::groundH, T::groundH, T::grassH, T::stoneBlock, scenePalette());
 }
 
 void SetupCanvas::paintWordmark(QPainter& p, double alpha)
 {
-    QFont f(Zero::pixelFamily());
-    f.setPixelSize(wordmarkPixelSize(devicePixelRatioF()));
-    f.setLetterSpacing(QFont::AbsoluteSpacing, T::wordmarkSpacing);
-    f.setStyleStrategy(QFont::NoAntialias);  // a pixel font: hard edges
-    p.setFont(f);
-    const QRectF box(0, T::wordmarkTop, T::winW, 60);
-    const QRectF shadow = box.translated(2, 2);
-    p.setOpacity(alpha);
-    p.setPen(T::c(T::bevelDark));
-    p.drawText(shadow.translated(T::wordmarkSpacing / 2.0, 0), Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("ZERO"));
-    p.setPen(T::c(T::text));
-    p.drawText(box.translated(T::wordmarkSpacing / 2.0, 0), Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("ZERO"));
-    p.setOpacity(1.0);
+    Zero::Scene::paintWordmark(p, QRectF(0, T::wordmarkTop, T::winW, 60), Zero::Scene::snapPixelSize(T::pxWordmark, devicePixelRatioF()),
+                               T::wordmarkSpacing, 2, alpha, scenePalette());
 }
 
 void SetupCanvas::paintMark(QPainter& p, double baseOpacity)
 {
-    const int total = int(m_blocks.size());
-    const double stagger = std::min<double>(T::dropStaggerMs, double(T::dropMaxBuildMs) / std::max(1, total));
-    const double originX = (T::winW - MarkData::kCells * T::markCell) / 2.0;
-    double bob = 0;
-    if (m_bob && Motion::enabled())
-        bob = T::bobPx * std::sin(2.0 * M_PI * double(Motion::now() % T::bobMs) / T::bobMs);
-    p.setRenderHint(QPainter::Antialiasing, false);
-    p.setPen(Qt::NoPen);
-    for (int i = 0; i < total; ++i) {
-        const Block& b = m_blocks[i];
-        double k = 1.0, opacity = 1.0, dy = 0;
-        if (Motion::enabled()) {
-            const qint64 start = m_markStart + qint64(i * stagger);
-            const double lin = double(Motion::now() - start) / T::dropMs;
-            if (lin <= 0)
-                continue;
-            k = Motion::progress(start, T::dropMs, QEasingCurve::OutBack, T::dropOvershoot);
-            opacity = std::min(1.0, lin * 3.0);
-            dy = -T::dropFromPx * (1.0 - k);
-        }
-        p.setOpacity(opacity * baseOpacity);
-        p.setBrush(T::c(b.color));
-        p.drawRect(QRectF(originX + b.cell.x() * T::markCell, T::markTop + b.cell.y() * T::markCell + dy + bob, T::markCell, T::markCell));
-    }
-    p.setOpacity(1.0);
+    const double originX = (T::winW - 16 * T::markCell) / 2.0;
+    const bool motion = Motion::enabled();
+    const double bob = Zero::Scene::bobOffset(Motion::now(), m_bob && motion, T::bobPx);
+    Zero::Scene::paintMark(p, QPointF(originX, T::markTop), T::markCell, Motion::now() - m_markStart, motion, bob, T::dropFromPx, baseOpacity);
 }
 
 void SetupCanvas::paintHero(QPainter& p)
@@ -258,17 +168,7 @@ void SetupCanvas::paintEvent(QPaintEvent* e)
     p.drawPixmap(0, 0, m_bg);
 
     // stars
-    p.setPen(Qt::NoPen);
-    const qint64 now = Motion::now();
-    for (const Star& s : std::as_const(m_stars)) {
-        double a = T::starStaticAlpha;
-        if (Motion::enabled()) {
-            const double ph = std::fmod(double(now) / T::twinkleMs + s.phase, 1.0);
-            a = T::starMinAlpha + (T::starMaxAlpha - T::starMinAlpha) * (0.5 - 0.5 * std::cos(2.0 * M_PI * ph));
-        }
-        p.setBrush(T::withAlpha(T::text, a));
-        p.drawRect(QRectF(s.pos, QSizeF(T::starSize, T::starSize)));
-    }
+    Zero::Scene::paintStars(p, m_stars, T::starSize, Motion::now(), Motion::enabled(), T::text);
 
     // title strip caption
     p.setRenderHint(QPainter::TextAntialiasing);

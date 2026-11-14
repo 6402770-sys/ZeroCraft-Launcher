@@ -82,6 +82,8 @@ set(TEST_SOURCES
     ZeroElyAuth_test.cpp
     ZeroPerformanceDialog_test.cpp
     ZeroAddAccount_test.cpp
+    ZeroIntro_test.cpp
+    ZeroTour_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

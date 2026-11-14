@@ -59,6 +59,7 @@
 #include "zero/history/SessionHistory.h"  // ZERO
 #include "zero/ZeroLanguage.h"  // ZERO
 #include "ui/zero/ZeroTheme.h"  // ZERO
+#include "ui/zero/onboarding/IntroGate.h"  // ZERO: first-run intro gating
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/instanceview/AccessibleInstanceView.h"
 
@@ -601,14 +602,17 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     // ZERO: offer to import (copy) data from Prism Launcher, then PolyMC, then MultiMC.
     // Only done for the default per-user data path so that --dir / ZEROLAUNCHER_DATA_DIR runs never prompt.
     if (adjustedBy == "Persistent data path") {
+        const bool hadOwnConfig = QFileInfo::exists(FS::PathCombine(dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
         const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
         auto migrated = handleDataMigration(dataPath, FS::PathCombine(appData, "../../PrismLauncher"), "Prism Launcher", "prismlauncher.cfg");
         if (!migrated) {
             migrated = handleDataMigration(dataPath, FS::PathCombine(appData, "../../PolyMC"), "PolyMC", "polymc.cfg");
         }
         if (!migrated) {
-            handleDataMigration(dataPath, FS::PathCombine(appData, "../../multimc"), "MultiMC", "multimc.cfg");
+            migrated = handleDataMigration(dataPath, FS::PathCombine(appData, "../../multimc"), "MultiMC", "multimc.cfg");
         }
+        // ZERO: a data dir filled by an import is a new ZERO user: the first-run intro still plays (zeroIntroDecision)
+        m_zeroDataImported = migrated && !hadOwnConfig;
     }
 
     {
@@ -667,6 +671,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
         // ZERO: one-time switch to Obsidian + flat_white (so users imported from Prism get the ZERO look once)
         m_settings->registerSetting("ZeroThemeInitialized", false);
+        m_settings->registerSetting("ZeroIntroSeen", false);  // the first-run intro played (or this is an older data dir): never again
+        m_settings->registerSetting("ZeroTourDone", false);   // the guided tour was finished or skipped (or this is an older data dir): it never starts by itself again
         m_settings->registerSetting("ZeroMinecraftDefaultApplied", false);
         m_settings->registerSetting("ZeroReduceMotion", false);  // legacy: only consulted while ZeroMotion was never set
         // "system" (follow Windows "Animation effects") | "on" | "off". Empty = never chosen = "system", except that a
@@ -1483,6 +1489,24 @@ bool Application::event(QEvent* event)
     return QApplication::event(event);
 }
 
+bool Application::zeroShouldAskForAccount() const
+{
+    return !m_accounts->anyAccountIsValid() &&
+           (capabilities().testAnyFlag(Application::SupportsMSA) || capabilities().testAnyFlag(Application::SupportsEly));
+}
+
+Zero::Onboarding::IntroDecision Application::zeroIntroDecision() const
+{
+    Zero::Onboarding::IntroGate gate;
+    gate.seen = m_settings->get("ZeroIntroSeen").toBool();
+    gate.forced = qEnvironmentVariableIntValue("ZERO_FORCE_INTRO") == 1;
+    gate.screenshotRun = !m_zeroScreenshotPath.isEmpty();
+    gate.launchesInstance = !m_instanceIdToLaunch.isEmpty() || !m_instanceIdToShowWindowOf.isEmpty();
+    // an older ZERO data dir (it has instances or accounts but never saw the intro) is not a new user; an import from Prism is
+    gate.existingData = !m_zeroDataImported && ((m_instances && m_instances->count() > 0) || (m_accounts && m_accounts->count() > 0));
+    return Zero::Onboarding::decideIntro(gate);
+}
+
 void Application::performMainStartupAction()
 {
     m_status = Application::Initialized;
@@ -1536,10 +1560,22 @@ void Application::performMainStartupAction()
         return;
     }
 
-    // ZERO: no account yet → the Add account dialog (step 1) right over the main window, instead of Prism's setup wizard page.
-    if (m_mainWindow && !m_accounts->anyAccountIsValid() &&
-        (capabilities().testAnyFlag(Application::SupportsMSA) || capabilities().testAnyFlag(Application::SupportsEly))) {
-        QMetaObject::invokeMethod(m_mainWindow, "addAccountZero", Qt::QueuedConnection);
+    // ZERO: the very first start on a data dir plays the intro over the main window; its "Get started" continues with the Add account
+    // dialog (MainWindow::onboardingIntroFinished). Otherwise: no account yet → the Add account dialog (step 1) right over the main
+    // window, instead of Prism's setup wizard page.
+    if (m_mainWindow) {
+        const Zero::Onboarding::IntroDecision intro = zeroIntroDecision();
+        if (intro.markSeen) {
+            m_settings->set("ZeroIntroSeen", true);
+            m_settings->set("ZeroTourDone", true);  // an existing user never gets the guided tour by itself either
+        }
+        if (intro.show)
+            QMetaObject::invokeMethod(m_mainWindow, "startOnboardingIntro", Qt::QueuedConnection);
+        else if (zeroShouldAskForAccount())
+            QMetaObject::invokeMethod(m_mainWindow, "addAccountZero", Qt::QueuedConnection);
+        // Dev aid: ZERO_FORCE_TOUR=1 starts the guided tour once the main window shows (after the intro when that is forced too).
+        if (qEnvironmentVariableIntValue("ZERO_FORCE_TOUR") == 1 && !intro.show)
+            QMetaObject::invokeMethod(m_mainWindow, "startGuidedTour", Qt::QueuedConnection);
     }
 
     // initialize the updater

@@ -44,6 +44,7 @@
 #include <memory>
 
 #include <QMainWindow>
+#include <QPointer>
 #include <QProcess>
 #include <QTimer>
 
@@ -86,6 +87,10 @@ class ZeroSettingsPage;
 class ZeroShell;
 class ZeroCommandPalette;
 class ZeroShortcutSheet;
+namespace Onboarding {
+class IntroOverlay;  // ZERO
+class TourOverlay;   // ZERO
+}
 struct PaletteCommand;
 struct ShortcutGroup;
 namespace Perf {
@@ -224,6 +229,14 @@ class MainWindow : public QMainWindow {
 
     void on_actionManageAccounts_triggered();
     void addAccountZero();  // ZERO: the Add account dialog
+    /// ZERO: plays the first-run intro over the window (queued by Application::performMainStartupAction); does nothing when one is up.
+    void startOnboardingIntro();
+    /// ZERO: the intro is over ("Get started"). The single place the next onboarding steps hang on: the Add account dialog now (when
+    /// there is no valid account), the guided tour later.
+    void onboardingIntroFinished();
+    /// ZERO: the guided tour (Home, rail, New instance, Search ...). Starts from step 1 on Home, whatever ZeroTourDone says; does nothing
+    /// when one is up. Called after the intro, by the "Take the tour" palette entry and by ZERO_FORCE_TOUR.
+    void startGuidedTour();
 
     void on_actionReportBug_triggered();
 
@@ -389,6 +402,8 @@ class MainWindow : public QMainWindow {
     Zero::AppearancePage* m_appearance = nullptr;
     Zero::ZeroSettingsPage* m_settingsPage = nullptr;
     Zero::ZeroCommandPalette* m_palette = nullptr;
+    QPointer<Zero::Onboarding::IntroOverlay> m_intro;  // ZERO: the first-run intro while it plays
+    QPointer<Zero::Onboarding::TourOverlay> m_tour;    // ZERO: the guided tour while it runs
     Zero::ZeroShortcutSheet* m_shortcutSheet = nullptr;
     QAction* m_actionAddAccount = nullptr;  // ZERO: "Add account..." in the account menu
     QList<QAction*> m_accountActions;  // per-account actions (they carry the Ctrl+N shortcuts), recreated on repopulate

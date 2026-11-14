@@ -81,10 +81,12 @@ set(SETUP_UI_SOURCES
     src/ui/SetupWindow.cpp src/ui/SetupWindow.h
     src/ui/Worker.cpp src/ui/Worker.h
     src/SetupTokens.h
-    src/MarkData.h
-    # the launcher's own pixel font (needs only Qt)
+    # the launcher's own pixel font and brand scene (sky, stars, ground, the block-built mark, wordmark): they need only Qt
     "${ZERO_SETUP_LAUNCHER_ROOT}/launcher/ui/zero/ZeroPixelFont.cpp"
     "${ZERO_SETUP_LAUNCHER_ROOT}/launcher/ui/zero/ZeroPixelFont.h"
+    "${ZERO_SETUP_LAUNCHER_ROOT}/launcher/ui/zero/ZeroScene.cpp"
+    "${ZERO_SETUP_LAUNCHER_ROOT}/launcher/ui/zero/ZeroScene.h"
+    "${ZERO_SETUP_LAUNCHER_ROOT}/launcher/ui/zero/ZeroMarkData.h"
 )
 # ZeroPixelFont.cpp relies on the launcher's precompiled header for <QIODevice>: include it here instead of editing that file
 set_source_files_properties("${ZERO_SETUP_LAUNCHER_ROOT}/launcher/ui/zero/ZeroPixelFont.cpp" PROPERTIES COMPILE_OPTIONS "-include;QIODevice")

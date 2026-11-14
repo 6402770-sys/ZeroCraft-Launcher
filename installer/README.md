@@ -8,7 +8,7 @@ fallback: `scripts/zero/package.sh --nsis`).
 
 Standalone CMake project (C++20, Qt 6 Widgets only, no link to launcher code). It compiles exactly one launcher source,
 `launcher/ui/zero/ZeroPixelFont.cpp` (the ZERO Pixel font, Qt only). Design tokens: `src/SetupTokens.h` (Minecraft Theme of
-`docs/zero/DESIGN.md`, motion durations from the installer brief). The 16x16 mark in `src/MarkData.h` is generated from
+`docs/zero/DESIGN.md`, motion durations from the installer brief). The 16x16 mark in `launcher/ui/zero/ZeroMarkData.h` is generated from
 `program_info/zero-logo-minecraft.svg` by `tools/gen_mark.py`.
 
 ## Build

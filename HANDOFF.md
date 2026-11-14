@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-13 (session 13: release 1.0.0 built, waiting for owner OK to publish; see "Session 13" inside Mission 003 › item 9 Release) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-13 (session 13: **1.0.0 PUBLISHED** on GitHub; see "Session 13" inside Mission 003 › item 9 Release) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -578,6 +578,11 @@ remove them with `git worktree remove --force <path>` once the owner agrees.
        SHA256SUMS, smoke OK, silent install 144 files identical. GitHub repo `6402770-sys/ZeroCraft-Launcher` is a fork of Prism at
        `00f216ce5` (our base) → publishing = fast-forward push of `zero-development` to its `develop` + tag `v1.0.0` + Release with the
        three files (`gh`), ONLY on the owner's explicit OK. Intro/tour not yet clicked by a human on a real desktop.
+       🚀 **PUBLISHED 2026-11-13 (owner OK)**: `zero-development` pushed as `develop` to remote `zero`
+       (https://github.com/6402770-sys/ZeroCraft-Launcher, fast-forward from `00f216ce5`), tag `v1.0.0`, Release "ZERO Launcher 1.0.0"
+       (latest) with Setup.exe, Portable.zip, SHA256SUMS (GitHub digests = local). `origin` is still Prism upstream: push to `zero`.
+       Follow-ups: own MSA client ID for 1.0.1 (RELEASE.md Paso 2); real click-through of intro/tour; repo description still "Currently
+       Developing"; the in-app updater against this repo's releases is untested (first real check = 1.0.1).
        (was: owner QA of the earlier list (colour dialog, icon, sound,
        font, cart, mod roll back).)
      🔴 **Session 12 RESUME HERE** (session hit its limit while a worker ran; nothing committed — owner commits):

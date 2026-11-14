@@ -6,6 +6,7 @@ Stack: C++20, Qt 6 (Widgets), CMake + Ninja, MSYS2 UCRT64 GCC toolchain at `C:\m
 - Build: `scripts/zero/build.sh` (configures `build/` on first run; Debug, ccache)
 - Build + unit tests: `scripts/zero/build.sh test` (runs `FileSystem` without its 7 symlink cases, which need an elevated helper and hang)
 - Raw tools need `export PATH="/c/msys64/ucrt64/bin:$PATH"` first. Never use the vcpkg CMake preset.
+- Release package (portable zip, + installer when NSIS exists, into `dist/`): `scripts/zero/package.sh` (ARCHITECTURE.md "Packaging")
 - Run dev build: `scripts/zero/run-dev.cmd` (adds MSYS2 DLLs to PATH). For automated runs always pass
   `-d <temp dir>` so the real user data dir is never touched. Fake instances need `instance.cfg` with a `[General]`
   header (else an upstream debug ASSERT hangs the app). Never kill a running `zerolauncher.exe`; rename a locked exe.

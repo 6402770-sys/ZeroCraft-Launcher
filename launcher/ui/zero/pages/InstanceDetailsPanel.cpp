@@ -40,6 +40,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
+#include "zero/backup/PackSnapshot.h"
 #include "zero/mods/ModHealth.h"
 #include "zero/profiles/InstanceProfile.h"
 
@@ -379,6 +380,15 @@ void InstanceDetailsPanel::setActions(const LibraryActions& actions)
     connect(m_checkMods, &QPushButton::clicked, this, &InstanceDetailsPanel::checkModsRequested);
     m_checkMods->setVisible(m_instance && Mods::readInstanceContext(m_instance->instanceRoot()).loader != Mods::InstanceLoader::None);
     insert(m_checkMods);
+    m_boost = addActionButton(parent, QStringLiteral("gauge"), tr("Boost performance"), nullptr);
+    m_boost->setToolTip(tr("Add performance mods and give Minecraft the memory it needs"));
+    connect(m_boost, &QPushButton::clicked, this, &InstanceDetailsPanel::boostPerformanceRequested);
+    m_boost->setVisible(m_instance && !m_instance->isRunning());  // while the game runs nothing in its folders may change
+    insert(m_boost);
+    m_rollback = addActionButton(parent, QStringLiteral("arrow-left"), tr("Roll back update"), nullptr);
+    connect(m_rollback, &QPushButton::clicked, this, &InstanceDetailsPanel::rollbackRequested);
+    m_rollback->hide();
+    insert(m_rollback);
     insert(addActionButton(parent, QStringLiteral("list-filter"), tr("Change group"), actions.group));
     m_setArtwork = addActionButton(parent, QStringLiteral("image"), tr("Set artwork…"), nullptr);
     connect(m_setArtwork, &QPushButton::clicked, this, &InstanceDetailsPanel::setArtworkRequested);
@@ -389,8 +399,10 @@ void InstanceDetailsPanel::setActions(const LibraryActions& actions)
     insert(m_removeArtwork);
     insert(addActionButton(parent, QStringLiteral("copy"), tr("Copy"), actions.copy));
     auto* exportButton = addActionButton(parent, QStringLiteral("archive"), tr("Export"), nullptr);
-    if (actions.exportInstance && actions.exportInstance->menu())
-        exportButton->setMenu(actions.exportInstance->menu());
+    connect(exportButton, &QPushButton::clicked, this, [this]() {
+        if (m_instance)
+            emit exportRequested(m_instance->id());
+    });
     m_bindings.last().action = actions.exportInstance;
     insert(exportButton);
     insert(addActionButton(parent, QStringLiteral("terminal"), tr("Create shortcut"), actions.shortcut));
@@ -403,6 +415,25 @@ void InstanceDetailsPanel::setActions(const LibraryActions& actions)
     }
     refreshIcons();
     syncButtons();
+    refreshRollback();
+}
+
+void InstanceDetailsPanel::refreshRollback()
+{
+    if (!m_rollback)
+        return;
+    Backup::Pack::Info snapshot;
+    if (m_instance && m_instance->isManagedPack()) {
+        snapshot = Backup::Pack::newestActive(Backup::Pack::listSnapshots(Backup::Pack::snapshotsDirFor(APPLICATION->dataRoot(), m_instance->id())),
+                                              m_instance->getManagedPackID());
+    }
+    m_rollback->setVisible(snapshot.valid);
+    if (!snapshot.valid)
+        return;
+    const QString back = snapshot.meta.oldVersion.isEmpty() ? tr("the previous version") : snapshot.meta.oldVersion;
+    const bool running = m_instance->isRunning();
+    m_rollback->setEnabled(!running);
+    m_rollback->setToolTip(running ? tr("Close the game to roll back") : tr("Back to %1 (saved %2)").arg(back, Format::relativeTime(snapshot.createdMs)));
 }
 
 void InstanceDetailsPanel::refreshIcons()
@@ -414,7 +445,8 @@ void InstanceDetailsPanel::refreshIcons()
 
 void InstanceDetailsPanel::refreshPlayButton(bool running, bool canLaunch)
 {
-    Q_UNUSED(running);
+    if (m_boost)
+        m_boost->setVisible(m_instance && !running);
     m_play->setInstanceId(m_instance ? m_instance->id() : QString());
     m_play->setCanLaunch(canLaunch && m_actions.launch && m_actions.launch->isEnabled());
 }
@@ -492,8 +524,11 @@ void InstanceDetailsPanel::refreshProfile(bool reloadEditors)
     if (m_removeArtwork)
         m_removeArtwork->setVisible(hasArtwork);
 
+    if (m_boost)
+        m_boost->setVisible(!m_instance->isRunning());
     if (m_checkMods)  // only for instances with a mod loader (a small read of mmc-pack.json)
         m_checkMods->setVisible(Mods::readInstanceContext(m_instance->instanceRoot()).loader != Mods::InstanceLoader::None);
+    refreshRollback();
 
     const InstanceInfo info = InstanceInfo::of(m_instance);
     QStringList meta;

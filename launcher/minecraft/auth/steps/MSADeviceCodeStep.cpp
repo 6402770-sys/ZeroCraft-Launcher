@@ -43,9 +43,12 @@
 #include "net/RawHeaderProxy.h"
 
 // https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code
-MSADeviceCodeStep::MSADeviceCodeStep(AccountData* data) : AuthStep(data)
+MSADeviceCodeStep::MSADeviceCodeStep(AccountData* data) : MSADeviceCodeStep(data, APPLICATION->getMSAClientID()) {}
+
+// ZERO: the shared constructor (the Ely.by step passes its own client ID)
+MSADeviceCodeStep::MSADeviceCodeStep(AccountData* data, const QString& clientId)
+    : AuthStep(data), m_clientId(clientId), m_gotTokenMessage(tr("Got MSA token"))
 {
-    m_clientId = APPLICATION->getMSAClientID();
     connect(&m_expiration_timer, &QTimer::timeout, this, &MSADeviceCodeStep::abort);
     connect(&m_pool_timer, &QTimer::timeout, this, &MSADeviceCodeStep::authenticateUser);
 }
@@ -55,13 +58,33 @@ QString MSADeviceCodeStep::describe()
     return tr("Logging in with Microsoft account(device code).");
 }
 
-void MSADeviceCodeStep::perform()
+QByteArray MSADeviceCodeStep::deviceCodePayload() const
 {
     QUrlQuery data;
     data.addQueryItem("client_id", m_clientId);
-    data.addQueryItem("scope", "XboxLive.SignIn XboxLive.offline_access");
-    auto payload = data.query(QUrl::FullyEncoded).toUtf8();
-    QUrl url("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode");
+    data.addQueryItem("scope", m_scopes);
+    if (!m_clientSecret.isEmpty()) {
+        data.addQueryItem("client_secret", m_clientSecret);
+    }
+    return data.query(QUrl::FullyEncoded).toUtf8();
+}
+
+QByteArray MSADeviceCodeStep::tokenPayload() const
+{
+    QUrlQuery data;
+    data.addQueryItem("client_id", m_clientId);
+    data.addQueryItem("grant_type", "urn:ietf:params:oauth:grant-type:device_code");
+    data.addQueryItem("device_code", m_device_code);
+    if (!m_clientSecret.isEmpty()) {
+        data.addQueryItem("client_secret", m_clientSecret);
+    }
+    return data.query(QUrl::FullyEncoded).toUtf8();
+}
+
+void MSADeviceCodeStep::perform()
+{
+    auto payload = deviceCodePayload();
+    QUrl url = m_deviceCodeUrl;
     auto headers = QList<Net::HeaderPair>{
         { "Content-Type", "application/x-www-form-urlencoded" },
         { "Accept", "application/json" },
@@ -84,6 +107,7 @@ struct DeviceAuthorizationResponse {
     QString device_code;
     QString user_code;
     QString verification_uri;
+    QString verification_uri_complete;  // ZERO: RFC 8628 optional field
     int expires_in;
     int interval;
 
@@ -104,6 +128,7 @@ DeviceAuthorizationResponse parseDeviceAuthorizationResponse(const QByteArray& d
         .device_code = obj["device_code"].toString(),
         .user_code = obj["user_code"].toString(),
         .verification_uri = obj["verification_uri"].toString(),
+        .verification_uri_complete = obj["verification_uri_complete"].toString(),
         .expires_in = obj["expires_in"].toInt(),
         .interval = obj["interval"].toInt(),
         .error = obj["error"].toString(),
@@ -126,7 +151,10 @@ void MSADeviceCodeStep::deviceAuthorizationFinished(QByteArray* response)
                       tr("Device authorization failed: %1").arg(rsp.error_description.isEmpty() ? rsp.error : rsp.error_description));
         return;
     }
-    if (rsp.device_code.isEmpty() || rsp.user_code.isEmpty() || rsp.verification_uri.isEmpty() || rsp.expires_in == 0) {
+    // ZERO: the link to show; Ely.by's verification_uri_complete has the code prefilled
+    const bool useComplete = m_preferCompleteUri && !rsp.verification_uri_complete.isEmpty();
+    const QString link = useComplete ? rsp.verification_uri_complete : rsp.verification_uri;
+    if (rsp.device_code.isEmpty() || rsp.user_code.isEmpty() || link.isEmpty() || rsp.expires_in == 0) {
         qWarning() << "Device authorization failed: required fields missing";
         emit finished(AccountTaskState::STATE_FAILED_HARD, tr("Device authorization failed: required fields missing"));
         return;
@@ -135,7 +163,7 @@ void MSADeviceCodeStep::deviceAuthorizationFinished(QByteArray* response)
         interval = rsp.interval;
     }
     m_device_code = rsp.device_code;
-    emit authorizeWithBrowser(rsp.verification_uri, rsp.user_code, rsp.expires_in);
+    emit authorizeWithBrowser(link, rsp.user_code, rsp.expires_in);
     m_expiration_timer.setTimerType(Qt::VeryCoarseTimer);
     m_expiration_timer.setInterval(rsp.expires_in * 1000);
     m_expiration_timer.setSingleShot(true);
@@ -171,12 +199,8 @@ void MSADeviceCodeStep::startPoolTimer()
 
 void MSADeviceCodeStep::authenticateUser()
 {
-    QUrlQuery data;
-    data.addQueryItem("client_id", m_clientId);
-    data.addQueryItem("grant_type", "urn:ietf:params:oauth:grant-type:device_code");
-    data.addQueryItem("device_code", m_device_code);
-    auto payload = data.query(QUrl::FullyEncoded).toUtf8();
-    QUrl url("https://login.microsoftonline.com/consumers/oauth2/v2.0/token");
+    auto payload = tokenPayload();
+    QUrl url = m_tokenUrl;
     auto headers = QList<Net::HeaderPair>{
         { "Content-Type", "application/x-www-form-urlencoded" },
         { "Accept", "application/json" },
@@ -268,5 +292,5 @@ void MSADeviceCodeStep::authenticationFinished(QByteArray* response)
     m_data->msaToken.extra = rsp.extra;
     m_data->msaToken.refresh_token = rsp.refresh_token;
     m_data->msaToken.token = rsp.access_token;
-    emit finished(AccountTaskState::STATE_WORKING, tr("Got MSA token"));
+    emit finished(AccountTaskState::STATE_WORKING, m_gotTokenMessage);
 }

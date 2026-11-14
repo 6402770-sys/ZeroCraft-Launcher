@@ -34,8 +34,10 @@
  */
 
 #pragma once
+#include <QByteArray>
 #include <QObject>
 #include <QTimer>
+#include <QUrl>
 
 #include "minecraft/auth/AuthStep.h"
 #include "net/NetJob.h"
@@ -51,6 +53,10 @@ class MSADeviceCodeStep : public AuthStep {
 
     QString describe() override;
 
+    // ZERO: the bodies of the two requests, public so that tests can check them without the network
+    QByteArray deviceCodePayload() const;
+    QByteArray tokenPayload() const;
+
    public slots:
     void abort() override;
 
@@ -63,8 +69,20 @@ class MSADeviceCodeStep : public AuthStep {
     void authenticateUser();
     void authenticationFinished(QByteArray* response);
 
-   private:
+   protected:
+    // ZERO: lets the Ely.by step reuse this flow with its own client and endpoints (RFC 8628 is the same on both sides)
+    MSADeviceCodeStep(AccountData* data, const QString& clientId);
+
     QString m_clientId;
+    QString m_clientSecret;  // optional; sent only when not empty
+    QString m_scopes = "XboxLive.SignIn XboxLive.offline_access";
+    QUrl m_deviceCodeUrl{ "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode" };
+    QUrl m_tokenUrl{ "https://login.microsoftonline.com/consumers/oauth2/v2.0/token" };
+    // show/open verification_uri_complete (the code comes prefilled) when the server sends it
+    bool m_preferCompleteUri = false;
+    QString m_gotTokenMessage;
+
+   private:
     QString m_device_code;
     bool m_is_aborted = false;
     int interval = 5;

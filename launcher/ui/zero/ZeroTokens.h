@@ -158,6 +158,19 @@ constexpr int radiusXl = 4;
 
 } // namespace Minecraft
 
+// Accent presets offered by the theme editor (muted, readable on both dark and light backgrounds).
+struct AccentPreset {
+    const char* name;  // untranslated; the editor translates it
+    QRgb rgb;
+};
+inline constexpr AccentPreset accentPresets[] = {
+    { "Blue", 0xFF5B8DEF },
+    { "Green", 0xFF5FBF7F },
+    { "Purple", 0xFF9B7BE0 },
+    { "Gold", 0xFFE0B04A },
+    { "Red", 0xFFE0645C },
+};
+
 // Light edge of a bevel: white at 7%.
 constexpr double bevelLightAlpha = 0.07;
 // Size of the square step cut into each corner of a Notched panel (px).
@@ -196,6 +209,30 @@ struct ThemeSpec {
     quint32 pixelRoles = 0;  // bitmask of roleBit(Role): roles drawn with the "ZERO Pixel" font
     Density density = Density::Comfortable;
     bool reduceMotion = false;
+
+    // Custom (user-made) themes only; the built-in themes leave these at their defaults.
+    QString baseId;             // built-in theme this one derives from ("obsidian" / "minecraft"): selects the overlay stylesheet; empty = id
+    QString backgroundImage;    // absolute path of the window background image; empty = flat bg (or the stone texture)
+    QString backgroundVideo;    // absolute path of the window background video (muted loop); empty = none. Wins over the image
+    double backgroundDim = 0.0; // 0..1: bg color laid over the image / video
+    double cardOpacity = 1.0;   // alpha of `surface` / `surfaceHover` (cards and panels); everything else stays opaque
+    bool videoSound = false;    // the background video plays its sound (only with a video; default off)
+    double videoVolume = 0.5;   // 0..1, only meaningful with videoSound
+    QString appIcon;            // absolute path of the theme's own launcher icon (window, taskbar, rail header); empty = the ZERO mark
+    QString fontFile;           // absolute path of the theme's own UI font file; empty = the default font
+    QString fontFamily;         // family registered from fontFile (resolved when the theme is applied); empty = default or failed to load
+
+    /// The id that picks the overlay stylesheet and the pixel-art touches (a custom theme answers with its base theme).
+    QString styleId() const { return baseId.isEmpty() ? id : baseId; }
+    /// `surface` / `surfaceHover` without the card opacity: for popups, menus and overlays that must never be see-through.
+    QColor surfaceSolid() const { return opaque(surface); }
+    QColor surfaceHoverSolid() const { return opaque(surfaceHover); }
+
+    static QColor opaque(QColor c)
+    {
+        c.setAlpha(255);
+        return c;
+    }
 
     static ThemeSpec obsidian()
     {

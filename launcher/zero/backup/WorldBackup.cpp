@@ -54,7 +54,9 @@ bool makePath(const QString& path)
 
 // ---------------------------------------------------------------- hooks
 
-bool defaultRename(const QString& from, const QString& to)
+}  // namespace
+
+bool renamePath(const QString& from, const QString& to)
 {
     // Folder renames on Windows fail while an indexer / antivirus still holds a handle on a file inside: retry a few times.
     for (int attempt = 0; attempt < 5; ++attempt) {
@@ -65,6 +67,13 @@ bool defaultRename(const QString& from, const QString& to)
         QThread::msleep(150);
     }
     return false;
+}
+
+namespace {
+
+bool defaultRename(const QString& from, const QString& to)
+{
+    return renamePath(from, to);
 }
 
 qint64 defaultFreeBytes(const QString& path)
@@ -107,6 +116,7 @@ struct Manifest {
     Kind kind = Kind::Manual;
     qint64 createdMs = 0;
     BackupMeta meta;
+    QJsonObject extra;
     QList<ManifestFile> files;
     qint64 totalBytes = 0;
 };
@@ -125,7 +135,10 @@ QByteArray manifestToJson(const Manifest& m)
                             { "worldName", m.meta.worldName },
                             { "files", files },
                             { "totalBytes", double(m.totalBytes) } };
-    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    QJsonObject withExtra = root;
+    if (!m.extra.isEmpty())
+        withExtra.insert(QStringLiteral("extra"), m.extra);
+    return QJsonDocument(withExtra).toJson(QJsonDocument::Compact);
 }
 
 bool isHex64(const QString& s)
@@ -166,6 +179,7 @@ bool parseManifest(const QByteArray& json, Manifest* out, QString* error)
     m.meta.worldFolder = root.value("worldFolder").toString();
     m.meta.worldName = root.value("worldName").toString();
     m.totalBytes = qint64(root.value("totalBytes").toDouble(-1));
+    m.extra = root.value("extra").toObject();
 
     QSet<QString> seen;
     qint64 sum = 0;
@@ -249,8 +263,8 @@ bool hashFile(const QString& path, QString* sha, qint64* size, QString* error)
 }
 
 /// Regular files below `root`, links (symbolic or junction) neither followed nor listed, `session.lock` of the world root excluded.
-/// Same traversal rules as Worlds::folderSize.
-QList<FileItem> collectFiles(const QString& root)
+/// Same traversal rules as Worlds::folderSize. `exclude` (optional) leaves out files and whole folders by their path relative to `root`.
+QList<FileItem> collectFiles(const QString& root, const std::function<bool(const QString&, bool)>& exclude = {})
 {
     QList<FileItem> out;
     const QString base = QDir(root).absolutePath();
@@ -261,12 +275,16 @@ QList<FileItem> collectFiles(const QString& root)
             if (entry.isSymLink() || entry.fileInfo().isJunction())
                 continue;
             if (entry.isDir()) {
+                if (exclude && exclude(entry.filePath().mid(base.size() + 1), true))
+                    continue;
                 pending.append(entry.filePath());
             } else if (entry.isFile()) {
                 FileItem item;
                 item.abs = entry.filePath();
                 item.rel = item.abs.mid(base.size() + 1);
                 if (item.rel == QLatin1String("session.lock"))
+                    continue;
+                if (exclude && exclude(item.rel, false))
                     continue;
                 item.size = entry.size();
                 out.append(item);
@@ -447,7 +465,8 @@ bool isSafeRelativePath(const QString& path)
 
 // ---------------------------------------------------------------- createBackup
 
-BackupResult createBackup(const QString& worldFolderPath, const QString& backupDir, Kind kind, const BackupMeta& meta, const Hooks& hooksIn)
+BackupResult createBackup(const QString& worldFolderPath, const QString& backupDir, Kind kind, const BackupMeta& meta, const Hooks& hooksIn,
+                          const Options& options)
 {
     BackupResult result;
     const Hooks hooks = resolve(hooksIn);
@@ -457,17 +476,24 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
         result.zipPath.clear();
         return result;
     };
+    auto stopped = [&]() { return options.cancelled && options.cancelled(); };
+    auto cancel = [&]() {
+        result.cancelled = true;
+        return fail(tr("Cancelled."));
+    };
 
     if (!QFileInfo(worldFolderPath).isDir())
         return fail(tr("The world folder does not exist."));
     if (!makePath(backupDir))
         return fail(tr("Could not create the backup folder."));
 
-    QList<FileItem> files = collectFiles(worldFolderPath);
+    QList<FileItem> files = collectFiles(worldFolderPath, options.exclude);
+    if (stopped())
+        return cancel();
     qint64 total = 0;
     for (const FileItem& f : std::as_const(files)) {
         if (!isSafeRelativePath(f.rel))
-            return fail(tr("This world contains a file name that cannot be backed up safely: %1").arg(f.rel));
+            return fail(options.unsafeName ? options.unsafeName(f.rel) : tr("This world contains a file name that cannot be backed up safely: %1").arg(f.rel));
         total += f.size;
     }
 
@@ -481,15 +507,28 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
     manifest.kind = kind;
     manifest.createdMs = QDateTime::currentMSecsSinceEpoch();
     manifest.meta = meta;
+    manifest.extra = options.extra;
     QString error;
+    const qint64 passTotal = std::max<qint64>(total, 1) * 3;  // hashing, writing, verifying
+    qint64 done = 0;
+    auto report = [&]() {
+        if (options.progress)
+            options.progress(std::min(done, passTotal), passTotal);
+    };
     for (FileItem& f : files) {
+        if (stopped())
+            return cancel();
         if (!hashFile(f.abs, &f.sha256, &f.size, &error))
             return fail(error);
         manifest.files.append({ f.rel, f.size, f.sha256 });
         manifest.totalBytes += f.size;
+        done += f.size;
+        report();
     }
 
-    const QString finalPath = uniqueZipPath(backupDir, kind);
+    const QString finalPath = options.fileName.isEmpty() ? uniqueZipPath(backupDir, kind) : QDir(backupDir).filePath(options.fileName);
+    if (!options.fileName.isEmpty() && (QFileInfo::exists(finalPath) || QFileInfo::exists(finalPath + QStringLiteral(".part"))))
+        return fail(tr("The backup file already exists."));
     const QString partPath = finalPath + QStringLiteral(".part");
     auto discardPart = [&]() { QFile::remove(partPath); };
 
@@ -505,11 +544,18 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
             return fail(tr("Could not write the backup: %1").arg(r.error()));
         }
         for (const FileItem& f : std::as_const(files)) {
+            if (stopped()) {
+                writer.close();
+                discardPart();
+                return cancel();
+            }
             if (auto r = writer.addFile(f.abs, QString::fromLatin1(kWorldPrefix) + f.rel); !r) {
                 writer.close();
                 discardPart();
                 return fail(tr("Could not write the backup: %1").arg(r.error()));
             }
+            done += f.size;
+            report();
         }
         if (auto r = writer.close(); !r) {
             discardPart();
@@ -518,6 +564,10 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
     }
 
     // verify before the backup may look valid: every entry against the manifest
+    if (stopped()) {
+        discardPart();
+        return cancel();
+    }
     const VerifyResult verified = verifyBackup(partPath);
     if (!verified.ok) {
         discardPart();
@@ -527,9 +577,25 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
         discardPart();
         return fail(tr("Could not finish the backup file."));
     }
+    done = passTotal;
+    report();
     result.ok = true;
     result.zipPath = finalPath;
     return result;
+}
+
+ManifestInfo readBackupInfo(const QString& zipPath)
+{
+    ManifestInfo info;
+    Manifest manifest;
+    if (!readManifest(zipPath, &manifest, &info.error))
+        return info;
+    info.ok = true;
+    info.totalBytes = manifest.totalBytes;
+    info.createdMs = manifest.createdMs;
+    info.meta = manifest.meta;
+    info.extra = manifest.extra;
+    return info;
 }
 
 // ---------------------------------------------------------------- listBackups / verifyBackup
@@ -660,6 +726,32 @@ bool extractAndVerify(const QString& zipPath, const Manifest& manifest, const QS
 }
 
 }  // namespace
+
+VerifyResult extractBackup(const QString& zipPath, const QString& stagingFolder)
+{
+    VerifyResult result;
+    const VerifyResult verified = verifyBackup(zipPath);
+    if (!verified.ok) {
+        result.error = tr("This backup is damaged and was not restored: %1").arg(verified.error);
+        return result;
+    }
+    Manifest manifest;
+    QString error;
+    if (!readManifest(zipPath, &manifest, &error)) {
+        result.error = error;
+        return result;
+    }
+    if (!makePath(stagingFolder)) {
+        result.error = tr("Could not create a temporary folder next to the world.");
+        return result;
+    }
+    if (!extractAndVerify(zipPath, manifest, stagingFolder, &error)) {
+        result.error = error;
+        return result;
+    }
+    result.ok = true;
+    return result;
+}
 
 RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPath, const QString& backupDir, const BackupMeta& meta,
                             const Hooks& hooksIn)

@@ -59,6 +59,38 @@ install/launch, auth, mod platforms, tasks, networking) is kept and only changed
 MSYS2 UCRT64 (GCC, Qt 6.12, CMake, Ninja) — `scripts/zero/build.sh`. Helper Java jars target `--release 8`.
 The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
 
+## Packaging (portable zip, installer, updater)
+`scripts/zero/package.sh [--version X.Y.Z] [--preview|--release] [--no-installer] [--no-smoke]` (Git Bash, repo root).
+- **Steps**: configures a separate Release tree in `build-release/` (Ninja, ccache, no LTO, no tests, `-DZERO_VERSION=...`), builds, `cmake --install --strip` into `dist/stage/ZEROLauncher/`,
+  then makes the folder self-contained: Prism's install-time deploy (`qt_generate_deploy_script`, i.e. windeployqt) ships the Qt plugins, then the script walks the imports of every exe / DLL / plugin
+  with `objdump -p` and copies each non-system DLL from `C:\msys64\ucrt64\bin` (libstdc++, libgcc, winpthread, zlib, ssl, ffmpeg and their dependencies, about 75 files). Missing plugins trigger a
+  `windeployqt6` fallback; an import that cannot be resolved fails the script. `Qt6Multimedia.dll`, `multimedia/ffmpegmediaplugin.dll` and the ffmpeg DLLs are checked explicitly (video themes), as are
+  `platforms/qwindows`, `styles`, `tls/qschannelbackend` (HTTPS) and the `imageformats` plugins (jpeg, gif, svg, webp; png is built into QtGui).
+- **Outputs** (`dist/`, git-ignored): `ZEROLauncher-<ver>-Windows-Portable.zip` (flat, stage + `portable.txt`), `ZEROLauncher-<ver>-Windows-Setup.exe` (only when `makensis` is found; otherwise the script
+  prints the MSYS2 install line `pacman -S --needed mingw-w64-ucrt-x86_64-nsis`), `SHA256SUMS.txt`. The installer is built from `build-release/program_info/win_install.nsi` (configured from
+  `program_info/win_install.nsi.in`); the script copies it next to the staged files and makes `OutFile` / `MUI_ICON` absolute. Every top-level stage folder must be packed by the template or the script stops.
+- **Smoke test** (on by default): extracts the zip to a temp folder and runs it with `PATH=C:\Windows\System32;C:\Windows`, a temp data dir and `--zero-screenshot`; it must exit 0 and write a PNG.
+- **Version**: the numbers in the root `CMakeLists.txt` (`Launcher_VERSION_*`); `--version` passes `-DZERO_VERSION=X.Y.Z`, which overrides them for that build tree.
+- **Updater**: `Launcher_UPDATER_GITHUB_REPO=https://github.com/6402770-sys/ZeroCraft-Launcher`, `Launcher_BUILD_ARTIFACT=Windows`, `Launcher_BUILD_PLATFORM=Windows-MinGW-w64` (so
+  `zerolauncher_updater.exe` is built and shipped). `PrismUpdaterApp::validReleaseArtifacts` accepts a GitHub release asset when its lower-cased name contains the artifact (`windows`), contains
+  `portable` for a portable install (the `portable.txt` next to the exe) and is not an archive for an installed one. So upload exactly `ZEROLauncher-<ver>-Windows-Portable.zip` and
+  `ZEROLauncher-<ver>-Windows-Setup.exe` to the release (no other asset name may contain "windows": it would be offered as a choice).
+- **`--release`** adds `-DZERO_RELEASE_BUILD=ON` and requires the env vars `ZERO_MSA_CLIENT_ID` and `ZERO_CURSEFORGE_API_KEY` (never printed; they land in the git-ignored
+  `build-release/CMakeCache.txt`, so do not share that folder). Without them the script stops; see `docs/zero/CREDENTIALS.md`. A `--preview` build still carries Prism's development credentials and
+  must not be published.
+- **Displayed version**: `BuildConfig::printableVersionString()` appends the git branch (`0.1.0-zero-development`) unless the build is on a commit whose git tag equals the version. For a public release
+  tag the commit `X.Y.Z` before running the script, otherwise the package (and the updater's version comparison) carries the branch suffix.
+- **Compiler flags**: the upstream `-mguard=cf` Release flag is only added for Clang (GCC rejects it).
+- **Installer notes** (per-user install in `%LOCALAPPDATA%\Programs\ZEROLauncher`, registry under `HKCU\Software\ZEROLauncher`): an upgrade runs the previous uninstaller first (program files only; user
+  data is never inside the install folder, it lives in `%APPDATA%\ZEROLauncher`); nothing in the template references `%APPDATA%\PrismLauncher`. It registers the `zerolauncher:`, `curseforge:` and
+  `modrinth:` URL handlers (the last two are shared with other launchers: the uninstaller removes them only while they still point at ZERO) and optional `.mrpack` / `.zip` "Open with".
+  NSIS is now only the fallback (`package.sh --nsis`, or when qt6-static is missing).
+- **ZERO Setup v2** (default installer since session 12): own animated Qt installer in `installer/` (standalone CMake project, statically
+  linked against MSYS2 `qt6-static`, imports only Windows DLLs). `zero-setup-pack` appends the `dist/stage` payload (per-file SHA-256, zlib)
+  to the stub; the stub reproduces the NSIS footprint above exactly (same keys, paths, handlers, `/S` `/D=` switches) and copies itself
+  without payload as `uninstall.exe`. Uninstall moves user data to the Recycle Bin only when asked. Details, switches, payload format,
+  test switches (`--target`, `--no-system`, `--screenshot`, `--demo`): `installer/README.md`.
+
 ## Instance profiles (Mission 002, milestone 6)
 - **Data**: everything lives with the instance, no parallel store. `BaseInstance` registers `ZeroFavorite` (bool), `ZeroTags` (JSON array in a
   string; the INI format quotes it because of the commas) and `ZeroArtwork` (path relative to the instance root) in `instance.cfg`; the
@@ -158,6 +190,51 @@ The first ZERO feature that writes inside user worlds. Rule: never silently over
 - Known limits: nothing prevents another program from editing a world during the copy (the verify step would then fail the backup rather than record a torn one); a restore sets file modification times
   to "now"; empty folders inside a world are not restored.
 
+### Modpack snapshots (safe update, Mission 003 task 6b)
+A modpack update must never cost the player an instance. Code: `launcher/zero/backup/PackSnapshot` (pure core, namespace `Zero::Backup::Pack`, no widgets, no `APPLICATION`, seams in `Pack::Hooks`: trash,
+rename, free space, clock) and `PackSnapshotTasks` (`PackSnapshotTask`, `PackRollbackTask`: `Task`s on the pool, shown by Prism's `ProgressDialog`). It reuses the zip engine of `WorldBackup`, extended without
+changing the world behavior: `Backup::Options` (exclude predicate for files and folders, fixed zip name, `extra` manifest object, cancel poll, progress), `readBackupInfo`, `extractBackup` (verify, extract into a
+staging folder, verify again) and `renamePath`.
+- **Why before the task**: Prism's Modrinth / Flame update tasks remove the old pack files inside the instance folder while they run and `InstanceList::commitStagedInstance` then copies the new ones over it
+  (`FS::overrideFolder`). `MainWindow::installModpack` therefore takes the copy right after the dialog was accepted with `isUpdate()` and **before** `extractTask()`; if it fails the update does not start
+  ("Could not save a copy of X first, so it was not updated: <reason>"), cancelling the progress cancels the update ("Update cancelled. X was not changed."). It is refused while the game runs
+  (`Application::launchPhase` / `isRunning`) or another backup job holds the instance (`WorldBackupJobs::isInstanceLocked`; the tasks hold the same launch lock while they run).
+- **Snapshot** = `<data>/zero/snapshots/<instance id>/pack-<yyyyMMdd-HHmmss>[-n].zip` (UTC stamp; the folder is shared with the mod snapshots of task 6a, which are folders, not zips) with the manifest of
+  `WorldBackup` (`world/<path relative to the instance folder>`, SHA-256 per file, written as `.part`, verified, renamed) and a `.json` beside it (format 1: instance id and name, pack id / name, old and new
+  version, game folder, created time, `outcome` pending | ok | failed, `rolledBack`). The zip cannot change after it was written, so the outcome and the roll back mark live in the `.json` (written with
+  `QSaveFile`); without it the zip's own manifest `extra` is read and the outcome is pending. Never part of it (`isExcluded`): `<game dir>/saves`, `screenshots`, `logs`, `crash-reports`, `.cache`
+  (the game dir comes from `gameRoot()`, never guessed) and anything below a `.zero-*` folder. Links and junctions are not followed (a linked `mods` folder is therefore not in the copy). Free space: size x 1.1
+  + 50 MiB on the volume of the snapshots folder.
+- **Outcome**: after the update task the copy is **kept** (success or failure) and marked ok / failed. When the provider created a new instance instead of updating this one (`createdId != updateId`) the copy
+  is removed (`removeSnapshot`, ZERO's own file). **Retention**: the newest 2 `pack-*.zip` per instance (`kKeep`, rolled back ones count), older ones and their `.json` are removed; a `.part` older than an
+  hour too. Only names that match the pattern are touched. Snapshots of deleted instances are left in place (the delete-instance flow is unchanged); a recreated instance with the same id never offers them
+  because the pack id must match (`newestActive(list, packId)`, checked again by `rollback`).
+- **Roll back** (`Pack::rollback`, order matters): 1. the snapshot must be in this instance's snapshots folder, of this instance id and pack id, not rolled back; free space; 2. `extractBackup` into
+  `<instances>/.zero-restore-<id>-<ts>` (the zip is verified before and the files after); 3. `instance.cfg` of the staging folder = the CURRENT file with only the `ManagedPack*` keys of the [General] section
+  taken from the snapshot (`mergeInstanceCfg`: play time, ZERO profile keys and Java settings stay; written with `QSaveFile`); 4. the player's folders (`playDataFolders`: saves, screenshots, logs,
+  crash-reports of the game dir) are **renamed** from the instance into the staging folder, and so is every symlink / junction / shortcut found in the instance (walk without following links, `findLinks`; the zip
+  engine skips them, so a linked `mods` folder is not in the snapshot) when its place in the staging folder is free (a link whose place the snapshot holds stays with the old instance); 5. rename instance -> `.zero-replaced-<id>-<ts>`, rename staging -> instance; 6. mark the snapshot rolled back;
+  7. the replaced folder goes to the Recycle Bin (`FS::trash`, **no permanent-delete fallback**). Any failure up to step 5 puts everything back (carried folders move back, the staging folder is removed only
+  when nothing of the player's is in it) and says "Your instance was not changed"; if even the way back fails the message names the folders that hold the instance and the play data. A trash failure after
+  the swap is not a failure: the instance is the old one, the replaced folder stays where it is (renamed `.zero-leftover-<id>-<ts>` so that recovery cannot take it for a cut-off roll back and bring a deleted
+  instance back) and the toast says where. Everything else the player did after the update outside those folders (options.txt,
+  servers.dat, mods added since) is the snapshot's again, and what was replaced is in the Recycle Bin.
+- **Startup recovery** (`Pack::recoverInterrupted(instancesDir)`, run by the `InstanceList` constructor for every instances folder, before the first discovery; one `// ZERO` block): a crash or power
+  loss during a roll back would leave the worlds in a hidden `.zero-restore-<id>-<ts>` folder or the instance only as `.zero-replaced-<id>-<ts>`. Per id: replaced exists and the instance does not -> renamed
+  back; the instance and a staging folder -> every play-data folder and link of the staging folder whose place is free in the instance moves back, and the staging folder (ZERO's extracted copy) is removed
+  only when no folder named like play data and no link remains in it (else it is kept and logged); the instance and a replaced folder and no staging folder (crash after the swap) -> the replaced folder
+  goes to the Recycle Bin; a `.zero-leftover-*` is offered to the Recycle Bin again when its instance exists. Nothing is overwritten, every action and problem is logged (`ZERO recovery:`).
+- **After the swap** `InstanceList::reloadInstance(id)` (one `// ZERO` method) drops the in-memory instance (stale settings, components, mod lists and their folder watchers; a stale `PackProfile` would write the
+  new pack's `mmc-pack.json` back) and `loadList()` discovers the folder again; `instanceSelectRequest` selects it. `InstanceList::discoverInstances` skips folders named `.zero-*`: the staging and replaced
+  folders hold an `instance.cfg` and would otherwise appear as instances.
+- **UI**: success toast "Updated X" with the single action **Undo** (replaces "Show in Library" for updates; installs keep it); Library details panel button **Roll back update** (icon `arrow-left`,
+  `InstanceDetailsPanel::refreshRollback`) only while the instance has a not rolled back snapshot of its pack, tooltip "Back to <old version> (saved <relative time>)", disabled while the game runs; the question
+  "Roll back X to <old version>?" / "Your worlds, screenshots and play time stay. The updated files go to the Recycle Bin." (`ModsUi::ChoiceDialog`, Cancel / Roll back, Enter cancels); a modal progress while it
+  runs; toast "Rolled back X" or the error. Dev aids: `ZERO_SCREENSHOT_PACK_SNAPSHOT=<instance id>` (+ `ZERO_SCREENSHOT_PACK_NEW_VERSION`) takes a snapshot, `ZERO_SCREENSHOT_PACK_ROLLBACK=<instance id>` grabs the question.
+- Tests: `tests/PackSnapshot_test.cpp` (exclude rules, cfg merge, snapshot contents and meta, retention, listing, happy-path roll back, every failure path with injected rename / trash / free-space hooks,
+  corrupt zips, the tasks: failure gates the update, cancel, refusal while running or locked). Known limits: a crash between the carry-over and the swap leaves the player's folders in the hidden `.zero-restore-*`
+  folder (named in the log); the copy is as big as the instance without its play data (mods and resource packs can be gigabytes); a task that is cancelled while it verifies finishes that step first.
+
 ## Storage Manager (Mission 002)
 Core only (no widgets, no `APPLICATION`, no Prism instance classes): `launcher/zero/storage/StorageScanner` (namespace `Zero::Storage`). The UI fills plain `InstanceSource` / `LauncherSource` structs from the
 instance list (like `sourcesFromApplication()` in `WorldsPage`). Rule: measure everything, never delete without clear consent, never auto-delete user content.
@@ -240,3 +317,111 @@ Never reported: `java` requirements, dependencies with `side = SERVER`, anything
   (title/subtitle/breadcrumb/top-bar actions). MainWindow remains the controller.
 - **Command palette**: ranking is pure logic in `launcher/zero/palette/CommandMatcher` (unit-tested); UI in
   `launcher/ui/zero/palette/`; MainWindow supplies command descriptors that call existing QActions/APIs.
+
+## Custom themes (Theme editor)
+User-made ZERO themes are real themes: `<data>/themes/<slug>/zero-theme.json` (+ `background.<ext>` next to it), id `zero-custom-<slug>`.
+- **Core (no widgets)**: `zero/theme/CustomTheme` (definition, JSON `format: 1`, derivation, contrast), `zero/theme/ThemeArchive` (zip export / import, Recycle Bin delete). Unparsable, unknown or newer-format files are skipped with a warning, never fatal.
+- **Derivation** (`Custom::deriveSpec`, pure): start from the base spec (Obsidian or Minecraft: bevel, pixel roles, radii), `texture = false` (a custom theme never tiles the stone). `accent` hover / pressed = HSL lightness +-0.07 (dark bg: hover lighter, light bg: hover darker); `onAccent` = black or white by contrast; surfaces step from `bg` toward `text` (0.04 / 0.065 / 0.08 / 0.11 / 0.13), border / borderStrong mix `surface` and `text`, `textSecondary` / `textTertiary` = text at 0.70 / 0.50 over bg; status colors from the base; `overrides` last. Corners: `rounded` = Obsidian radii, `square` = Minecraft's notched look on a Minecraft base and radius 0 on an Obsidian one.
+- **ThemeSpec additions**: `baseId` (overlay stylesheet / pixel mark follow the base: `styleId()`), `backgroundImage` (absolute path), `backgroundDim`, `cardOpacity`. `backgroundVideo` (absolute path; a custom theme has an image or a video, never both), `videoSound` / `videoVolume` (the video's sound switch, default off, and its 0..1 volume), `appIcon` (absolute path of the theme's own launcher icon), `fontFile` (absolute path of the theme's font file) and `fontFamily` (the family registered from it, resolved when the theme is applied; empty = the default font or a font that failed to load).
+- **Background image**: `ZeroShell::paintEvent` draws it scaled to cover (centered crop), then `bg` at alpha `dim`; the scaled pixmap is cached per path + size.
+- **Background video** (`kind: video`): `ui/zero/shell/ZeroVideoBackground`, owned by `ZeroShell`. `QMediaPlayer` + `QVideoSink` only (no `QVideoWidget`, no MultimediaWidgets), `QMediaPlayer::Infinite` loop. It is silent by construction: a `QAudioOutput` exists only while the theme's sound is on (`setSound(on, volume)`, applied live: off deletes the output, on creates it for the existing or the next player) and it is muted whenever the video is not playing (`ZeroVideoBackground::audible(sound, playing)` on top of the play rule below), so the sound stops with the video. Each frame is converted once (`QVideoFrame::toImage()`) and `ZeroShell::paintEvent` draws it with the same cover crop (`coverRect`, source rect straight into `drawImage`, no rescale cache) and `bg` at alpha `dim`. Until the first frame, or if the file cannot be played (codec / plugin missing, file gone), the flat background shows and one warning is logged; never a crash or a black window. The player exists only while the theme has a video: a theme without one calls `setSource("")`, which stops and deletes it (no decoder left running); the same path + mtime is a no-op, so an edited file reloads.
+  - **Play rule** (pure, `ZeroVideoBackground::shouldPlay(pageId, minimized, gameRunning, motionOff)`): plays only when the page is `home` or `appearance`, the top-level window is not minimized, no game is running and motion is on; otherwise it is paused and the last frame stays as a still. A theme that opens on another page loads, shows the first frame as the still and pauses. Inputs: `ZeroShell::pageChanged`, `QEvent::WindowStateChange` on the top-level window (event filter installed in `showEvent`), `ZeroShell::setGameRunning` (MainWindow connects `Application::updateAllowedChanged`: false = a game started), `Theme::changed` (motion off, theme switch). Play / pause transitions are logged at debug level (`ZeroVideoBackground: play|pause (page ...)`).
+  - **Editor**: BACKGROUND is None | Image | Video; the Video row is the file name + Change (`QFileDialog`, mp4 webm mkv mov) with the same Dim / Cards sliders; the live preview plays the picked source file before saving. `ThemeFiles::saveTheme(root, folder, def, backgroundSource, SaveLimits)` takes an image or a video source (kind from the extension, one list per kind: `imageExtensions()` / `videoExtensions()`, `backgroundExtensions()` is their union), copies it as `background.<ext>` through the same temp / backup / rollback path, and removes the previous `background.*` after the JSON is saved (Image <-> Video leaves one file). A video over `kMaxBackgroundBytes` (200 MB, also the import cap) is refused, in the editor with a toast and again in `saveTheme` (`SaveLimits::maxVideoBytes`, a parameter for tests).
+  - **Sound** (JSON `background.sound` bool, `background.volume` 0..1; keys written only with a video; old themes without them = no sound): under the Video row of the editor, a **Sound** checkbox (default off) and, only while it is on, a **Volume** slider 0-100 % (default 50). `ZeroShell::syncVideo` hands `ThemeSpec::videoSound` / `videoVolume` to the video on every theme change, so toggling and dragging apply live.
+  - **Release / packaging**: the launcher links `Qt6::Multimedia` (top-level `find_package(Qt6 ... Multimedia)`); `windeployqt` must ship `Qt6Multimedia.dll`, the plugin `multimedia/ffmpegmediaplugin.dll` and the ffmpeg DLLs it needs (`avcodec`, `avformat`, `avutil`, `swscale`, `swresample` and their dependencies). Without them a video theme falls back to the flat background (warning in the log).
+- **App icon** (editor section APP ICON, after COLORS: Default | Custom; Custom = a 32 px preview, the file name and Change): `icon.<png|svg|ico>` in the theme folder, JSON `"icon": "icon.png"`, <= 2 MB (`kMaxIconBytes`), raster icons at least 32 px on both sides (an .ico counts by its largest image, an .svg is scalable): `Custom::validateIconSource`, used by the picker and again by `saveTheme`. `Zero::logoPathFor(spec)` answers the file (the theme's icon when the file exists, else the base theme's mark) and feeds `appLogoPath()` / `appLogo()` (window and taskbar icon through `Application::logo()` + `ThemeManager`) and the rail header (`RailHeader` draws it instead of either mark); `applySpecLive` also sets the window icon, so the editor previews it live and Cancel / reapply puts the previous one back. Default and the built-in themes are unchanged. The exe and desktop-shortcut icon cannot change (a Windows resource): the tooltip says "Window, taskbar and sidebar. The desktop shortcut keeps the ZERO icon."
+- **Font** (editor section FONT, before CORNERS: Default | Custom; Custom = file row + Change + a preview line "The quick brown fox jumps over the lazy dog" drawn in that font): `font.<ttf|otf>` in the theme folder, JSON `"font": "font.ttf"`, <= 20 MB (`kMaxFontBytes`). `ui/zero/ZeroCustomFont` registers it (`QFontDatabase::addApplicationFont`; at most one theme font at a time, a new file or none removes the previous one; the same path + mtime is a no-op) and `ZeroTheme::apply` stores the family in `Theme::current().fontFamily` before the spec becomes current. `Style::font(role)` puts that family first (the default families stay behind it for missing glyphs) for every role **except** the pixel roles of a Minecraft-based theme; `Style::refreshRoleFonts` re-fonts widgets whose font names a theme family that is no longer wanted (or lacks the wanted one). A file Qt cannot load (also: missing) falls back to the default font with one warning per file, never a crash; the editor's picker refuses such a file with a toast.
+- **Opaque windows**: card opacity is for cards inside pages only. `obsidian.qss` paints `QMainWindow, QDialog, QColorDialog, QFileDialog, QInputDialog, QMessageBox, QProgressDialog, QWizard` with `@bgSolid@` and `QToolTip` with `@elevatedSolid@` (both `ThemeSpec::opaque(...)`), and the painted Discover filter popup (`FilterPanel`, its own top-level window) uses `surfaceSolid()`. The theme editor's color dialog does NOT re-apply the application style sheet while it is open: a pick shows only in that row's swatch and hex (`previewSwatch`), and the theme is updated once on OK (`colorSelected`); Cancel puts the row back. A pending live preview is flushed before the dialog opens. (Re-applying the sheet under an open dialog restyled it while its layout was fixed: clipped content.)
+- **Card opacity** (0.4..1) is alpha on `surface` / `surfaceHover` only. The QSS color helper emits `rgba(...)` for colors with alpha < 255. Popups must not use it: `ThemeSpec::surfaceSolid()` / `surfaceHoverSolid()` and the `@surfaceSolid@` / `@surfaceHoverSolid@` tokens give the opaque color (QMenu, combo popup list, command palette panel, `QPalette::Base`).
+- **Readability**: `Custom::readability(spec)` is Readable when text/bg >= 4.5, text/surface >= 4.5 and onAccent/accent >= 3.0; otherwise HardToRead with the failed pairs in `summary`.
+- **Saving**: `ThemeFiles::saveTheme(root, folder, def, backgroundSource, limits, AssetSources{icon, font})` copies each picked file through its own temp name (`.zero-bg-new`, `.zero-icon-new`, `.zero-font-new`) and backup, writes the JSON, then drops the backups and the stale `background.*` / `icon.*` / `font.*` (choosing Default removes the icon / font file); any failure puts every file back and a new theme's folder is removed. `duplicateTheme` copies the background, icon and font too.
+- **Loading**: `ThemeManager::initializeWidgets` loads a folder with `zero-theme.json` as `ZeroCustomTheme` before the Prism `theme.json` branch. `ThemeManager::loadCustomTheme(folder)` (re)loads one folder (re-applies it when active) and `removeCustomTheme(id)` unregisters one (falls back to the ZERO default when active), so the editor needs no restart. `specForThemeId` answers for loaded custom ids, so the Appearance page lists them as cards.
+- **Import safety**: only the flat entries `zero-theme.json`, `background.<png|jpg|jpeg|webp|bmp|gif|mp4|webm|mkv|mov>`, `icon.<png|svg|ico>` and `font.<ttf|otf>` (at most one of each); json <= 256 KB, background <= 200 MB, icon <= 2 MB, font <= 20 MB (`ImportLimits`); written to `.zero-import-*` then renamed into a NEW slug folder (a clashing name becomes "Name (2)"); a failed import leaves nothing. Delete = `FS::trash` only.
+
+## Add account dialog
+
+One ZERO dialog (`launcher/ui/zero/accounts/AddAccountDialog`, modal, 440 px wide, height to content) replaces Prism's
+"Add Microsoft Account" window and the old Ely / Offline dialogs (`MSALoginDialog` is back to the upstream file and unused by
+ZERO; `ElyLoginDialog` is gone; `ChooseOfflineNameDialog` stays upstream but is no longer opened). API: `AddAccountDialog::run(parent)`
+(starts at step 1) and `run(parent, AccountType)` (opens straight at step 2 without back arrow or "step" overline; used to sign in
+again). The dialog never touches the account list: it returns the account and the caller adds it (and makes it the default when it is
+the first). Entry points: Settings > Accounts toolbar "Add account", the account menu "Add account..." (above "Manage accounts"),
+the first-run setup page, and `LaunchController::reauthenticateAccount` (step 2 of the account's own kind).
+
+**Step 1, "Choose your account"** (overline "Step 1 of 2"): one raised card per kind (icon tile, title, caption, chevron):
+Microsoft (`key-round`, "Official account. Every server."), Ely.by (`gem`, "Free account with skins. Servers that accept Ely.by."),
+Offline (`user-x`, "Just a name. No online servers."). Microsoft is shown only when `Application::getMSAClientID()` is not empty;
+Ely.by and Offline are always there (`Application::SupportsEly` is always on). Click, Enter or Space choose; Up/Down move the focus (ring in accent2).
+**Step 2** slides in from the right (320 ms OutCubic through `Zero::Motion`, snapshot overlay, instant with reduced motion); back
+slides out.
+
+**Step 2, Microsoft / Ely.by (code)**: header row (back arrow + provider), overline, title "Sign in with ...", a primary button ("Open
+Microsoft sign-in" = the browser flow's link, falling back to the code page; "Open Ely.by" = `verification_uri_complete`; when no browser
+opens the link goes to the clipboard, like Prism), the caption "or enter this code at <host/path of the flow's url>", the code panel
+(QR code of the link the flow gave, with Prism's `?otc=<code>` added for microsoft.com/link; the code in ZERO Pixel (Minecraft) or the mono
+font at 20 px; "Copy code" turns into "Copied" for 1.5 s) and the status row (three pulsing squares + "Waiting for you to confirm"; static with
+reduced motion). Microsoft runs both `AuthFlow`s (Login = browser, DeviceCode) at once, Ely.by (code) only DeviceCode. A flow's status is the
+user's progress only after that flow showed its link/code; the first such status means the user confirmed, and the other flow is aborted.
+Success: check + "Signed in as <profile name>", the dialog accepts 900 ms later. A flow that fails before the user confirmed leaves the
+other way open; one that fails after (or the last one) turns the status row danger with the flow's first message line, greys the code panel and
+shows "Try again" (restarts the flows with a new blank account). A code that expires (`expires_in`) is the same failure ("The code expired.
+Try again."). Leaving step 2 (back, Esc, close) aborts the running flows (only running ones: aborting a finished `Task` trips an ASSERT).
+**Ely.by password page**: with a client ID the Ely.by step 2 shows the code step first, with the link "Use email and password
+instead" (the password page has "Use a code instead" back); without one the password page is the only step. Fields: Email or
+username, Password (eye toggle), a slide-open "Two-factor code" (only after Ely answers that it is needed), "Sign in"; footer "ZERO
+sends your password only to Ely.by and never saves it." plus links Create an Ely.by account / Forgot password?. Re-login of a password
+account opens this page prefilled with the saved username (see "Ely.by accounts").
+**Offline**: "Play offline", a username field with Prism's rules (3 to 16 English letters, numbers or underscores; "Allow invalid
+usernames" keeps the warning and allows any non-empty name), "Add account" disabled until valid. Prism's rule that an offline account needs
+another account that owns Minecraft stays: without one the field is disabled and the hint says so.
+Test seams: `AddAccountEnvironment` (kinds offered, the `AuthFlow` factory, open-URL, clipboard, offline factory, success delay); tests
+use scripted flows built on a dummy offline `AccountData` (the real steps need `APPLICATION`): `tests/ZeroAddAccount_test.cpp`.
+Dev aid `ZERO_SCREENSHOT_ADD_ACCOUNT=<state>` (docs/zero/SHELL.md).
+
+## Ely.by accounts
+
+Third account type next to Microsoft and Offline (`AccountType::Ely`, saved as `"type": "Ely"`). Ported from ElyPrismLauncher
+(GPL-3.0) except its `ElyPatchTask`: ZERO runs the game through **authlib-injector** directly (see below).
+
+Two sign-in modes: **email/username + password** (authserver, needs no registration, always available) and **code sign-in** (OAuth
+device code, only when a client ID is set).
+
+**Configuration.** `Launcher_ELY_CLIENT_ID` (default `zerocraft-launcher`, ZERO's Website-type app, no secret; `scripts/zero/package.sh`
+unsets it for packages built from other IDs) and optional `Launcher_ELY_CLIENT_SECRET` in the root `CMakeLists.txt`
+-> `BuildConfig.ELY_CLIENT_ID/_SECRET` -> `Zero::Auth::Ely::configFromBuild()`. Capabilities: `Application::SupportsEly` always on,
+`Application::SupportsElyOAuth` when the ID is not empty (empty ID = the code step is skipped and the password page opens directly).
+The secret is sent only when set and is never logged. See `docs/zero/CREDENTIALS.md`.
+
+**Password mode** (`launcher/zero/auth/ElyAuthserver.{h,cpp}`: request bodies + answer/error parsing, no network;
+`ElyAuthserverNet.{h,cpp}`: Prism `Net` transport). Talks to `https://authserver.ely.by`: `/auth/authenticate` (login),
+`/auth/refresh`, and `/auth/invalidate` (best effort when the account is removed). Steps: `ElyPasswordStep` (login, ends in the
+profile from the answer) and `ElyAuthserverRefreshStep` (refresh; Ely refuses = `STATE_FAILED_HARD` "Your Ely.by session ended. Sign
+in again.", no network = `STATE_OFFLINE`). 2FA: the first try sends the plain password; if Ely answers 401 "two-factor" the dialog
+shows the "Two-factor code" field and retries with `password:code`. `accounts.json`: `"type": "Ely"`, `"ely-auth": "password"`,
+`"ely-username"`, `"ely-client-token"` (random UUID per account), the authserver access token in the `ygg` slot and the profile.
+**The password is never stored**: it is wiped from memory right after the request body is built. A missing `ely-auth` = an old OAuth
+account. A failed refresh makes the account re-login (`reauthenticateAccount`), which opens the password page prefilled.
+
+**Code sign-in (OAuth; device code only, Ely.by documents no redirect flow).** Step 2 of the Add account dialog runs only the device code flow
+for Ely.by: the primary button "Open Ely.by" opens `verification_uri_complete` (code prefilled) and the QR code encodes that URL.
+`AuthFlow` for an Ely account: Login and DeviceCode =
+`ElyDeviceCodeStep` (a `MSADeviceCodeStep` with Ely's client, scopes `account_info offline_access minecraft_server_session` and
+endpoints `https://account.ely.by/api/oauth2/v1/{devicecode,token}`) -> `ElyYggdrasilTokenStep` (the OAuth access token is the game
+session token) -> `MinecraftProfileStepEly` (`GET .../api/mojang/services/minecraft/profile`, then the account counts as owning
+the game). Refresh = `ElyRefreshStep` (grant_type=refresh_token; an answer without `refresh_token` keeps the old one; Ely says no =
+Expired, no answer = Offline) -> the same two steps. No skin step: skins live on ely.by, so "Manage skins" is for Microsoft
+accounts only. The OAuth token is stored in the `msa` slot of `accounts.json` (`msa-client-id` + `msa`), the session token in `ygg`.
+List text "Ely.by", top-bar chip subtitle "Ely.by account". Account files without Ely accounts load as before; a type this build
+does not know is skipped, never a crash.
+
+**Launch with authlib-injector** (`launcher/zero/auth/AuthlibInjector`). Only sessions of Ely accounts in Normal launch mode
+(`AuthSession::wantsAuthlibInjector`) get the extra launch step `EnsureAuthlibInjector`, before the game starts: it fetches
+`https://authlib-injector.yushi.moe/artifact/latest.json` (`version`, `download_url` https only, `checksums.sha256`), downloads the jar
+to `<data>/zero/authlib-injector/authlib-injector-<version>.jar.part`, checks the SHA-256, renames it and records the hash in
+`<jar>.sha256`; a valid jar of that version is reused. If the fetch fails but a jar whose recorded hash still matches exists, the
+newest such jar is used (warning in the launch log); otherwise the launch fails with "Ely.by accounts need authlib-injector, which
+couldn't be downloaded: <reason>". `LauncherPartLaunch` then adds `-javaagent:<jar>=ely.by` after `MinecraftInstance::javaArguments()`
+and before the main class. Microsoft and offline launches never get the step or the argument.
+
+Tests: `tests/ZeroElyAuth_test.cpp` (fake network + `ZERO_LIVE_NETWORK_TESTS=1` live download), `tests/ZeroAddAccount_test.cpp` (dialog,
+password page). A real Ely.by sign-in has not been exercised.

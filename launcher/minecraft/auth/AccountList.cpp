@@ -36,6 +36,7 @@
 #include "AccountList.h"
 #include "AccountData.h"
 #include "tasks/Task.h"
+#include "zero/auth/ElyAuthserverNet.h"
 
 #include <QDir>
 #include <QFile>
@@ -144,6 +145,11 @@ void AccountList::removeAccount(QModelIndex index)
     int row = index.row();
     if (index.isValid() && row >= 0 && row < m_accounts.size()) {
         auto& account = m_accounts[row];
+        if (account->accountType() == AccountType::Ely && account->accountData()->elyAuth == ElyAuthKind::Password) {
+            // ZERO: tell Ely.by the session token is no longer wanted (best effort; nothing waits for the answer)
+            Zero::Auth::Ely::Authserver::invalidateInBackground(account->accountData()->yggdrasilToken.token,
+                                                                account->accountData()->elyClientToken);
+        }
         if (account == m_defaultAccount) {
             m_defaultAccount = nullptr;
             onDefaultAccountChanged();
@@ -333,6 +339,9 @@ QVariant AccountList::data(const QModelIndex& index, int role) const
                         }
                         case AccountType::Offline: {
                             return tr("Offline", "Account type");
+                        }
+                        case AccountType::Ely: {  // ZERO
+                            return tr("Ely.by", "Account type");
                         }
                     }
                     return tr("Unknown", "Account type");

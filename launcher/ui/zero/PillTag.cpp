@@ -55,6 +55,7 @@ void PillTag::paintPill(QPainter* painter, const QRectF& rect, const QString& te
         case Tone::Warning: status = t.warning; break;
         case Tone::Danger: status = t.danger; break;
         case Tone::Info: status = t.info; break;
+        case Tone::Accent: status = t.accent; break;
         default: break;
     }
     QColor fill = t.surface, border = t.border, textColor = tone == Tone::PlainDanger ? t.danger : t.textSecondary;

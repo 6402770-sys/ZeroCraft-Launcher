@@ -26,6 +26,7 @@
         <file>icons/arrow-up-down.svg</file>
         <file>icons/file-archive.svg</file>
         <file>icons/link.svg</file>
+        <file>icons/eye-off.svg</file>
         <file>icons/eye.svg</file>
         <file>icons/wand-sparkles.svg</file>
         <file>icons/cuboid.svg</file>
@@ -36,6 +37,7 @@
         <file>icons/images.svg</file>
         <file>icons/hammer.svg</file>
         <file>icons/archive.svg</file>
+        <file>icons/arrow-down-up.svg</file>
         <file>icons/arrow-left.svg</file>
         <file>icons/box.svg</file>
         <file>icons/check.svg</file>
@@ -43,6 +45,8 @@
         <file>icons/chevron-left.svg</file>
         <file>icons/chevron-right.svg</file>
         <file>icons/chevron-up.svg</file>
+        <file>icons/chevrons-up.svg</file>
+        <file>icons/chevrons-down.svg</file>
         <file>icons/circle-check.svg</file>
         <file>icons/circle-x.svg</file>
         <file>icons/clock.svg</file>
@@ -79,6 +83,9 @@
         <file>icons/trash-2.svg</file>
         <file>icons/triangle-alert.svg</file>
         <file>icons/user.svg</file>
+        <file>icons/user-x.svg</file>
+        <file>icons/key-round.svg</file>
+        <file>icons/gem.svg</file>
         <file>icons/wrench.svg</file>
         <file>icons/x.svg</file>
         <file alias="icons/LICENSE">icons/LICENSE</file>

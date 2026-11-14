@@ -34,7 +34,7 @@ void PalettePanel::paintEvent(QPaintEvent*)
     p.setPen(Qt::NoPen);
     p.setBrush(t.border);
     p.drawPath(Paint::panelPath(QRectF(rect()), t.radiusXl));
-    p.setBrush(t.surface);
+    p.setBrush(t.surfaceSolid());  // an overlay over live content: never see-through
     p.drawPath(Paint::panelPath(QRectF(rect()).adjusted(1, 1, -1, -1), qMax(0, t.radiusXl - 1)));
 }
 

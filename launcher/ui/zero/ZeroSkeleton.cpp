@@ -16,6 +16,13 @@ namespace {
 constexpr int kCaptionGap = 14;  // caption -> first shape
 constexpr int kRowHeight = 66;
 constexpr int kTileMin = 240;
+constexpr int kCardMin = 280;  // Discover grid card: 280-340 px wide, 16:9 artwork on top
+constexpr int kCardMax = 340;
+constexpr int kGalleryMin = 220;
+constexpr int kModCardMin = 300;  // Discover mod card: 300-420 px wide, 132 px high, no artwork
+constexpr int kModCardMax = 420;
+constexpr int kModCardHeight = 132;
+constexpr int kGap = 16;
 }  // namespace
 
 ZeroSkeleton::ZeroSkeleton(Shape shape, const QString& caption, QWidget* parent) : QWidget(parent), m_shape(shape), m_caption(caption)
@@ -26,6 +33,14 @@ ZeroSkeleton::ZeroSkeleton(Shape shape, const QString& caption, QWidget* parent)
     connect(&m_timer, &QTimer::timeout, this, qOverload<>(&QWidget::update));
     connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
     setAccessibleName(caption);
+}
+
+void ZeroSkeleton::setCompactCards(bool compact)
+{
+    if (compact != m_compactCards) {
+        m_compactCards = compact;
+        update();
+    }
 }
 
 void ZeroSkeleton::setCaption(const QString& caption)
@@ -96,6 +111,19 @@ void ZeroSkeleton::paintEvent(QPaintEvent*)
         case Shape::Report:
             paintReport(p, area);
             break;
+        case Shape::Cards:
+            if (m_compactCards) {
+                paintModCards(p, area);
+            } else {
+                paintCards(p, area);
+            }
+            break;
+        case Shape::Gallery:
+            paintGallery(p, area);
+            break;
+        case Shape::Cinematic:
+            paintCinematic(p, area);
+            break;
     }
 }
 
@@ -159,6 +187,106 @@ void ZeroSkeleton::paintReport(QPainter& p, const QRect& area) const
         block(p, QRectF(list.left() + 16, y, 120 + 30 * (i % 3), 11));
         block(p, QRectF(list.right() - 16 - 56, y, 56, 11));
         block(p, QRectF(list.left() + 16, y + 22, (list.width() - 32) * fill[i], 4));
+    }
+}
+
+void ZeroSkeleton::paintCards(QPainter& p, const QRect& area) const
+{
+    // The grid card: 16:9 artwork, the icon overlapping its bottom-left corner, name, author, two description lines and a
+    // footer of pills. Columns fill the width like the real grid (280-340 px per card).
+    const auto& t = Theme::current();
+    const int columns = std::max(1, (area.width() + kGap) / (kCardMin + kGap));
+    const qreal cardW = std::min<qreal>(kCardMax, (area.width() - kGap * (columns - 1)) / qreal(columns));
+    const qreal art = cardW * 9.0 / 16.0;
+    const qreal cardH = art + 164;
+    for (int r = 0; area.top() + r * (cardH + kGap) < area.bottom(); ++r) {
+        for (int c = 0; c < columns; ++c) {
+            const QRectF card(area.left() + c * (cardW + kGap), area.top() + r * (cardH + kGap), cardW, cardH);
+            p.setPen(QPen(t.border, 1));
+            p.setBrush(Qt::NoBrush);
+            p.drawPath(Paint::panelPath(card.adjusted(0.5, 0.5, -0.5, -0.5), t.radiusLg));
+            block(p, QRectF(card.left() + 1, card.top() + 1, card.width() - 2, art - 1));
+            const QRectF icon(card.left() + 12, card.top() + art - 24, 48, 48);
+            p.fillPath(Paint::panelPath(icon.adjusted(-3, -3, 3, 3), t.radiusMd), t.bg);  // a ring in the page color: the icon overlaps the artwork
+            block(p, icon);
+            const qreal text = card.top() + art + 32;
+            block(p, QRectF(card.left() + 12, text, cardW * 0.55, 14));
+            block(p, QRectF(card.left() + 12, text + 22, cardW * 0.28, 10));
+            block(p, QRectF(card.left() + 12, text + 42, cardW - 24, 10));
+            block(p, QRectF(card.left() + 12, text + 58, (cardW - 24) * 0.7, 10));
+            block(p, QRectF(card.left() + 12, card.bottom() - 30, 56, 18));
+            block(p, QRectF(card.left() + 74, card.bottom() - 30, 48, 18));
+            block(p, QRectF(card.right() - 12 - 60, card.bottom() - 30, 60, 18));
+        }
+    }
+}
+
+void ZeroSkeleton::paintModCards(QPainter& p, const QRect& area) const
+{
+    // The mod card: padding 16, the 48 px icon at the left, name and author at its right, two description lines under them, a
+    // footer of pills. Columns fill the width like the real grid.
+    const auto& t = Theme::current();
+    const int columns = std::max(1, (area.width() + kGap) / (kModCardMin + kGap));
+    const qreal cardW = std::min<qreal>(kModCardMax, (area.width() - kGap * (columns - 1)) / qreal(columns));
+    const qreal pad = 16;
+    for (int r = 0; area.top() + r * (kModCardHeight + kGap) < area.bottom(); ++r) {
+        for (int c = 0; c < columns; ++c) {
+            const QRectF card(area.left() + c * (cardW + kGap), area.top() + r * (kModCardHeight + kGap), cardW, kModCardHeight);
+            p.setPen(QPen(t.border, 1));
+            p.setBrush(Qt::NoBrush);
+            p.drawPath(Paint::panelPath(card.adjusted(0.5, 0.5, -0.5, -0.5), t.radiusLg));
+            block(p, QRectF(card.left() + pad, card.top() + pad, 48, 48));
+            const qreal text = card.left() + pad + 48 + 12;
+            const qreal textW = card.right() - pad - text;
+            block(p, QRectF(text, card.top() + pad + 2, textW * 0.5, 13));
+            block(p, QRectF(text, card.top() + pad + 22, textW * 0.28, 10));
+            block(p, QRectF(text, card.top() + pad + 46, textW, 10));
+            block(p, QRectF(text, card.top() + pad + 62, textW * 0.7, 10));
+            block(p, QRectF(card.left() + pad, card.bottom() - pad - 20, 52, 20));
+            block(p, QRectF(card.left() + pad + 58, card.bottom() - pad - 20, 44, 20));
+            block(p, QRectF(card.right() - pad - 52, card.bottom() - pad - 20, 52, 20));
+        }
+    }
+}
+
+void ZeroSkeleton::paintGallery(QPainter& p, const QRect& area) const
+{
+    // Artwork tiles (resource packs, shaders): a tall picture, a name line and a short second line, no card frame.
+    const int columns = std::max(1, (area.width() + kGap) / (kGalleryMin + kGap));
+    const qreal tileW = (area.width() - kGap * (columns - 1)) / qreal(columns);
+    const qreal pic = tileW * 10.0 / 16.0;
+    const qreal tileH = pic + 52;
+    for (int r = 0; area.top() + r * (tileH + kGap) < area.bottom(); ++r) {
+        for (int c = 0; c < columns; ++c) {
+            const qreal x = area.left() + c * (tileW + kGap);
+            const qreal y = area.top() + r * (tileH + kGap);
+            block(p, QRectF(x, y, tileW, pic));
+            block(p, QRectF(x, y + pic + 12, tileW * 0.6, 12));
+            block(p, QRectF(x, y + pic + 30, tileW * 0.35, 10));
+        }
+    }
+}
+
+void ZeroSkeleton::paintCinematic(QPainter& p, const QRect& area) const
+{
+    // The featured strip: wide 16:9 hero cards side by side (the strip scrolls), each with its text block bottom-left and a
+    // button bottom-right over the artwork.
+    const auto& t = Theme::current();
+    const qreal heroW = std::clamp<qreal>(area.width() * 0.62, 320, 640);
+    const qreal heroH = std::min<qreal>(heroW * 9.0 / 16.0, std::max<qreal>(120, area.height()));
+    const qreal w = heroH * 16.0 / 9.0;
+    for (int i = 0; area.left() + i * (w + kGap) < area.right(); ++i) {
+        const QRectF hero(area.left() + i * (w + kGap), area.top(), w, heroH);
+        block(p, hero);
+        // The text block sits on a darker plate so the shapes read like the overlay of the real card.
+        p.setPen(Qt::NoPen);
+        p.setBrush(withAlpha(t.bg, 0.45));
+        p.drawPath(Paint::panelPath(QRectF(hero.left(), hero.bottom() - 84, hero.width(), 84), t.radiusLg));
+        p.setBrush(withAlpha(t.textTertiary, 0.35));
+        p.drawPath(Paint::panelPath(QRectF(hero.left() + 16, hero.bottom() - 68, hero.width() * 0.4, 16), t.radiusSm));
+        p.drawPath(Paint::panelPath(QRectF(hero.left() + 16, hero.bottom() - 44, hero.width() * 0.6, 10), t.radiusSm));
+        p.drawPath(Paint::panelPath(QRectF(hero.left() + 16, hero.bottom() - 28, hero.width() * 0.25, 10), t.radiusSm));
+        p.drawPath(Paint::panelPath(QRectF(hero.right() - 16 - 84, hero.bottom() - 52, 84, 32), t.radiusMd));
     }
 }
 

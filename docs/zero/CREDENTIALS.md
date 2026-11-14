@@ -7,12 +7,13 @@ has registered. This file lists them, what ZERO does today, and what must change
 
 | Variable | What it is | Today | Before a public release |
 |---|---|---|---|
-| `Launcher_MSA_CLIENT_ID` | Microsoft Entra (Azure) app registration used for the Microsoft/Xbox/Minecraft sign-in | Prism's client ID, local development only | Register an own Azure app, then request Minecraft API approval from Mojang/Microsoft for it. Tokens from one client ID do not work with another, so users re-login. |
+| `Launcher_MSA_CLIENT_ID` | Microsoft Entra (Azure) app registration used for the Microsoft/Xbox/Minecraft sign-in | Prism's client ID | **Owner decision 2026-11-13: releases keep Prism's client ID** (the owner cannot open an Azure account; ElyPrismLauncher ships Prism's ID the same way). Consequences: sign-in uses the `http://localhost` redirect (`MSAStep.cpp`), Microsoft's consent page names Prism Launcher, and Prism/Microsoft could revoke it. Later, optionally: own Azure app + Minecraft API approval (users then re-login, tokens do not carry over between client IDs). |
+| `Launcher_ELY_CLIENT_ID` / `Launcher_ELY_CLIENT_SECRET` | OAuth application of ZERO at Ely.by (account.ely.by > Applications), used for the Ely.by device code sign-in and token refresh | **Set: `zerocraft-launcher`** (ZERO's own app, registered by the owner on 2026-11-13; Ely.by answered the device code request with HTTP 200). Email + password sign-in needs no ID; an empty ID hides only the code sign-in. Never use another launcher's registration. A developer tests with `-DLauncher_ELY_CLIENT_ID=<id>` (and `-DLauncher_ELY_CLIENT_SECRET=<secret>` only if the app is confidential; the secret is sent only when set and never logged). | Register ZERO's application at Ely.by, enable the device code grant, put the ID (and secret if Ely.by issues one) into the release configure. Accounts remember the client ID they signed in with: changing it makes Ely.by accounts ask to sign in again. |
 | `Launcher_CURSEFORGE_API_KEY` | CurseForge Core API key (mod/modpack search and downloads) | Prism's key, local development only | Apply for an own key at the CurseForge developer console. CurseForge requires derivative works to use their own key. |
 | `Launcher_IMGUR_CLIENT_ID` | Imgur API client for screenshot upload | Empty (upload action hidden) | Optional. Register an Imgur app to enable it. |
 
-Guard: configure with `-DZERO_RELEASE_BUILD=ON` to make CMake fail while either of the first two still equals the
-Prism default. Pass your own values with `-DLauncher_MSA_CLIENT_ID=...` and `-DLauncher_CURSEFORGE_API_KEY=...`.
+Guard: configure with `-DZERO_RELEASE_BUILD=ON` to make CMake fail while the CurseForge key still equals the Prism default
+(the MSA client ID may stay Prism's, see above; CMake prints a status line when it does). Pass your own values with `-DLauncher_MSA_CLIENT_ID=...` and `-DLauncher_CURSEFORGE_API_KEY=...`.
 Never commit real values or print them in logs.
 
 ## Services reused from Prism (public infrastructure)
@@ -31,10 +32,13 @@ Never commit real values or print them in logs.
 `Launcher_DISCORD_URL`, `Launcher_SUBREDDIT_URL`, `Launcher_UPDATER_GITHUB_REPO`, `Launcher_Git`,
 `MACOSX_SPARKLE_UPDATE_FEED_URL`.
 
+Exception: `scripts/zero/package.sh` configures its release tree with `Launcher_UPDATER_GITHUB_REPO` set to the owner's GitHub
+repo and the artifact name `Windows` (see "Packaging" in `ARCHITECTURE.md`); the dev build keeps the updater off.
+
 ## Owner checklist before a public release
 
-1. Azure app registration plus Minecraft API approval, then set `Launcher_MSA_CLIENT_ID`.
-2. CurseForge API key, then set `Launcher_CURSEFORGE_API_KEY`.
+1. (Optional, decided against for now) Azure app registration plus Minecraft API approval, then set `Launcher_MSA_CLIENT_ID`.
+2. ✅ CurseForge API key (own, verified 2026-11-13): stored outside the repo in `%USERPROFILE%\.zero\curseforge-api-key`; `package.sh --release` reads it when `ZERO_CURSEFORGE_API_KEY` is unset (`ZERO_CURSEFORGE_API_KEY_FILE` overrides the path).
 3. Decide on the meta server (keep Prism's or run an own mirror).
 4. Public repository URL (`Launcher_Git`), bug tracker, community links, updater repo and artifact name.
 5. Configure with `-DZERO_RELEASE_BUILD=ON` for release builds.

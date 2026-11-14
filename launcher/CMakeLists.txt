@@ -215,6 +215,16 @@ set(MINECRAFT_SOURCES
     minecraft/auth/AuthFlow.cpp
     minecraft/auth/AuthFlow.h
 
+    minecraft/auth/steps/ElyAuthserverRefreshStep.cpp
+    minecraft/auth/steps/ElyAuthserverRefreshStep.h
+    minecraft/auth/steps/ElyDeviceCodeStep.cpp
+    minecraft/auth/steps/ElyDeviceCodeStep.h
+    minecraft/auth/steps/ElyPasswordStep.cpp
+    minecraft/auth/steps/ElyPasswordStep.h
+    minecraft/auth/steps/ElyRefreshStep.cpp
+    minecraft/auth/steps/ElyRefreshStep.h
+    minecraft/auth/steps/ElyYggdrasilTokenStep.cpp
+    minecraft/auth/steps/ElyYggdrasilTokenStep.h
     minecraft/auth/steps/EntitlementsStep.cpp
     minecraft/auth/steps/EntitlementsStep.h
     minecraft/auth/steps/GetSkinStep.cpp
@@ -223,6 +233,8 @@ set(MINECRAFT_SOURCES
     minecraft/auth/steps/LauncherLoginStep.h
     minecraft/auth/steps/MinecraftProfileStep.cpp
     minecraft/auth/steps/MinecraftProfileStep.h
+    minecraft/auth/steps/MinecraftProfileStepEly.cpp
+    minecraft/auth/steps/MinecraftProfileStepEly.h
     minecraft/auth/steps/MSADeviceCodeStep.cpp
     minecraft/auth/steps/MSADeviceCodeStep.h
     minecraft/auth/steps/MSAStep.cpp
@@ -868,14 +880,56 @@ SET(LAUNCHER_SOURCES
     ui/themes/CatPainter.h
 
     # ZERO services (non-UI)
+    zero/auth/AuthlibInjector.cpp
+    zero/auth/AuthlibInjector.h
+    zero/auth/ElyAuth.cpp
+    zero/auth/ElyAuth.h
+    zero/auth/ElyAuthserver.cpp
+    zero/auth/ElyAuthserver.h
+    zero/auth/ElyAuthserverNet.cpp
+    zero/auth/ElyAuthserverNet.h
+    zero/auth/EnsureAuthlibInjector.cpp
+    zero/auth/EnsureAuthlibInjector.h
     zero/backup/AutoBackup.cpp
     zero/backup/AutoBackup.h
+    zero/backup/PackSnapshot.cpp
+    zero/backup/PackSnapshot.h
+    zero/backup/PackSnapshotTasks.cpp
+    zero/backup/PackSnapshotTasks.h
     zero/backup/WorldBackup.cpp
     zero/backup/WorldBackup.h
     zero/backup/WorldBackupJobs.cpp
     zero/backup/WorldBackupJobs.h
     zero/content/ContentFilter.cpp
     zero/content/ContentFilter.h
+    zero/content/CreateInstanceModel.cpp
+    zero/content/CreateInstanceModel.h
+    zero/content/CartInstall.cpp
+    zero/content/CartInstall.h
+    zero/content/InstallCart.cpp
+    zero/content/InstallCart.h
+    zero/content/InstalledMods.cpp
+    zero/content/InstalledMods.h
+    zero/content/InstalledPacks.cpp
+    zero/content/InstalledPacks.h
+    zero/content/ModDependencies.cpp
+    zero/content/ModDependencies.h
+    zero/content/ModInstall.cpp
+    zero/content/ModInstall.h
+    zero/content/ModTarget.cpp
+    zero/content/ShaderMod.cpp
+    zero/content/ShaderMod.h
+    zero/content/WorldInstall.cpp
+    zero/content/WorldInstall.h
+    zero/content/ModTarget.h
+    zero/content/ModpackInstall.cpp
+    zero/content/ModpackInstall.h
+    zero/content/ModpackSource.cpp
+    zero/content/ModpackSource.h
+    zero/content/ModpackSources.cpp
+    zero/content/ModpackSources.h
+    zero/content/PackOrder.cpp
+    zero/content/PackOrder.h
     zero/content/TechnicDetailsStore.cpp
     zero/content/TechnicDetailsStore.h
     zero/content/TechnicMeta.cpp
@@ -889,14 +943,28 @@ SET(LAUNCHER_SOURCES
     zero/history/SessionHistory.h
     zero/java/JavaDoctor.cpp
     zero/java/JavaDoctor.h
+    zero/perf/PerformanceCatalog.cpp
+    zero/perf/PerformanceCatalog.h
+    zero/perf/PerformanceProfile.cpp
+    zero/perf/PerformanceProfile.h
+    zero/mods/DependencyInspector.cpp
+    zero/mods/DependencyInspector.h
+    zero/mods/DependencyScanner.cpp
+    zero/mods/DependencyScanner.h
+    zero/mods/InstalledModsModel.cpp
+    zero/mods/InstalledModsModel.h
     zero/mods/ModHealth.cpp
     zero/mods/ModHealth.h
     zero/mods/ModHealthScanner.cpp
     zero/mods/ModHealthScanner.h
     zero/mods/ModMetadata.cpp
     zero/mods/ModMetadata.h
+    zero/mods/ModResolver.cpp
+    zero/mods/ModResolver.h
     zero/mods/ModRepair.cpp
     zero/mods/ModRepair.h
+    zero/mods/ModSnapshot.cpp
+    zero/mods/ModSnapshot.h
     zero/mods/Versions.cpp
     zero/mods/Versions.h
     zero/palette/CommandMatcher.cpp
@@ -918,6 +986,14 @@ SET(LAUNCHER_SOURCES
     zero/servers/ServerPinger.h
     zero/worlds/WorldScanner.cpp
     zero/worlds/WorldScanner.h
+    zero/theme/CustomTheme.cpp
+    zero/theme/CustomTheme.h
+    zero/theme/ThemeArchive.cpp
+    zero/theme/ThemeArchive.h
+    zero/theme/ThemeEditorModel.cpp
+    zero/theme/ThemeEditorModel.h
+    zero/theme/ThemeFiles.cpp
+    zero/theme/ThemeFiles.h
 
     # ZERO design system
     ui/zero/PillTag.cpp
@@ -956,6 +1032,10 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroPlayButton.h
     ui/zero/ZeroSpinner.cpp
     ui/zero/ZeroSpinner.h
+    ui/zero/ZeroCustomFont.cpp
+    ui/zero/ZeroCustomFont.h
+    ui/zero/ZeroCustomTheme.cpp
+    ui/zero/ZeroCustomTheme.h
     ui/zero/ZeroStyle.cpp
     ui/zero/ZeroStyle.h
     ui/zero/ZeroTheme.cpp
@@ -970,11 +1050,21 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroRipple.cpp
     ui/zero/ZeroRipple.h
     ui/zero/pages/AppearancePage.cpp
+    ui/zero/accounts/AddAccountDialog.cpp
+    ui/zero/accounts/AddAccountDialog.h
+    ui/zero/accounts/AddAccountScreenshot.cpp
+    ui/zero/accounts/AddAccountScreenshot.h
+    ui/zero/pages/ExportChooserDialog.cpp
+    ui/zero/pages/ExportChooserDialog.h
+    ui/zero/pages/LibraryImportButton.cpp
+    ui/zero/pages/LibraryImportButton.h
     ui/zero/pages/AppearancePage.h
     ui/zero/pages/ArtworkCache.cpp
     ui/zero/pages/ArtworkCache.h
     ui/zero/pages/CrashDetectiveView.cpp
     ui/zero/pages/CrashDetectiveView.h
+    ui/zero/pages/DiscoverPage.cpp
+    ui/zero/pages/DiscoverPage.h
     ui/zero/pages/ElidedLabel.h
     ui/zero/pages/FilterChipBar.cpp
     ui/zero/pages/FilterChipBar.h
@@ -1015,10 +1105,32 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/ScreenshotRows.h
     ui/zero/pages/ScreenshotViewer.cpp
     ui/zero/pages/ScreenshotViewer.h
+    ui/zero/pages/ThemeEditorPanel.cpp
+    ui/zero/pages/ThemeEditorPanel.h
+    ui/zero/pages/ThemeLibrary.cpp
+    ui/zero/pages/ThemeLibrary.h
     ui/zero/pages/ThumbnailCache.cpp
     ui/zero/pages/ThumbnailCache.h
     ui/zero/pages/JavaDoctorView.cpp
     ui/zero/pages/JavaDoctorView.h
+    ui/zero/instance/InstancePageParts.cpp
+    ui/zero/instance/InstancePageParts.h
+    ui/zero/instance/ModDependencyPanel.cpp
+    ui/zero/instance/ModDependencyPanel.h
+    ui/zero/instance/ModSnapshotNotice.cpp
+    ui/zero/instance/ModSnapshotNotice.h
+    ui/zero/instance/ModsDialogs.cpp
+    ui/zero/instance/ModsDialogs.h
+    ui/zero/instance/ModsList.cpp
+    ui/zero/instance/ModsList.h
+    ui/zero/instance/ModsPage.cpp
+    ui/zero/instance/ModsPage.h
+    ui/zero/instance/ModsUpdates.cpp
+    ui/zero/instance/ModsUpdates.h
+    ui/zero/instance/PackList.cpp
+    ui/zero/instance/PackList.h
+    ui/zero/instance/ResourcePacksPage.cpp
+    ui/zero/instance/ResourcePacksPage.h
     ui/zero/pages/ModHealthView.cpp
     ui/zero/pages/ModHealthView.h
     ui/zero/pages/StorageView.cpp
@@ -1027,6 +1139,75 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/ToolsPage.h
     ui/zero/pages/ZeroInstanceDelegate.cpp
     ui/zero/pages/ZeroInstanceDelegate.h
+    ui/zero/create/ChoiceChips.cpp
+    ui/zero/create/ChoiceChips.h
+    ui/zero/create/CreateInstanceDialog.cpp
+    ui/zero/create/CreateInstanceDialog.h
+    ui/zero/create/CreateMetaSource.cpp
+    ui/zero/create/CreateMetaSource.h
+    ui/zero/create/ImportPanel.cpp
+    ui/zero/create/ImportPanel.h
+    ui/zero/create/InstancePreviewPanel.cpp
+    ui/zero/create/InstancePreviewPanel.h
+    ui/zero/create/ModpackSourcesPanel.cpp
+    ui/zero/create/ModpackSourcesPanel.h
+    ui/zero/create/TypeCardRow.cpp
+    ui/zero/create/TypeCardRow.h
+    ui/zero/create/VersionListView.cpp
+    ui/zero/create/VersionListView.h
+    ui/zero/create/VersionPanel.cpp
+    ui/zero/create/VersionPanel.h
+    ui/zero/content/ContentDetailsPanel.cpp
+    ui/zero/content/ContentDetailsPanel.h
+    ui/zero/content/ContentDelegate.h
+    ui/zero/content/ContentDraw.cpp
+    ui/zero/content/ContentDraw.h
+    ui/zero/content/ContentGalleryViewer.cpp
+    ui/zero/content/ContentGalleryViewer.h
+    ui/zero/content/ContentHeroCard.cpp
+    ui/zero/content/ContentHeroCard.h
+    ui/zero/content/ContentReveal.cpp
+    ui/zero/content/ContentReveal.h
+    ui/zero/content/ContentSection.cpp
+    ui/zero/content/ContentSection.h
+    ui/zero/content/ContentStates.cpp
+    ui/zero/content/ContentStates.h
+    ui/zero/content/ContentToolbar.cpp
+    ui/zero/content/ContentToolbar.h
+    ui/zero/content/FeaturedStrip.cpp
+    ui/zero/content/FeaturedStrip.h
+    ui/zero/content/FilterChipStrip.cpp
+    ui/zero/content/FilterChipStrip.h
+    ui/zero/content/FilterPanel.cpp
+    ui/zero/content/FilterPanel.h
+    ui/zero/content/CartReviewDialog.cpp
+    ui/zero/content/CartReviewDialog.h
+    ui/zero/content/InstallDialogParts.cpp
+    ui/zero/content/InstallDialogParts.h
+    ui/zero/content/ModInstallDialog.cpp
+    ui/zero/content/ModInstallDialog.h
+    ui/zero/content/ShaderModNotice.cpp
+    ui/zero/content/ShaderModNotice.h
+    ui/zero/content/ModpackInstallDialog.cpp
+    ui/zero/content/ModpackInstallDialog.h
+    ui/zero/content/ModRows.cpp
+    ui/zero/content/ModRows.h
+    ui/zero/content/ModsSection.cpp
+    ui/zero/content/ModsSection.h
+    ui/zero/content/PackRows.cpp
+    ui/zero/content/PackRows.h
+    ui/zero/content/ModpackRows.cpp
+    ui/zero/content/ModpackRows.h
+    ui/zero/content/ModpacksSection.cpp
+    ui/zero/content/ModpacksSection.h
+    ui/zero/content/SelectionBar.cpp
+    ui/zero/content/SelectionBar.h
+    ui/zero/content/RemoteImageCache.cpp
+    ui/zero/content/RemoteImageCache.h
+    ui/zero/content/TargetInstanceButton.cpp
+    ui/zero/content/TargetInstanceButton.h
+    ui/zero/perf/PerformanceDialog.cpp
+    ui/zero/perf/PerformanceDialog.h
     ui/zero/palette/PaletteDraw.cpp
     ui/zero/palette/PaletteDraw.h
     ui/zero/palette/PaletteOverlay.cpp
@@ -1046,6 +1227,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/shell/ZeroShell.h
     ui/zero/shell/ZeroTopBar.cpp
     ui/zero/shell/ZeroTopBar.h
+    ui/zero/shell/ZeroVideoBackground.cpp
+    ui/zero/shell/ZeroVideoBackground.h
 
     # Processes
     LaunchMode.h
@@ -1457,6 +1640,7 @@ target_link_libraries(Launcher_logic
     Qt${QT_VERSION_MAJOR}::NetworkAuth
     Qt${QT_VERSION_MAJOR}::Svg
     Qt${QT_VERSION_MAJOR}::OpenGL
+    Qt${QT_VERSION_MAJOR}::Multimedia  # ZERO: video window background (QMediaPlayer + QVideoSink; no MultimediaWidgets)
     ${Launcher_QT_DBUS}
     ${Launcher_QT_LIBS}
 )

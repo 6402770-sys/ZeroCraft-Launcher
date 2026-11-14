@@ -57,6 +57,13 @@ AppearanceWidget::AppearanceWidget(bool themesOnly, QWidget* parent)
 
     m_defaultFormat = QTextCharFormat(m_ui->consolePreview->currentCharFormat());
 
+    // ZERO: the cat background is never painted (MainWindow::setCatBackground), so its settings are hidden.
+    for (QWidget* cat : { static_cast<QWidget*>(m_ui->catPackLabel), static_cast<QWidget*>(m_ui->catPackComboBox),
+                          static_cast<QWidget*>(m_ui->catPackFolder), static_cast<QWidget*>(m_ui->enableCatCheckBox),
+                          static_cast<QWidget*>(m_ui->catSettingsBox), static_cast<QWidget*>(m_ui->catPreview) }) {
+        cat->hide();
+    }
+
     if (themesOnly) {
         m_ui->catPackLabel->hide();
         m_ui->catPackComboBox->hide();

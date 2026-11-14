@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QEvent>
+#include <QFileInfo>
 #include <QAbstractSpinBox>
 #include <QDebug>
 #include <QDialog>
@@ -18,6 +19,9 @@
 #include "Application.h"
 #include "settings/Setting.h"
 #include "settings/SettingsObject.h"
+#include "ui/themes/ThemeManager.h"
+#include "ui/zero/ZeroCustomFont.h"
+#include "ui/zero/ZeroCustomTheme.h"
 #include "ui/zero/ZeroMotion.h"
 #include "ui/zero/ZeroRipple.h"
 #include "ui/zero/ZeroStyle.h"
@@ -209,7 +213,18 @@ bool specForThemeId(const QString& id, ThemeSpec* out)
         *out = ThemeSpec::obsidian();
     else if (id == QLatin1String(ZeroMinecraftTheme::kId))
         *out = ThemeSpec::minecraft();
-    else
+    else if (Custom::isCustomThemeId(id)) {
+        auto* app = qobject_cast<Application*>(qApp);
+        if (!app || !app->themeManager())
+            return false;
+        for (ITheme* theme : app->themeManager()->getValidApplicationThemes()) {
+            if (auto* custom = dynamic_cast<ZeroCustomTheme*>(theme); custom && custom->id() == id) {
+                *out = custom->derivedSpec();
+                return true;
+            }
+        }
+        return false;
+    } else
         return false;
     return true;
 }
@@ -223,6 +238,9 @@ void ZeroTheme::apply(bool initial)
 {
     ThemeSpec spec = baseSpec();
     spec.reduceMotion = !motionEnabledFromSettings();
+    // The theme's own font is registered before the spec becomes current (Style::font reads the family); a font that cannot be loaded
+    // leaves the family empty = the default font. A theme without a font unregisters the previous one.
+    spec.fontFamily = CustomFont::load(spec.fontFile);
     Theme::setCurrent(spec);
 
     ITheme::apply(initial);  // Fusion base + palette + stylesheet
@@ -231,6 +249,29 @@ void ZeroTheme::apply(bool initial)
     // Replacing the style sheet makes Qt restore the fonts widgets had before it was applied, which undoes the
     // refresh done on Theme::changed. Re-apply the pixel/UI role fonts now that the new sheet is in place.
     Style::refreshRoleFonts();
+}
+
+namespace {
+
+/// A ZeroTheme whose spec is handed in (never registered anywhere): the live preview of the theme editor.
+class LiveTheme : public ZeroTheme {
+   public:
+    explicit LiveTheme(ThemeSpec spec) : m_spec(std::move(spec)) {}
+
+   protected:
+    ThemeSpec baseSpec() override { return m_spec; }
+
+   private:
+    ThemeSpec m_spec;
+};
+
+}  // namespace
+
+void applySpecLive(const ThemeSpec& spec)
+{
+    LiveTheme(spec).apply(false);
+    // The window / taskbar icon of the theme being edited (a theme switch does this in ThemeManager; the preview is not a switch).
+    QGuiApplication::setWindowIcon(QIcon(logoPathFor(spec)));
 }
 
 QString ZeroTheme::id()
@@ -293,10 +334,19 @@ QColor ZeroTheme::fadeColor()
     return Theme::current().bg;
 }
 
+QString logoPathFor(const ThemeSpec& spec)
+{
+    // A theme's own icon (a missing file = the default mark), else the mark of its base theme.
+    if (!spec.appIcon.isEmpty() && QFileInfo(spec.appIcon).isFile())
+        return spec.appIcon;
+    return spec.styleId() == QLatin1String("minecraft") ? QStringLiteral(":/zero/zero-logo-minecraft.svg") : QStringLiteral(":/zero/zero-logo.svg");
+}
+
 QString appLogoPath()
 {
-    const bool minecraft = isThemeActive() && Theme::current().id == QLatin1String("minecraft");
-    return minecraft ? QStringLiteral(":/zero/zero-logo-minecraft.svg") : QStringLiteral(":/zero/zero-logo.svg");
+    if (!isThemeActive())
+        return QStringLiteral(":/zero/zero-logo.svg");
+    return logoPathFor(Theme::current());
 }
 
 QIcon appLogo()

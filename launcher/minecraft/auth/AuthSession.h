@@ -25,6 +25,10 @@ struct AuthSession {
     QString user_type;
     // the actual launch mode for this session
     LaunchMode launchMode;
+    // ZERO: Ely.by accounts play through the authlib-injector java agent (launcher/zero/auth/AuthlibInjector.h). Set by
+    // MinecraftAccount::fillSession; cleared for offline/demo sessions. The launch step EnsureAuthlibInjector fills the jar path.
+    bool wantsAuthlibInjector = false;
+    QString authlibInjectorJar;
 };
 
 using AuthSessionPtr = std::shared_ptr<AuthSession>;

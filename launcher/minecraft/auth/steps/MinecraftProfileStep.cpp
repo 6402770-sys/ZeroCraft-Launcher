@@ -16,7 +16,7 @@ QString MinecraftProfileStep::describe()
 
 void MinecraftProfileStep::perform()
 {
-    QUrl url("https://api.minecraftservices.com/minecraft/profile");
+    QUrl url = m_profileUrl;  // ZERO
     auto headers = QList<Net::HeaderPair>{ { "Content-Type", "application/json" },
                                            { "Accept", "application/json" },
                                            { "Authorization", QString("Bearer %1").arg(m_data->yggdrasilToken.token).toUtf8() } };
@@ -68,5 +68,6 @@ void MinecraftProfileStep::onRequestDone(QByteArray* response)
         return;
     }
 
+    profileAcquired();  // ZERO
     emit finished(AccountTaskState::STATE_WORKING, tr("Got Minecraft profile"));
 }

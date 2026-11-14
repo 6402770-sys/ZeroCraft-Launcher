@@ -10,6 +10,7 @@
 #include <QStyle>
 #include <QWidget>
 #include <QtDebug>
+#include "ZeroCustomFont.h"
 #include "ZeroIcons.h"
 #include "ZeroPixelFont.h"
 #include "ZeroThemeState.h"
@@ -57,6 +58,12 @@ QString hex(const QColor& c)
 QString rgba(const QColor& c, double alpha)
 {
     return QStringLiteral("rgba(%1, %2, %3, %4)").arg(c.red()).arg(c.green()).arg(c.blue()).arg(qRound(alpha * 255));
+}
+
+/// Stylesheet value of a theme color: "#rrggbb" when opaque, "rgba(...)" when it carries alpha (card opacity of custom themes).
+QString colorValue(const QColor& c)
+{
+    return c.alpha() < 255 ? rgba(c, c.alphaF()) : hex(c);
 }
 
 QString px(int v)
@@ -146,10 +153,11 @@ QString templateSource()
 
 QString overlaySource(const ThemeSpec& spec)
 {
-    if (spec.id.isEmpty() || spec.id == QLatin1String("obsidian"))  // obsidian.qss is the base template itself
+    const QString styleId = spec.styleId();  // a custom theme uses the overlay of its base theme
+    if (styleId.isEmpty() || styleId == QLatin1String("obsidian"))  // obsidian.qss is the base template itself
         return {};
     initResources();
-    QFile f(QStringLiteral(":/zero/%1.qss").arg(spec.id));
+    QFile f(QStringLiteral(":/zero/%1.qss").arg(styleId));
     if (!f.exists() || !f.open(QIODevice::ReadOnly | QIODevice::Text))
         return {};
     return QString::fromUtf8(f.readAll());
@@ -167,7 +175,13 @@ QHash<QString, QString> tokenMap(const ThemeSpec& spec)
 {
     QHash<QString, QString> m;
     for (const auto& c : kColors)
-        m.insert(QLatin1String(c.name), hex(spec.*(c.member)));
+        m.insert(QLatin1String(c.name), colorValue(spec.*(c.member)));
+    // Opaque twins of the card colors: menus and popups use these so a translucent card opacity never makes them see-through.
+    m.insert("surfaceSolid", hex(spec.surfaceSolid()));
+    m.insert("surfaceHoverSolid", hex(spec.surfaceHoverSolid()));
+    // Top-level windows (dialogs, tooltips) are always opaque, whatever the colors carry.
+    m.insert("bgSolid", hex(ThemeSpec::opaque(spec.bg)));
+    m.insert("elevatedSolid", hex(ThemeSpec::opaque(spec.elevated)));
 
     // Status tints (12%) and a stronger pressed tint (20%).
     m.insert("success12", rgba(spec.success, Tokens::statusTint));
@@ -256,7 +270,7 @@ QPalette palette(const ThemeSpec& s)
     QPalette p;
     p.setColor(QPalette::Window, s.bg);
     p.setColor(QPalette::WindowText, s.text);
-    p.setColor(QPalette::Base, s.surface);
+    p.setColor(QPalette::Base, s.surfaceSolid());
     p.setColor(QPalette::AlternateBase, s.bg);
     p.setColor(QPalette::ToolTipBase, s.elevated);
     p.setColor(QPalette::ToolTipText, s.text);
@@ -299,7 +313,11 @@ QFont font(Role role)
             f.setCapitalization(QFont::AllUppercase);
         return f;
     }
-    f.setFamilies({ QLatin1String(Tokens::fontFamilyPrimary), QLatin1String(Tokens::fontFamilyFallback) });
+    // A custom theme's own font comes first; the default families stay behind it for the glyphs it lacks.
+    QStringList families{ QLatin1String(Tokens::fontFamilyPrimary), QLatin1String(Tokens::fontFamilyFallback) };
+    if (const QString& custom = Theme::current().fontFamily; !custom.isEmpty())
+        families.prepend(custom);
+    f.setFamilies(families);
     f.setPixelSize(t.px);
     f.setWeight(static_cast<QFont::Weight>(t.weight));
     if (t.uppercase)
@@ -334,8 +352,17 @@ void refreshRoleFonts()
         const bool wantsPixel = pixelReady && Theme::current().usesPixelFont(role);
         const QFont current = w->font();
         const bool hasPixel = current.family() == pixel || current.families().contains(pixel);
-        // Only widgets that switch between the pixel font and the UI font are touched.
-        if (wantsPixel != hasPixel)
+        // The theme font (never on a pixel role): the widget must name exactly the family the theme has now, or none.
+        const QString wantedCustom = wantsPixel ? QString() : Theme::current().fontFamily;
+        QString hasCustom;
+        for (const QString& family : current.families() + QStringList{ current.family() }) {
+            if (CustomFont::isThemeFontFamily(family)) {
+                hasCustom = family;
+                break;
+            }
+        }
+        // Only widgets that switch between the pixel font, the UI font and a theme font are touched.
+        if (wantsPixel != hasPixel || hasCustom != wantedCustom)
             w->setFont(font(role));
     }
 }

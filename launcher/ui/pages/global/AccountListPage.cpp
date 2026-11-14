@@ -44,9 +44,8 @@
 
 #include <QDebug>
 
-#include "ui/dialogs/ChooseOfflineNameDialog.h"
+#include "ui/zero/accounts/AddAccountDialog.h"  // ZERO
 #include "ui/dialogs/CustomMessageBox.h"
-#include "ui/dialogs/MSALoginDialog.h"
 
 #include "Application.h"
 
@@ -55,7 +54,7 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
     ui->setupUi(this);
     ui->listView->setEmptyString(
         tr("Welcome!\n"
-           "If you're new here, you can select the \"Add Microsoft\" button to link your Microsoft account."));
+           "If you're new here, you can select the \"Add account\" button to sign in or play offline."));
     ui->listView->setEmptyMode(VersionListView::String);
     ui->listView->setContextMenuPolicy(Qt::CustomContextMenu);
 
@@ -82,12 +81,8 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
     connect(m_accounts, &AccountList::defaultAccountChanged, this, &AccountListPage::listChanged);
 
     updateButtonStates();
-
-    // Xbox authentication won't work without a client identifier, so disable the button if it is missing
-    if (~APPLICATION->capabilities() & Application::SupportsMSA) {
-        ui->actionAddMicrosoft->setVisible(false);
-        ui->actionAddMicrosoft->setToolTip(tr("No Microsoft Authentication client ID was set."));
-    }
+    // ZERO: one "Add account" action; the dialog only offers the kinds this build can sign in with (Microsoft and Ely.by need
+    // their client IDs), so nothing unfinished is shown.
 }
 
 AccountListPage::~AccountListPage()
@@ -127,34 +122,11 @@ void AccountListPage::listChanged()
     updateButtonStates();
 }
 
-void AccountListPage::on_actionAddMicrosoft_triggered()
+void AccountListPage::on_actionAddAccount_triggered()
 {
-    auto account = MSALoginDialog::newAccount(this);
+    // ZERO: one dialog for Microsoft, Ely.by and offline accounts (it returns the account; adding it is ours)
+    const MinecraftAccountPtr account = Zero::Accounts::AddAccountDialog::run(this);
     if (account) {
-        m_accounts->addAccount(account);
-        if (m_accounts->count() == 1) {
-            m_accounts->setDefaultAccount(account);
-        }
-    }
-}
-
-void AccountListPage::on_actionAddOffline_triggered()
-{
-    if (!m_accounts->anyAccountIsValid()) {
-        QMessageBox::warning(this, tr("Error"),
-                             tr("You must add a Microsoft account that owns Minecraft before you can add an offline account."
-                                "<br><br>"
-                                "If you have lost your account you can contact Microsoft for support."));
-        return;
-    }
-
-    ChooseOfflineNameDialog dialog(tr("Please enter your desired username to add your offline account."), this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    if (const MinecraftAccountPtr account = MinecraftAccount::createOffline(dialog.getUsername())) {
-        account->login()->start();  // The task will complete here.
         m_accounts->addAccount(account);
         if (m_accounts->count() == 1) {
             m_accounts->setDefaultAccount(account);
@@ -209,6 +181,7 @@ void AccountListPage::updateButtonStates()
     bool hasSelection = !selection.empty();
     bool accountIsReady = false;
     bool accountIsOnline = false;
+    bool accountCanManageSkins = false;  // ZERO
     bool accountCanMoveUp = false;
     bool accountCanMoveDown = false;
     if (hasSelection) {
@@ -216,6 +189,7 @@ void AccountListPage::updateButtonStates()
         MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         accountIsReady = !account->isActive();
         accountIsOnline = account->accountType() != AccountType::Offline;
+        accountCanManageSkins = account->accountType() == AccountType::MSA;  // ZERO: Ely.by skins live on ely.by
 
         accountCanMoveUp = selected.row() > 0;
         int indexOfLast = m_accounts->count() - 1;
@@ -223,7 +197,7 @@ void AccountListPage::updateButtonStates()
     }
     ui->actionRemove->setEnabled(accountIsReady);
     ui->actionSetDefault->setEnabled(accountIsReady);
-    ui->actionManageSkins->setEnabled(accountIsReady && accountIsOnline);
+    ui->actionManageSkins->setEnabled(accountIsReady && accountCanManageSkins);
     ui->actionRefresh->setEnabled(accountIsReady && accountIsOnline);
 
     if (m_accounts->defaultAccount().get() == nullptr) {

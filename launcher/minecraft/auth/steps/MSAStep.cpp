@@ -114,7 +114,12 @@ class LoggingOAuthHttpServerReplyHandler final : public QOAuthHttpServerReplyHan
 MSAStep::MSAStep(AccountData* data, bool silent) : AuthStep(data), m_silent(silent)
 {
     m_clientId = APPLICATION->getMSAClientID();
-    if (QCoreApplication::applicationFilePath().startsWith("/tmp/.mount_") || APPLICATION->isPortable() || !isSchemeHandlerRegistered())
+    // ZERO: Prism's public client ID only has Prism's own redirect URIs registered (its custom scheme and http://localhost), so
+    // "zerolauncher://oauth/microsoft" fails with invalid_request. While a build uses that ID, always take the localhost reply
+    // handler. ZERO's own Azure registration must list "zerolauncher://oauth/microsoft" (docs/zero/RELEASE.md, step 2).
+    const bool upstreamClientId = m_clientId == QLatin1String("c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb");
+    if (upstreamClientId || QCoreApplication::applicationFilePath().startsWith("/tmp/.mount_") || APPLICATION->isPortable() ||
+        !isSchemeHandlerRegistered())
 
     {
         auto replyHandler = new LoggingOAuthHttpServerReplyHandler(this);

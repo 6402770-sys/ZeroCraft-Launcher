@@ -231,6 +231,11 @@ Tri matchTerm(const Parsed& v, const QString& term)
     QString rest;
     splitOperator(term, op, rest);
     rest = rest.trimmed();
+    bool lowest = false;
+    if (rest.size() > 1 && rest.endsWith(QLatin1Char('-'))) {
+        lowest = true;
+        rest.chop(1);
+    }
     if (rest.isEmpty())
         return Tri::Unknown;
     if (isWildcard(rest))
@@ -263,20 +268,46 @@ Tri matchTerm(const Parsed& v, const QString& term)
         return Tri::Yes;
     }
 
+    // A trailing "-" ("1.19.4-") is Fabric's way to say "the lowest pre-release of 1.19.4": the bound itself, but every pre-release of
+    // it counts as at-or-above it, and a version below 1.19.4 is below it.
     const auto bound = parseVersion(rest);
     if (!bound)
         return Tri::Unknown;
     const auto c = compareParsed(v, *bound);
-    if (op.isEmpty() || op == QLatin1String("="))
+    bool preOfBound = false;
+    if (lowest && !v.pre.isEmpty()) {
+        Parsed bare = v;
+        bare.pre.clear();
+        bare.ambiguousPre = false;
+        const auto core = compareParsed(bare, *bound);
+        preOfBound = core && *core == 0;
+    }
+    // "at or above the bound" and its strict forms, with the pre-release rule applied
+    const auto atLeast = [&]() { return lowest && preOfBound ? Tri::Yes : fromCmp(c, [](int x) { return x >= 0; }); };
+    if (op.isEmpty() || op == QLatin1String("=")) {
+        if (lowest)
+            return preOfBound || (c && *c == 0) ? Tri::Unknown : (c ? Tri::No : Tri::Unknown);
         return fromCmp(c, [](int x) { return x == 0; });
+    }
     if (op == QLatin1String(">="))
-        return fromCmp(c, [](int x) { return x >= 0; });
-    if (op == QLatin1String(">"))
+        return atLeast();
+    if (op == QLatin1String(">")) {
+        if (lowest && preOfBound)
+            return Tri::Unknown;  // above the lowest pre-release, or the lowest itself: cannot tell
         return fromCmp(c, [](int x) { return x > 0; });
-    if (op == QLatin1String("<="))
+    }
+    if (op == QLatin1String("<=")) {
+        if (lowest && preOfBound)
+            return Tri::Unknown;
+        if (lowest)
+            return fromCmp(c, [](int x) { return x < 0; });  // equal to the bound is above its lowest pre-release
         return fromCmp(c, [](int x) { return x <= 0; });
-    if (op == QLatin1String("<"))
+    }
+    if (op == QLatin1String("<")) {
+        if (lowest && preOfBound)
+            return Tri::No;
         return fromCmp(c, [](int x) { return x < 0; });
+    }
 
     // ~ (same minor) and ^ (same major): lower bound inclusive, computed upper bound exclusive
     const QStringList base = bound->core;
@@ -287,7 +318,7 @@ Tri matchTerm(const Parsed& v, const QString& term)
     if (!ok)
         return Tri::Unknown;
     upper[bumpIndex] = QString::number(n + 1);
-    return andOf(fromCmp(c, [](int x) { return x >= 0; }), fromCmp(cmp(v, upper.join(QLatin1Char('.'))), [](int x) { return x < 0; }));
+    return andOf(atLeast(), fromCmp(cmp(v, upper.join(QLatin1Char('.'))), [](int x) { return x < 0; }));
 }
 
 QStringList splitTerms(const QString& alternative)
@@ -346,6 +377,8 @@ QString describeTerm(const QString& term)
     QString op;
     QString rest;
     splitOperator(term, op, rest);
+    if (rest.size() > 1 && rest.endsWith(QLatin1Char('-')))
+        rest.chop(1);  // ">=1.19.4-" (lowest pre-release) reads "1.19.4 or newer"
     if (rest.isEmpty())
         return term;
     if (isWildcard(rest))

@@ -69,8 +69,7 @@ class AccountListPage : public QMainWindow, public BasePage {
     void retranslate() override;
 
    public slots:
-    void on_actionAddMicrosoft_triggered();
-    void on_actionAddOffline_triggered();
+    void on_actionAddAccount_triggered();  // ZERO: one dialog for Microsoft, Ely.by and offline
     void on_actionRemove_triggered();
     void on_actionRefresh_triggered();
     void on_actionSetDefault_triggered();

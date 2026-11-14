@@ -154,6 +154,12 @@ class Config {
     QString MSA_CLIENT_ID;
 
     /**
+     * ZERO: client ID / optional secret of the Ely.by OAuth application. Empty ID = Ely.by accounts are not offered.
+     */
+    QString ELY_CLIENT_ID;
+    QString ELY_CLIENT_SECRET;
+
+    /**
      * Client API key for CurseForge
      */
     QString FLAME_API_KEY;

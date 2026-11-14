@@ -383,6 +383,7 @@ Section "@Launcher_DisplayName@"
   File /r "iconengines"
   File /r "imageformats"
   File /r "jars"
+  File /nonfatal /r "multimedia"
   File /r "platforms"
   File /r "styles"
   File /nonfatal /r "tls"
@@ -451,7 +452,7 @@ SectionEnd
 
 Section /o "Shell Association (Open-With dialog)" SHELL_ASSOC
 
-  !insertmacro APP_SETUP `${APPDESCRIPTION}` `${APPICON}` `${APPID}` `${APPCMDTEXT}` `${APPEXE}` `${APPCMDTEXT}` '$INSTDIR\${APPEXE} -I "%1"'
+  !insertmacro APP_SETUP `${APPDESCRIPTION}` `${APPICON}` `${APPID}` `${APPCMDTEXT}` `${APPEXE}` `${APPCMDTEXT}` '"$INSTDIR\${APPEXE}" -I "%1"'
 
   !insertmacro APP_ASSOCIATE_DEFAULT ".mrpack" `${APPID}` `${APPEXE}` true
   !insertmacro APP_ASSOCIATE ".zip" `${APPID}` `${APPEXE}` false
@@ -483,12 +484,24 @@ Section "Uninstall"
   RMDir /r $INSTDIR\iconengines
   RMDir /r $INSTDIR\imageformats
   RMDir /r $INSTDIR\jars
+  RMDir /r $INSTDIR\multimedia
   RMDir /r $INSTDIR\platforms
   RMDir /r $INSTDIR\styles
   RMDir /r $INSTDIR\tls
 
   Delete "$SMPROGRAMS\@Launcher_DisplayName@.lnk"
   Delete "$DESKTOP\@Launcher_DisplayName@.lnk"
+
+  ; URL handlers: curseforge:// and modrinth:// are shared with other launchers, only remove them while they still point here
+  ReadRegStr $0 HKCU Software\Classes\curseforge\shell\open\command ""
+  ${If} $0 == '"$INSTDIR\@Launcher_APP_BINARY_NAME@.exe" "%1"'
+    DeleteRegKey HKCU Software\Classes\curseforge
+  ${EndIf}
+  ReadRegStr $0 HKCU Software\Classes\modrinth\shell\open\command ""
+  ${If} $0 == '"$INSTDIR\@Launcher_APP_BINARY_NAME@.exe" "%1"'
+    DeleteRegKey HKCU Software\Classes\modrinth
+  ${EndIf}
+  DeleteRegKey HKCU Software\Classes\@Launcher_APP_BINARY_NAME@
 
   RMDir "$INSTDIR"
 

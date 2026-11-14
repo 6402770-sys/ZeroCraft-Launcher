@@ -74,6 +74,23 @@ MinecraftAccountPtr MinecraftAccount::createBlankMSA()
     return account;
 }
 
+MinecraftAccountPtr MinecraftAccount::createBlankEly()
+{
+    // ZERO
+    MinecraftAccountPtr account(new MinecraftAccount());
+    account->data.type = AccountType::Ely;
+    return account;
+}
+
+MinecraftAccountPtr MinecraftAccount::createBlankElyPassword()
+{
+    // ZERO
+    MinecraftAccountPtr account(new MinecraftAccount());
+    account->data.type = AccountType::Ely;
+    account->data.elyAuth = ElyAuthKind::Password;
+    return account;
+}
+
 MinecraftAccountPtr MinecraftAccount::createOffline(const QString& username)
 {
     auto account = makeShared<MinecraftAccount>();
@@ -163,7 +180,11 @@ void MinecraftAccount::authFailed(QString reason)
             // NOTE: this doesn't do much. There was an error of some sort.
         } break;
         case AccountTaskState::STATE_FAILED_HARD: {
-            if (accountType() == AccountType::MSA) {
+            if (accountType() == AccountType::Ely && data.elyAuth == ElyAuthKind::Password) {  // ZERO: the authserver token is the game token
+                data.yggdrasilToken.token = QString();
+                data.yggdrasilToken.validity = Validity::None;
+                data.validity_ = Validity::None;
+            } else if (accountType() == AccountType::MSA || accountType() == AccountType::Ely) {  // ZERO: Ely OAuth keeps its token there too
                 data.msaToken.token = QString();
                 data.msaToken.refresh_token = QString();
                 data.msaToken.validity = Validity::None;
@@ -251,6 +272,7 @@ void MinecraftAccount::fillSession(AuthSessionPtr session)
         session->uuid = uuidFromUsername(session->player_name).toString(QUuid::Id128);
     // 'legacy' or 'mojang', depending on account type
     session->user_type = typeString();
+    session->wantsAuthlibInjector = data.type == AccountType::Ely;  // ZERO
     if (!session->access_token.isEmpty()) {
         session->session = "token:" + data.accessToken() + ":" + data.profileId();
     } else {

@@ -9,12 +9,22 @@
 #include "tasks/Task.h"
 #include "zero/java/JavaDoctor.h"
 
+class MinecraftInstance;
 class QPushButton;
 class QScrollArea;
 class QStackedLayout;
 class QVBoxLayout;
 
 namespace Zero {
+
+/// What Java Doctor reads to predict a launch, for other callers (Boost performance asks the same question for one instance): the instance's
+/// requirements and settings, the launcher-wide Java settings and the runtimes detected so far. Read-only; the detection itself is
+/// `APPLICATION->javalist()->getLoadTask()`.
+namespace JavaGather {
+Java::InstanceJava instanceJava(MinecraftInstance* instance);
+Java::GlobalJava global();
+QList<Java::Runtime> runtimes();
+}  // namespace JavaGather
 
 class JavaDoctorView : public QWidget {
     Q_OBJECT

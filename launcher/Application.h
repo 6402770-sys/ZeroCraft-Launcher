@@ -112,6 +112,8 @@ class Application : public QApplication {
         SupportsFlame = 1U << 1U,
         SupportsGameMode = 1U << 2U,
         SupportsMangoHud = 1U << 3U,
+        SupportsEly = 1U << 4U,       // ZERO: Ely.by accounts (always: email/username + password through Ely's authserver needs no registration)
+        SupportsElyOAuth = 1U << 5U,  // ZERO: a client ID for Ely.by sign-in with a code is configured (Launcher_ELY_CLIENT_ID)
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -165,6 +167,7 @@ class Application : public QApplication {
     QString getJarPath(const QString& jarFile);
 
     QString getMSAClientID();
+    QString getElyClientID();  // ZERO: empty = no Ely.by sign-in with a code (email + password always works)
     QString getFlameAPIKey();
     QString getModrinthAPIToken();
     QString getUserAgent();

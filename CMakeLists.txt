@@ -90,7 +90,11 @@ else()
         # -ffunction-sections and -fdata-sections help reduce binary size
         # -mguard=cf enables Control Flow Guard
         # TODO: Look into -gc-sections to further reduce binary size
-        add_compile_options("$<$<AND:$<CONFIG:Release,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:-ffunction-sections;-fdata-sections;-mguard=cf>")
+        add_compile_options("$<$<AND:$<CONFIG:Release,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:-ffunction-sections;-fdata-sections>")
+        # ZERO: GCC (MSYS2 UCRT64) does not know -mguard=cf, only the Clang / llvm-mingw toolchain does
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            add_compile_options("$<$<AND:$<CONFIG:Release,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:-mguard=cf>")
+        endif()
     endif()
 endif()
 
@@ -192,6 +196,18 @@ set(Launcher_VERSION_MAJOR 0)
 set(Launcher_VERSION_MINOR 1)
 set(Launcher_VERSION_PATCH 0)
 
+# ZERO: scripts/zero/package.sh passes -DZERO_VERSION=X.Y.Z to build a release with another version than the one above.
+set(ZERO_VERSION "" CACHE STRING "Override the launcher version (X.Y.Z). Empty keeps the numbers above.")
+if(NOT ZERO_VERSION STREQUAL "")
+    if(ZERO_VERSION MATCHES "^([0-9]+)[.]([0-9]+)[.]([0-9]+)$")
+        set(Launcher_VERSION_MAJOR ${CMAKE_MATCH_1})
+        set(Launcher_VERSION_MINOR ${CMAKE_MATCH_2})
+        set(Launcher_VERSION_PATCH ${CMAKE_MATCH_3})
+    else()
+        message(FATAL_ERROR "ZERO_VERSION must look like X.Y.Z, got '${ZERO_VERSION}'")
+    endif()
+endif()
+
 set(Launcher_VERSION_NAME "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}")
 set(Launcher_VERSION_NAME4 "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}.0")
 set(Launcher_VERSION_NAME4_COMMA "${Launcher_VERSION_MAJOR},${Launcher_VERSION_MINOR},${Launcher_VERSION_PATCH},0")
@@ -280,22 +296,33 @@ endif()
 # https://docs.microsoft.com/en-us/legal/microsoft-identity-platform/terms-of-use
 set(Launcher_MSA_CLIENT_ID "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb" CACHE STRING "Client ID you can get from Microsoft Identity Platform when you register an application")
 
+# ZERO: Ely.by accounts. The client ID of ZERO's own OAuth application, registered by the owner at
+# https://account.ely.by/dev/applications (public, not a secret). It enables the "sign in with a code" path; email + password sign-in
+# needs no ID. Empty hides only the code path (never use another launcher's registration). The secret is optional (Ely documents it
+# for confidential apps); it is only sent when it is not empty and must never be committed. See docs/zero/CREDENTIALS.md.
+set(Launcher_ELY_CLIENT_ID "zerocraft-launcher" CACHE STRING "Client ID of ZERO's Ely.by OAuth application (empty hides the code sign-in)")
+set(Launcher_ELY_CLIENT_SECRET "" CACHE STRING "Optional client secret of ZERO's Ely.by OAuth application")
+
 # By using this key in your builds you accept the terms and conditions laid down in
 # https://support.curseforge.com/en/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions
 # NOTE: CurseForge requires you to change this if you make any kind of derivative work.
 # This key was issued specifically for Prism Launcher
 set(Launcher_CURSEFORGE_API_KEY "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC" CACHE STRING "API key for the CurseForge platform")
 
-# ZERO: the defaults above are Prism Launcher's credentials, kept for local development only.
-# Official ZERO releases must use their own registrations, see docs/zero/CREDENTIALS.md
+# ZERO: the defaults above are Prism Launcher's credentials.
+# Microsoft: releases may keep Prism's MSA client ID (owner decision 2026-11-13, as ElyPrismLauncher does: the owner cannot
+# register an Azure app). Sign-in then uses the localhost redirect (MSAStep.cpp) and Microsoft's consent page names Prism Launcher.
+# CurseForge: its terms require an own key for derivative works, so releases still need one. See docs/zero/CREDENTIALS.md
 option(ZERO_RELEASE_BUILD "Official ZERO release build" OFF)
 if(ZERO_RELEASE_BUILD)
     set(_zero_upstream_msa "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb")
     set(_zero_upstream_cf "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC")
-    if(Launcher_MSA_CLIENT_ID STREQUAL _zero_upstream_msa OR Launcher_CURSEFORGE_API_KEY STREQUAL _zero_upstream_cf)
-        message(FATAL_ERROR "ZERO_RELEASE_BUILD is ON but Launcher_MSA_CLIENT_ID and/or Launcher_CURSEFORGE_API_KEY still use "
-            "the upstream Prism Launcher defaults. ZERO releases must use their own Azure app registration (with Minecraft "
-            "API approval) and their own CurseForge API key. See docs/zero/CREDENTIALS.md.")
+    if(Launcher_CURSEFORGE_API_KEY STREQUAL _zero_upstream_cf)
+        message(FATAL_ERROR "ZERO_RELEASE_BUILD is ON but Launcher_CURSEFORGE_API_KEY still uses the upstream Prism Launcher "
+            "default. ZERO releases need their own CurseForge API key. See docs/zero/CREDENTIALS.md.")
+    endif()
+    if(Launcher_MSA_CLIENT_ID STREQUAL _zero_upstream_msa)
+        message(STATUS "ZERO release: Microsoft sign-in uses Prism Launcher's MSA client ID (owner decision, docs/zero/CREDENTIALS.md)")
     endif()
     unset(_zero_upstream_msa)
     unset(_zero_upstream_cf)
@@ -331,6 +358,7 @@ if(Launcher_QT_VERSION_MAJOR EQUAL 6)
             Concurrent
             Core
             CoreTools
+            Multimedia
             Network
             NetworkAuth
             OpenGL

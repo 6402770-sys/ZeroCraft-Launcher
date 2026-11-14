@@ -20,6 +20,9 @@ class ZeroCard : public QFrame {
 
     /// Hover feedback is on by default; turn it off for purely static cards.
     void setHoverEnabled(bool enabled);
+    /// The focus ring (accent border) is drawn while the card has focus; a subclass turns it off when focus came from the
+    /// mouse (default on).
+    void setFocusRingVisible(bool visible);
 
    signals:
     void clicked();
@@ -39,6 +42,7 @@ class ZeroCard : public QFrame {
     bool m_clickable = false;
     bool m_hoverEnabled = true;
     bool m_pressed = false;
+    bool m_focusRing = true;
 };
 
 }  // namespace Zero

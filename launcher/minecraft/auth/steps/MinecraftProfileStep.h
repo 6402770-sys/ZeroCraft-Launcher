@@ -16,6 +16,12 @@ class MinecraftProfileStep : public AuthStep {
 
     QString describe() override;
 
+   protected:
+    // ZERO: the Ely.by step reads the profile from Ely's Mojang-compatible endpoint
+    QUrl m_profileUrl{ "https://api.minecraftservices.com/minecraft/profile" };
+    //! ZERO: called after a profile was read and parsed; the Ely.by step marks the account as owning the game there
+    virtual void profileAcquired() {}
+
    private slots:
     void onRequestDone(QByteArray* response);
 

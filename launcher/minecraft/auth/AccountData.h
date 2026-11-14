@@ -88,7 +88,11 @@ struct MinecraftProfile {
     Validity validity = Validity::None;
 };
 
-enum class AccountType { MSA, Offline };
+enum class AccountType { MSA, Offline, Ely };  // ZERO: Ely (Ely.by account; its OAuth token lives in msaToken)
+
+//! ZERO: how an Ely.by account signs in. OAuth = the device code flow (token in msaToken); Password = Ely's authserver (email/username +
+//! password; the authserver access token is the game token in yggdrasilToken; the password is never stored).
+enum class ElyAuthKind { OAuth, Password };
 
 enum class AccountState { Unchecked, Offline, Working, Online, Disabled, Errored, Expired, Gone };
 
@@ -105,6 +109,11 @@ struct AccountData {
     QString lastError() const;
 
     AccountType type = AccountType::MSA;
+
+    // ZERO: Ely.by accounts only
+    ElyAuthKind elyAuth = ElyAuthKind::OAuth;
+    QString elyUsername;     //!< Password accounts: the email/username used to sign in (prefills a new sign-in). Never the password.
+    QString elyClientToken;  //!< Password accounts: the authserver clientToken, made once at the first sign-in
 
     QString msaClientID;
     Token msaToken;

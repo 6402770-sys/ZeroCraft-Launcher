@@ -42,6 +42,7 @@
 #include "FileSystem.h"
 #include "launch/LaunchTask.h"
 #include "minecraft/MinecraftInstance.h"
+#include "zero/auth/AuthlibInjector.h"  // ZERO
 
 #if defined(Q_OS_LINUX) && defined(ENABLE_GAMEMODE)
 #include "gamemode_client.h"
@@ -93,6 +94,14 @@ void LauncherPartLaunch::executeTask()
 
     m_launchScript = instance->createLaunchScript(m_session, m_targetToJoin);
     QStringList args = instance->javaArguments();
+    // ZERO: Ely.by accounts - the authlib-injector agent (put there by EnsureAuthlibInjector) must come before the main class
+    if (m_session && m_session->wantsAuthlibInjector && !m_session->authlibInjectorJar.isEmpty()) {
+        auto agentJar = m_session->authlibInjectorJar;
+#ifdef Q_OS_WIN
+        agentJar = FS::getPathNameInLocal8bit(agentJar);
+#endif
+        args << Zero::Auth::AuthlibInjector::javaAgentArgument(agentJar);
+    }
     QString allArgs = args.join(" ");
     emit logLine("Java arguments:\n  " + m_parent->censorPrivateInfo(allArgs) + "\n", MessageLevel::Launcher);
 

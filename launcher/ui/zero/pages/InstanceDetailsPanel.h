@@ -40,7 +40,7 @@ struct LibraryActions {
     QAction* folder = nullptr;
     QAction* group = nullptr;
     QAction* copy = nullptr;
-    QAction* exportInstance = nullptr;  ///< carries the Zip / Modrinth / CurseForge menu
+    QAction* exportInstance = nullptr;  ///< only its enabled state is mirrored (canExport); the button asks for the chooser
     QAction* shortcut = nullptr;
     QAction* remove = nullptr;
 };
@@ -61,6 +61,9 @@ class InstanceDetailsPanel : public ZeroCard {
     /// Replaces the title with an editable field. Emits renameRequested() on Enter / focus loss.
     void beginRename();
 
+    /// Shows / hides "Roll back update" for the shown instance (a not rolled back modpack snapshot exists). Cheap; also run by setInstance().
+    void refreshRollback();
+
     /// Saves a pending description edit now (focus out, idle timer, instance change and shutdown call this).
     void flushDescription();
 
@@ -80,6 +83,12 @@ class InstanceDetailsPanel : public ZeroCard {
     void removeArtworkRequested();
     /// "Check mods": open Tools > Mod Health for the shown instance (only offered for instances with a mod loader).
     void checkModsRequested();
+    /// "Boost performance": the dialog for the shown instance (hidden while the instance runs).
+    void boostPerformanceRequested();
+    /// The Export button was pressed (the Library opens the export chooser for this instance).
+    void exportRequested(const QString& instanceId);
+    /// "Roll back update": the instance goes back to the copy taken before its last modpack update (the window asks first).
+    void rollbackRequested();
 
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -134,6 +143,8 @@ class InstanceDetailsPanel : public ZeroCard {
     QPushButton* m_setArtwork = nullptr;
     QPushButton* m_removeArtwork = nullptr;
     QPushButton* m_checkMods = nullptr;
+    QPushButton* m_boost = nullptr;
+    QPushButton* m_rollback = nullptr;
 
     QVector<Binding> m_bindings;
     LibraryActions m_actions;

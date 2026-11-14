@@ -3,12 +3,18 @@
 #include <QNetworkRequest>
 
 #include "minecraft/auth/AccountData.h"
+#include "minecraft/auth/steps/ElyAuthserverRefreshStep.h"
+#include "minecraft/auth/steps/ElyDeviceCodeStep.h"
+#include "minecraft/auth/steps/ElyPasswordStep.h"
+#include "minecraft/auth/steps/ElyRefreshStep.h"
+#include "minecraft/auth/steps/ElyYggdrasilTokenStep.h"
 #include "minecraft/auth/steps/EntitlementsStep.h"
 #include "minecraft/auth/steps/GetSkinStep.h"
 #include "minecraft/auth/steps/LauncherLoginStep.h"
 #include "minecraft/auth/steps/MSADeviceCodeStep.h"
 #include "minecraft/auth/steps/MSAStep.h"
 #include "minecraft/auth/steps/MinecraftProfileStep.h"
+#include "minecraft/auth/steps/MinecraftProfileStepEly.h"
 #include "minecraft/auth/steps/XboxAuthorizationStep.h"
 #include "minecraft/auth/steps/XboxUserStep.h"
 #include "tasks/Task.h"
@@ -17,7 +23,7 @@
 
 #include <Application.h>
 
-AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
+AuthFlow::AuthFlow(AccountData* data, Action action, Zero::Auth::Ely::Authserver::Transport elyTransport) : Task(), m_data(data)
 {
     if (data->type == AccountType::MSA) {
         if (action == Action::DeviceCode) {
@@ -36,8 +42,48 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
         m_steps.append(makeShared<EntitlementsStep>(m_data));
         m_steps.append(makeShared<MinecraftProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
+    } else if (data->type == AccountType::Ely && data->elyAuth == ElyAuthKind::Password) {
+        // ZERO: Ely.by account that signs in with email/username + password through Ely's authserver (no OAuth, no client ID).
+        // Login = authenticate (it also sets the game token and the profile), Refresh = refresh. No skin step: skins live on ely.by.
+        using namespace Zero::Auth::Ely::Authserver;
+        if (action == Action::Refresh) {
+            m_steps.append(elyTransport ? makeShared<ElyAuthserverRefreshStep>(m_data, std::move(elyTransport))
+                                        : makeShared<ElyAuthserverRefreshStep>(m_data));
+        } else {
+            auto passwordStep = elyTransport ? makeShared<ElyPasswordStep>(m_data, std::move(elyTransport)) : makeShared<ElyPasswordStep>(m_data);
+            m_passwordStep = passwordStep.get();
+            connect(passwordStep.get(), &ElyPasswordStep::failure, this, [this](Failure failure) { m_elyFailure = failure; });
+            m_steps.append(passwordStep);
+        }
+    } else if (data->type == AccountType::Ely) {
+        // ZERO: Ely.by accounts. Signing in is the device code flow only (Ely.by documents no redirect flow for desktop apps), so
+        // Login and DeviceCode build the same steps; Refresh uses the refresh token. No skin step: skins live on ely.by.
+        if (action == Action::Refresh) {
+            m_steps.append(makeShared<ElyRefreshStep>(m_data));
+        } else {
+            auto oauthStep = makeShared<ElyDeviceCodeStep>(m_data);
+            connect(oauthStep.get(), &ElyDeviceCodeStep::authorizeWithBrowser, this, &AuthFlow::authorizeWithBrowserWithExtra);
+            m_steps.append(oauthStep);
+        }
+        m_steps.append(makeShared<ElyYggdrasilTokenStep>(m_data));
+        m_steps.append(makeShared<MinecraftProfileStepEly>(m_data));
     }
     changeState(AccountTaskState::STATE_CREATED);
+}
+
+QStringList AuthFlow::stepNames() const
+{
+    QStringList names;
+    for (const auto& step : m_steps) {
+        names << QString::fromLatin1(step->metaObject()->className());
+    }
+    return names;
+}
+
+void AuthFlow::setElyCredentials(const QString& username, const QString& password, const QString& twoFactorCode)
+{
+    if (m_passwordStep)
+        m_passwordStep->setCredentials(username, password, twoFactorCode);
 }
 
 void AuthFlow::succeed()

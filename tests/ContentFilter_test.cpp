@@ -381,7 +381,8 @@ class ContentFilterTest : public QObject {
                          { FacetId::category, { "vanilla-like" } },
                          { FacetId::installed, { kToggleOn } } },
                        " faithful ", "downloads");
-        auto args = toSearchArgs(s, Kind::ResourcePack, Provider::Modrinth, 25, methods);
+        auto args = toSearchArgs(s, Kind::ResourcePack, Provider::Modrinth, 25, methods,
+                                 facetsFor(Kind::ResourcePack, ctx(Provider::Modrinth, modrinthResourcePackCategories())));
         QCOMPARE(args.type, ModPlatform::ResourceType::ResourcePack);
         QCOMPARE(args.offset, 25);
         QCOMPARE(args.search.value(), QStringLiteral("faithful"));
@@ -397,7 +398,7 @@ class ContentFilterTest : public QObject {
 
         // Shaders: platform and performance go as category tags.
         s = state({ { FacetId::platform, { "iris", "optifine" } }, { FacetId::performance, { "potato" } } });
-        args = toSearchArgs(s, Kind::Shader, Provider::Modrinth, 0, methods);
+        args = toSearchArgs(s, Kind::Shader, Provider::Modrinth, 0, methods, facetsFor(Kind::Shader, ctx(Provider::Modrinth, modrinthShaderCategories())));
         QCOMPARE(args.type, ModPlatform::ResourceType::ShaderPack);
         QCOMPARE(args.categoryGroups.value(), (QList<QStringList>{ { "iris", "optifine" }, { "potato" } }));
         QVERIFY(!args.loaders.has_value());
@@ -406,7 +407,7 @@ class ContentFilterTest : public QObject {
 
         // Mods: loaders as flags (one OR group in the URL), environment as side.
         s = state({ { FacetId::loader, { "fabric", "quilt", "bogus" } }, { FacetId::environment, { "client" } } }, {}, "relevance");
-        args = toSearchArgs(s, Kind::Mod, Provider::Modrinth, 0, methods);
+        args = toSearchArgs(s, Kind::Mod, Provider::Modrinth, 0, methods, facetsFor(Kind::Mod, ctx(Provider::Modrinth)));
         QCOMPARE(args.loaders.value(), ModPlatform::ModLoaderTypes(ModPlatform::Fabric | ModPlatform::Quilt));
         QCOMPARE(args.side.value(), ModPlatform::SideType(ModPlatform::SideType::ClientSide));
         QVERIFY(!args.categoryGroups.has_value());
@@ -414,7 +415,7 @@ class ContentFilterTest : public QObject {
 
         // Values of facets that do not belong to the kind are ignored.
         s = state({ { FacetId::resolution, { "16x" } }, { FacetId::environment, { "client" } } });
-        args = toSearchArgs(s, Kind::Modpack, Provider::Modrinth, 0, methods);
+        args = toSearchArgs(s, Kind::Modpack, Provider::Modrinth, 0, methods, facetsFor(Kind::Modpack, ctx(Provider::Modrinth)));
         QVERIFY(!args.categoryGroups.has_value());
         QVERIFY(!args.side.has_value());
     }
@@ -422,19 +423,21 @@ class ContentFilterTest : public QObject {
     void toSearchArgs_curseForge()
     {
         const auto methods = FlameAPI::get().getSortingMethods();
+        const QList<ModPlatform::Category> cfCategories = { { .name = "a", .id = "4475", .header = "" }, { .name = "b", .id = "4484", .header = "" } };
+        const auto cfModpack = facetsFor(Kind::Modpack, ctx(Provider::CurseForge, cfCategories));
         const auto s = state({ { FacetId::mcVersion, { "1.20.1", "1.19.2" } },
                                { FacetId::loader, { "forge", "neoforge" } },
                                { FacetId::category, { "4475", "4484" } },
                                { FacetId::resolution, { "16x" } },
                                { FacetId::feature, { "audio" } } },
                              "atm", "featured");
-        auto args = toSearchArgs(s, Kind::Modpack, Provider::CurseForge, 50, methods);
+        auto args = toSearchArgs(s, Kind::Modpack, Provider::CurseForge, 50, methods, cfModpack);
         QCOMPARE(args.type, ModPlatform::ResourceType::Modpack);
         // CurseForge takes one gameVersion: with two selected none is sent (matchesClient filters the loaded rows).
         QVERIFY(!args.versions.has_value());
         {
             const auto one = state({ { FacetId::mcVersion, { "1.20.1" } } });
-            const auto oneArgs = toSearchArgs(one, Kind::Modpack, Provider::CurseForge, 0, methods);
+            const auto oneArgs = toSearchArgs(one, Kind::Modpack, Provider::CurseForge, 0, methods, cfModpack);
             QCOMPARE(oneArgs.versions->size(), size_t(1));
             QCOMPARE(oneArgs.versions->front().toString(), QStringLiteral("1.20.1"));
         }
@@ -446,15 +449,50 @@ class ContentFilterTest : public QObject {
         QVERIFY2(!url.contains("gameVersion="), qPrintable(url));
 
         // Resource pack resolution / features are Modrinth-only: never sent to CurseForge.
-        args = toSearchArgs(s, Kind::ResourcePack, Provider::CurseForge, 0, methods);
+        args = toSearchArgs(s, Kind::ResourcePack, Provider::CurseForge, 0, methods,
+                          facetsFor(Kind::ResourcePack, ctx(Provider::CurseForge, cfCategories)));
         QVERIFY(!args.categoryGroups.has_value());
         QCOMPARE(args.categoryIds.value(), (QStringList{ "4475", "4484" }));
+    }
+
+    void toSearchArgs_providerSwitchDropsForeignValues()
+    {
+        const auto methods = ModrinthAPI::get().getSortingMethods();
+        const QList<ModPlatform::Category> modrinthCats = { { .name = "optimization", .id = "optimization", .header = "categories" } };
+        const QList<ModPlatform::Category> cfCats = { { .name = "Adventure", .id = "4475", .header = "" } };
+
+        // Modrinth -> CurseForge: the Modrinth category is not a CurseForge id.
+        auto s = state({ { FacetId::category, { "optimization" } } });
+        auto args = toSearchArgs(s, Kind::Mod, Provider::Modrinth, 0, methods, facetsFor(Kind::Mod, ctx(Provider::Modrinth, modrinthCats)));
+        QCOMPARE(args.categoryGroups.value(), (QList<QStringList>{ { "optimization" } }));
+        args = toSearchArgs(s, Kind::Mod, Provider::CurseForge, 0, methods, facetsFor(Kind::Mod, ctx(Provider::CurseForge, cfCats)));
+        QVERIFY(!args.categoryIds.has_value());
+        QVERIFY(!args.categoryGroups.has_value());
+
+        // CurseForge -> Modrinth: the numeric id is not a Modrinth tag; an offered value next to it is kept.
+        s = state({ { FacetId::category, { "4475", "optimization" } } });
+        args = toSearchArgs(s, Kind::Mod, Provider::Modrinth, 0, methods, facetsFor(Kind::Mod, ctx(Provider::Modrinth, modrinthCats)));
+        QCOMPARE(args.categoryGroups.value(), (QList<QStringList>{ { "optimization" } }));
+        args = toSearchArgs(s, Kind::Mod, Provider::CurseForge, 0, methods, facetsFor(Kind::Mod, ctx(Provider::CurseForge, cfCats)));
+        QCOMPARE(args.categoryIds.value(), (QStringList{ "4475" }));
+
+        // Modrinth-only resolution / feature values never reach CurseForge (disabled facets), even with a matching option.
+        s = state({ { FacetId::resolution, { "16x" } }, { FacetId::feature, { "audio" } } });
+        args = toSearchArgs(s, Kind::ResourcePack, Provider::CurseForge, 0, methods,
+                            facetsFor(Kind::ResourcePack, ctx(Provider::CurseForge, modrinthResourcePackCategories())));
+        QVERIFY(!args.categoryIds.has_value());
+        QVERIFY(!args.categoryGroups.has_value());
+
+        // The values stay in the state, shown as inactive chips for a disabled facet.
+        const auto chips = chipsFor(s, facetsFor(Kind::ResourcePack, ctx(Provider::CurseForge)), FilterState{});
+        QVERIFY(!chips.isEmpty());
+        QVERIFY(chips.constFirst().isInactive);
     }
 
     void toSearchArgs_technicIsQueryOnly()
     {
         const auto s = state({ { FacetId::mcVersion, { "1.12.2" } }, { FacetId::loader, { "forge" } } }, "tekkit", "downloads");
-        const auto args = toSearchArgs(s, Kind::Modpack, Provider::Technic, 0, {});
+        const auto args = toSearchArgs(s, Kind::Modpack, Provider::Technic, 0, {}, facetsFor(Kind::Modpack, ctx(Provider::Technic)));
         QCOMPARE(args.search.value(), QStringLiteral("tekkit"));
         QVERIFY(!args.sorting.has_value());
         QVERIFY(!args.versions.has_value());
@@ -509,6 +547,11 @@ class ContentFilterTest : public QObject {
         QVERIFY(!matchesClient(s, facets, wrongLoader));
         wrongLoader.loaderNames = { "FABRIC" };  // provider casing does not matter
         QVERIFY(matchesClient(s, facets, wrongLoader));
+
+        // Exactly one value was sent to (and applied by) the server: not re-checked on the client.
+        const auto single = state({ { FacetId::mcVersion, { "1.20.1" } }, { FacetId::loader, { "fabric" } } });
+        ItemFacts partial{ .provider = Provider::CurseForge, .gameVersions = { "1.21.1" }, .loaderNames = { "forge" } };
+        QVERIFY(matchesClient(single, facets, partial));
 
         // Unknown data (empty lists) never excludes.
         ItemFacts unknown{ .provider = Provider::CurseForge };

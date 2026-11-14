@@ -15,7 +15,7 @@ class ZeroSearchPill : public QAbstractButton {
    public:
     static constexpr int kHeight = 34;
     static constexpr int kWidth = 360;
-    static constexpr int kMinWidth = 240;
+    static constexpr int kMinWidth = 200;  // five Discover sections need the room at 1100 px (it was 240)
 
     explicit ZeroSearchPill(QWidget* parent = nullptr);
 

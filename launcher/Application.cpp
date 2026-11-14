@@ -53,6 +53,7 @@
 #include "ui/ToolTipFilter.h"
 #include "ui/ViewLogWindow.h"
 
+#include "zero/auth/ElyAuth.h"  // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
@@ -671,10 +672,21 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // "system" (follow Windows "Animation effects") | "on" | "off". Empty = never chosen = "system", except that a
         // legacy ZeroReduceMotion=true keeps meaning "off" (Zero::Motion::resolveEnabled).
         m_settings->registerSetting("ZeroMotion", QString());
+        m_settings->registerSetting("ZeroExportFormat", QString("zip"));  // Library export chooser: "zip" | "mrpack" | "curseforge"
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
         m_settings->registerSetting("ZeroWorldsFavoritesOnly", false);  // Worlds page: show only favorite worlds
         m_settings->registerSetting("ZeroServersFavoritesOnly", false);  // Servers page: show only favorite servers
         m_settings->registerSetting("ZeroWorldsSort", QString("recent"));  // Worlds page: "recent" | "name" | "size" | "instance"
+        // ZERO Discover page (docs/zero/CONTENT.md): section, Modpacks filter (FilterState JSON without the search query), grid or list
+        m_settings->registerSetting("ZeroDiscoverSection", QString("modpacks"));
+        m_settings->registerSetting("ZeroDiscoverModpacksFilter", QString());
+        m_settings->registerSetting("ZeroDiscoverModpacksView", QString("grid"));  // "grid" | "list"
+        m_settings->registerSetting("ZeroDiscoverModsFilter", QString());
+        m_settings->registerSetting("ZeroDiscoverModsView", QString("grid"));  // "grid" | "list"
+        m_settings->registerSetting("ZeroDiscoverResourcePacksFilter", QString());  // FilterState JSON; packs are grid-only (no view setting)
+        m_settings->registerSetting("ZeroDiscoverShadersFilter", QString());        // FilterState JSON; shaders are grid-only too
+        m_settings->registerSetting("ZeroDiscoverWorldsFilter", QString());         // FilterState JSON; worlds are grid-only too (CurseForge only)
+        m_settings->registerSetting("ZeroDiscoverTarget", QString());  // instance id the mod browser installs into
         m_settings->registerSetting("ZeroScreenshotsSort", QString("newest"));  // Screenshots page: "newest" | "oldest" | "instance"
         m_settings->registerSetting("ZeroScreenshotsInstance", QString());  // Screenshots page: instance id filter, empty = all instances
         m_settings->registerSetting("ZeroServersSort", QString("name"));  // Servers page: "name" | "players" | "latency"
@@ -1138,6 +1150,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_metacache->addBase("meta", QDir("meta").absolutePath());
         m_metacache->addBase("java", QDir("cache/java").absolutePath());
         m_metacache->addBase("feed", QDir("cache/feed").absolutePath());
+        m_metacache->addBase("ZeroContent", QDir("cache/ZeroContent").absolutePath());  // Discover images (RemoteImageCache)
         m_metacache->Load();
         qInfo() << "<> Cache initialized.";
     }
@@ -1369,9 +1382,10 @@ bool Application::createSetupWizard()
     bool pasteInterventionRequired = settings()->get("PastebinURL") != "";
     bool validWidgets = m_themeManager->isValidApplicationTheme(settings()->get("ApplicationTheme").toString());
     bool validIcons = m_themeManager->isValidIconTheme(settings()->get("IconTheme").toString());
-    bool login = !m_accounts->anyAccountIsValid() && (capabilities().testAnyFlags(Application::SupportsMSA));
+    // ZERO: no "Add Microsoft account" wizard page: with no account the Add account dialog opens over the main window instead
+    // (performMainStartupAction).
     bool themeInterventionRequired = !validWidgets || !validIcons;
-    bool wizardRequired = javaRequired || languageRequired || pasteInterventionRequired || themeInterventionRequired || askjava || login;
+    bool wizardRequired = javaRequired || languageRequired || pasteInterventionRequired || themeInterventionRequired || askjava;
     if (wizardRequired) {
         const bool darkMode = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
         // set default theme after going into theme wizard
@@ -1417,9 +1431,6 @@ bool Application::createSetupWizard()
             setupWizard.addPage(new ThemeWizardPage(&setupWizard));
         }
 
-        if (login) {
-            setupWizard.addPage(new LoginWizardPage(&setupWizard));
-        }
         if (setupWizard.exec() != QDialog::Accepted) {
             qWarning() << "Setup wizard was not completed; continuing with the current settings";
         }
@@ -1523,6 +1534,12 @@ void Application::performMainStartupAction()
     if (!m_zeroScreenshotPath.isEmpty() && m_mainWindow) {
         m_mainWindow->zeroScreenshot(m_zeroScreenshotPath, m_zeroScreenshotPage);
         return;
+    }
+
+    // ZERO: no account yet → the Add account dialog (step 1) right over the main window, instead of Prism's setup wizard page.
+    if (m_mainWindow && !m_accounts->anyAccountIsValid() &&
+        (capabilities().testAnyFlag(Application::SupportsMSA) || capabilities().testAnyFlag(Application::SupportsEly))) {
+        QMetaObject::invokeMethod(m_mainWindow, "addAccountZero", Qt::QueuedConnection);
     }
 
     // initialize the updater
@@ -2016,6 +2033,10 @@ void Application::updateCapabilities()
     if (!getMSAClientID().isEmpty()) {
         m_capabilities |= SupportsMSA;
     }
+    m_capabilities |= SupportsEly;  // ZERO: Ely.by with email + password needs no registered application
+    if (!getElyClientID().isEmpty()) {
+        m_capabilities |= SupportsElyOAuth;
+    }
     if (!getFlameAPIKey().isEmpty()) {
         m_capabilities |= SupportsFlame;
     }
@@ -2073,6 +2094,12 @@ QString Application::getMSAClientID()
     }
 
     return BuildConfig.MSA_CLIENT_ID;
+}
+
+QString Application::getElyClientID()
+{
+    // ZERO: only the compiled-in ID of ZERO's own Ely.by application (-DLauncher_ELY_CLIENT_ID); no settings override
+    return Zero::Auth::Ely::configFromBuild().clientId;
 }
 
 QString Application::getFlameAPIKey()

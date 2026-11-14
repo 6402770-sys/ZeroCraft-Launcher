@@ -385,6 +385,21 @@ QString runtimeFolder(const QString& exePath)
 
 }  // namespace
 
+namespace JavaGather {
+Java::InstanceJava instanceJava(MinecraftInstance* instance)
+{
+    return instanceJavaFrom(instance);
+}
+Java::GlobalJava global()
+{
+    return globalFromApplication();
+}
+QList<Java::Runtime> runtimes()
+{
+    return runtimesFromList();
+}
+}  // namespace JavaGather
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 JavaDoctorView::JavaDoctorView(QWidget* parent) : QWidget(parent)

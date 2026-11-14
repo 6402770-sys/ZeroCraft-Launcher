@@ -85,6 +85,14 @@ void ZeroCard::setHoverEnabled(bool enabled)
         m_hover->setActive(false);
 }
 
+void ZeroCard::setFocusRingVisible(bool visible)
+{
+    if (m_focusRing == visible)
+        return;
+    m_focusRing = visible;
+    update();
+}
+
 void ZeroCard::paintEvent(QPaintEvent*)
 {
     const auto& t = Theme::current();
@@ -92,7 +100,7 @@ void ZeroCard::paintEvent(QPaintEvent*)
 
     QColor bg = mix(t.surface, t.surfaceHover, p);
     QColor border = mix(t.border, t.borderStrong, p);
-    if (m_clickable && hasFocus())
+    if (m_clickable && hasFocus() && m_focusRing)
         border = t.accent;
     if (m_pressed)
         bg = t.elevated;

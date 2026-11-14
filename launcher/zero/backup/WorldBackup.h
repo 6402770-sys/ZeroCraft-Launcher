@@ -9,6 +9,7 @@
 // All functions are synchronous: call them from a pool thread (see WorldBackupJobs).
 #pragma once
 
+#include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -47,8 +48,27 @@ struct Hooks {
     std::function<bool(const QString& path)> trashPath;
 };
 
+/// Extras of createBackup() for callers that back up something that is not a world (the instance snapshot of a modpack update, see
+/// PackSnapshot). Every member left empty keeps the world behavior.
+struct Options {
+    /// True leaves a file or a whole folder out. `rel` is relative to the backed-up folder, '/'-separated.
+    std::function<bool(const QString& rel, bool isDir)> exclude;
+    /// File name of the zip inside `backupDir` instead of the generated `<stamp>-<kind>.zip`. The call fails when it already exists.
+    QString fileName;
+    /// Text of the failure when a file has a name that cannot be backed up safely (`rel` = its path); empty = the world wording.
+    std::function<QString(const QString& rel)> unsafeName;
+    /// Stored in the manifest under "extra" (read back with readBackupInfo).
+    QJsonObject extra;
+    /// Polled between files; true stops the backup (nothing is left behind, BackupResult::cancelled is set).
+    std::function<bool()> cancelled;
+    /// Called from the calling thread after every file of each pass with (done, total) over three passes of the data: hashing, writing
+    /// and (once) the verification. Keep it cheap.
+    std::function<void(qint64 done, qint64 total)> progress;
+};
+
 struct BackupResult {
     bool ok = false;
+    bool cancelled = false;
     QString error;
     QString zipPath;
 };
@@ -85,7 +105,26 @@ QString backupDirFor(const QString& dataRoot, const QString& instanceId, const Q
 bool isSafeRelativePath(const QString& path);
 
 /// Backs up `worldFolderPath` into `backupDir` (created when missing). Links are skipped, `session.lock` is excluded. See file header.
-BackupResult createBackup(const QString& worldFolderPath, const QString& backupDir, Kind kind, const BackupMeta& meta, const Hooks& hooks = {});
+BackupResult createBackup(const QString& worldFolderPath, const QString& backupDir, Kind kind, const BackupMeta& meta, const Hooks& hooks = {},
+                          const Options& options = {});
+
+/// What the manifest of a backup says (without reading the files). `ok` is false when the zip or its manifest cannot be read.
+struct ManifestInfo {
+    bool ok = false;
+    QString error;
+    qint64 totalBytes = 0;
+    qint64 createdMs = 0;
+    BackupMeta meta;
+    QJsonObject extra;
+};
+ManifestInfo readBackupInfo(const QString& zipPath);
+
+/// Verifies `zipPath` (like verifyBackup), writes every entry below `stagingFolder` (created when missing, paths validated again) and
+/// re-reads the written files against the manifest. On a failure the folder is left as it is: it belongs to the caller.
+VerifyResult extractBackup(const QString& zipPath, const QString& stagingFolder);
+
+/// QDir::rename with a few retries (an indexer or antivirus can hold a handle on a file for a moment). Fails when `to` exists.
+bool renamePath(const QString& from, const QString& to);
 
 /// Newest first. Reads only the manifest of every `*.zip`; `.part` files are ignored; an unreadable zip has valid = false.
 QList<BackupInfo> listBackups(const QString& backupDir);

@@ -60,6 +60,7 @@
 #include "WatchLock.h"
 #include "minecraft/MinecraftInstance.h"
 #include "settings/INISettingsObject.h"
+#include "zero/backup/PackSnapshot.h"  // ZERO
 
 #ifdef Q_OS_WIN32
 #include <windows.h>
@@ -83,6 +84,12 @@ InstanceList::InstanceList(SettingsObject* settings, const QStringList& instDirs
             m_instDirs << canonical;
             m_watcher->addPath(canonical);
         }
+    }
+
+    // ZERO: finish a modpack roll back that was cut off (crash, power loss) before the first discovery, so the player's worlds and the
+    // instance are where they belong when the Library loads (zero/backup/PackSnapshot, recoverInterrupted).
+    for (const auto& dir : m_instDirs) {
+        Zero::Backup::Pack::recoverInterrupted(dir);
     }
 }
 
@@ -523,6 +530,11 @@ QList<InstanceId> InstanceList::discoverInstances()
             if (!QFileInfo::exists(FS::PathCombine(dirInfo.absoluteFilePath(), "instance.cfg"))) {
                 continue;
             }
+            // ZERO: the staging / replaced folders of a modpack roll back (".zero-restore-*", ".zero-replaced-*") hold an instance.cfg too
+            // and are never instances.
+            if (dirInfo.fileName().startsWith(QLatin1String(".zero-"))) {
+                continue;
+            }
             // if it is a symlink, ignore it if it goes to ANY configured instance
             if (dirInfo.isSymLink()) {
                 QFileInfo targetInfo(dirInfo.fileInfo().symLinkTarget());
@@ -635,6 +647,26 @@ void InstanceList::migrateTotalPlayTime()
     APPLICATION->playtimeSettings()->set("TotalPlayTimeMigrated", true);
 
     qDebug() << "Migrated" << existingTotal << "seconds of existing instance playtime into global TotalPlayTime.";
+}
+
+// ZERO: after a modpack roll back replaced the instance folder, the in-memory instance (settings, components, mod lists with their
+// folder watchers) is stale: drop it and let loadList() discover the folder again as a new instance.
+bool InstanceList::reloadInstance(const InstanceId& id)
+{
+    if (auto* old = getInstanceById(id)) {
+        const int row = getInstIndex(old);
+        if (row >= 0) {
+            old->invalidate();
+            beginRemoveRows(QModelIndex(), row, row);
+            m_instances.erase(m_instances.begin() + row);
+            endRemoveRows();
+        }
+    }
+    loadList();
+    if (!getInstanceById(id))
+        return false;
+    emit instanceSelectRequest(id);
+    return true;
 }
 
 void InstanceList::saveNow()

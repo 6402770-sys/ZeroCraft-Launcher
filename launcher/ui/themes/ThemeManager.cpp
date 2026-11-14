@@ -33,8 +33,10 @@
 #include "ui/themes/CustomTheme.h"
 #include "ui/themes/DarkTheme.h"
 #include "ui/themes/SystemTheme.h"
+#include "ui/zero/ZeroCustomTheme.h"
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/ZeroTransition.h"
+#include "zero/theme/CustomTheme.h"
 
 #include "Application.h"
 #include "settings/SettingsObject.h"
@@ -176,7 +178,14 @@ void ThemeManager::initializeWidgets()
          QDirListing(m_applicationThemeFolder.path(), QDirListing::IteratorFlag::DirsOnly | QDirListing::IteratorFlag::ResolveSymlinks)) {
         QDir dir(directoryEntry.filePath());
         QFileInfo themeJson(dir.absoluteFilePath("theme.json"));
-        if (themeJson.exists()) {
+        if (dir.dirName().startsWith(QLatin1Char('.'))) {
+            continue;  // e.g. a ".zero-import-*" staging folder left behind by an interrupted import
+        }
+        if (QFileInfo::exists(dir.absoluteFilePath(Zero::Custom::kDefinitionFile))) {
+            // ZERO custom theme (zero-theme.json): checked before the Prism theme.json branch
+            themeDebugLog() << "Loading ZERO custom theme from:" << dir.absolutePath();
+            loadCustomTheme(dir.absolutePath());
+        } else if (themeJson.exists()) {
             // Load "theme.json" based themes
             themeDebugLog() << "Loading JSON Theme from:" << themeJson.absoluteFilePath();
             addTheme(std::make_unique<CustomTheme>(getTheme(darkThemeId), themeJson, true));
@@ -414,6 +423,37 @@ void ThemeManager::initializeCatPacks()
         } else {
             loadFiles(dir);
         }
+    }
+}
+
+QString ThemeManager::loadCustomTheme(const QString& folder)
+{
+    auto theme = Zero::ZeroCustomTheme::load(folder);
+    if (!theme)
+        return {};  // already logged; the theme is skipped, never fatal
+    const QString id = theme->id();
+    const bool replacing = m_themes.contains(id);
+    if (replacing && !Zero::Custom::isCustomThemeId(id)) {
+        themeWarningLog() << "Custom theme(" << id << ") not loaded to prevent id duplication";
+        return {};
+    }
+    m_themes[id] = std::move(theme);  // replaces the same folder's earlier load
+    // An edit to the theme that is on screen shows at once (same id: no transition).
+    if (replacing && APPLICATION->settings()->get("ApplicationTheme").toString() == id)
+        setApplicationTheme(id, false);
+    return id;
+}
+
+void ThemeManager::removeCustomTheme(const QString& id)
+{
+    if (!Zero::Custom::isCustomThemeId(id) || !m_themes.contains(id))
+        return;
+    const bool wasActive = APPLICATION->settings()->get("ApplicationTheme").toString() == id;
+    m_themes.erase(id);
+    if (wasActive) {
+        // The theme in use is gone: fall back to the ZERO default.
+        APPLICATION->settings()->set("ApplicationTheme", QString::fromLatin1(Zero::kDefaultThemeId));
+        setApplicationTheme(QString::fromLatin1(Zero::kDefaultThemeId), false);
     }
 }
 

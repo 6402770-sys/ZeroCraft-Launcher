@@ -12,6 +12,7 @@
 //  - mcVersion: Minecraft version strings ("1.20.1")
 //  - loader (modpacks, mods): "fabric" | "forge" | "neoforge" | "quilt"
 //  - platform (shaders): "iris" | "optifine" | "canvas" | "vanilla" (Modrinth loader tags)
+//  - worlds (CurseForge only, no provider facet): Minecraft version + category
 //  - category / feature: provider category ids (ModPlatform::Category::id: Modrinth slugs, CurseForge numeric ids)
 //  - resolution: Modrinth resolution tags ("8x-", "16x", ... "512x+")
 //  - performance: Modrinth performance tags ("potato", "low", "medium", "high", "screenshot")
@@ -32,7 +33,7 @@
 
 namespace Zero::Content {
 
-enum class Kind { Modpack, Mod, ResourcePack, Shader };
+enum class Kind { Modpack, Mod, ResourcePack, Shader, World };
 enum class Provider { Modrinth, CurseForge, Technic };
 enum class FacetKind { Single, Multi, Toggle };
 enum class FacetSide { Server, Client };
@@ -147,11 +148,14 @@ std::optional<ResourceAPI::SortingMethod> sortingFor(const QString& sortId, cons
 /// Modrinth: loaders and versions OR-ed in their facet groups, every category-like facet one OR group in `categoryGroups`,
 /// shader platforms as category tags, environment as `side`. CurseForge: only the first selected Minecraft version (its
 /// search takes one), loaders as `modLoaderTypes`, categories as `categoryIds`. Technic: type, offset and query only.
+/// `facets` (facetsFor for this provider) decides which category-like values are sent: a value the provider's facet does not
+/// offer (picked under another provider) stays in the state, shown as inactive, but is never sent.
 ResourceAPI::SearchArgs toSearchArgs(const FilterState& state,
                                      Kind kind,
                                      Provider provider,
                                      int offset,
-                                     const QList<ResourceAPI::SortingMethod>& providerMethods);
+                                     const QList<ResourceAPI::SortingMethod>& providerMethods,
+                                     const QList<Facet>& facets);
 
 /// What the client predicate knows about one loaded item.
 struct ItemFacts {
@@ -164,7 +168,8 @@ struct ItemFacts {
 };
 
 /// The Client facets, plus the server facets the item's provider could not apply in full (CurseForge: Minecraft version
-/// and loader, checked as "any of the selected values"). Disabled facets never filter. Unknown data (an empty list) never
+/// and loader, checked as "any of the selected values" - not when exactly one value was selected: the server applied it
+/// and CurseForge's file index is partial). Disabled facets never filter. Unknown data (an empty list) never
 /// excludes an item.
 bool matchesClient(const FilterState& state, const QList<Facet>& facets, const ItemFacts& item);
 

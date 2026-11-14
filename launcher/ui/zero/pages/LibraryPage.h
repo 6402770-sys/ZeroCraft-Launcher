@@ -30,6 +30,7 @@ class ItemReveal;
 }
 
 class FilterChipBar;
+class LibraryImportButton;
 class InstanceTableModel;
 class ZeroEmptyState;
 
@@ -75,11 +76,16 @@ class LibraryPage : public ShellPage {
     void changeIconRequested();
     void favoriteToggleRequested();
     void checkModsRequested();
+    void boostPerformanceRequested();
+    /// The details panel Export button: the caller opens the export chooser for that instance.
+    void exportRequested(const QString& instanceId);
+    void rollbackRequested();
     void setArtworkRequested();
     void removeArtworkRequested();
 
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
    private:
     void setViewMode(bool list);    // crossfades when the mode changes
@@ -112,6 +118,7 @@ class LibraryPage : public ShellPage {
     QAbstractButton* m_gridButton;
     QAbstractButton* m_listButton;
     QPushButton* m_newButton;
+    LibraryImportButton* m_importButton = nullptr;
     QAction* m_searchAction = nullptr;
 
     QStackedWidget* m_body;  // 0 = collection, 1 = library empty

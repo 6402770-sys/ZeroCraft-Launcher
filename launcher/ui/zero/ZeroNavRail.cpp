@@ -4,6 +4,7 @@
 #include <QPixmap>
 #include <QtMath>
 #include <QAbstractButton>
+#include <QFileInfo>
 #include <QFocusEvent>
 #include <QFontMetrics>
 #include <QIcon>
@@ -209,13 +210,27 @@ class RailHeader : public QWidget {
         const int contentH = height() - 1;
         const bool wide = width() >= kLabelMinWidth;
         // Pixel themes draw the pixel-art mark at a whole multiple of its 16 px grid (crisp at every scale factor).
-        const bool pixelMark = t.id == QLatin1String("minecraft");
+        // A theme with its own launcher icon draws that instead of either mark.
+        const bool customMark = !t.appIcon.isEmpty() && QFileInfo(t.appIcon).isFile();
+        const bool pixelMark = !customMark && t.styleId() == QLatin1String("minecraft");
         const qreal dpr = devicePixelRatioF();
         const int markDevice = pixelMark ? qMax(16, qRound(kPixelLogoSize * dpr / 16.0) * 16) : 0;
         const int logoSize = pixelMark ? qCeil(markDevice / dpr) : kLogoSize;
         const int logoX = wide ? kPillInset + kIconPad - (logoSize - kLogoSize) / 2 : (width() - logoSize) / 2;
         const QRect logo(logoX, (contentH - logoSize) / 2, logoSize, logoSize);
-        if (pixelMark) {
+        if (customMark) {
+            // Cached by path and modification time: the file can change while the editor is open.
+            static QString cachedPath;
+            static qint64 cachedStamp = 0;
+            static QIcon cachedIcon;
+            const qint64 stamp = QFileInfo(t.appIcon).lastModified().toMSecsSinceEpoch();
+            if (cachedPath != t.appIcon || cachedStamp != stamp) {
+                cachedPath = t.appIcon;
+                cachedStamp = stamp;
+                cachedIcon = QIcon(t.appIcon);
+            }
+            cachedIcon.paint(&p, logo);
+        } else if (pixelMark) {
             static const QIcon pixel(QStringLiteral(":/zero/zero-logo-minecraft.svg"));
             QPixmap pm = pixel.pixmap(QSize(markDevice, markDevice), 1.0);
             pm.setDevicePixelRatio(dpr);

@@ -41,12 +41,14 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 
 #include <QMainWindow>
 #include <QProcess>
 #include <QTimer>
 
 #include "minecraft/auth/MinecraftAccount.h"
+#include "zero/content/CartInstall.h"
 
 class EditableLabel;
 class LaunchController;
@@ -64,8 +66,17 @@ class InstanceTask;
 class QMenu;
 
 namespace Zero {
+class ExportChooserDialog;  // ZERO
 class HomePage;
 class LibraryPage;
+class DiscoverPage;  // ZERO
+namespace Content {
+struct ModpackItem;  // ZERO
+enum class Kind;  // ZERO (zero/content/ContentFilter.h)
+class ModInstallDialog;  // ZERO
+class CartReviewDialog;  // ZERO
+class ModpackInstallDialog;  // ZERO
+}  // namespace Content
 class WorldsPage;  // ZERO
 class ScreenshotsPage;  // ZERO
 class ServersPage;  // ZERO
@@ -77,6 +88,12 @@ class ZeroCommandPalette;
 class ZeroShortcutSheet;
 struct PaletteCommand;
 struct ShortcutGroup;
+namespace Perf {
+class PerformanceDialog;  // ZERO
+}
+namespace Create {
+class CreateInstanceDialog;  // ZERO
+}
 }  // namespace Zero
 
 namespace Ui {
@@ -103,6 +120,52 @@ class MainWindow : public QMainWindow {
 
     /// Dev aid (`--zero-screenshot`): shows `page` ("home", "library" or "tools"), grabs the window to `path` and quits.
     void zeroScreenshot(const QString& path, const QString& page);
+    /// ZERO: opens the Discover page on `section` ("modpacks" | "mods" | "resourcepacks" | "shaders" | "worlds"; empty = the remembered one) with `provider` ("modrinth" | "curseforge" | "technic" | empty) preselected.
+    void showDiscover(const QString& section, const QString& provider = {});
+    /// Discover > Mods with this instance as the target (the instance window's "Add mods"); raises the main window.
+    /// `query` (optional) becomes the search text of Discover > Mods (the Mods page's "Find" for a missing dependency).
+    void showDiscoverMods(const QString& instanceId, const QString& query = QString());
+    /// Discover > Resource Packs with this instance as the target (the packs page of the instance window); raises the main window.
+    void showDiscoverPacks(const QString& instanceId, const QString& query = QString());
+    /// Discover > Shaders with this instance as the target; raises the main window.
+    void showDiscoverShaders(const QString& instanceId, const QString& query = QString());
+    /// Discover > Worlds with this instance as the target (only when the build has a CurseForge key); raises the main window.
+    void showDiscoverWorlds(const QString& instanceId, const QString& query = QString());
+    /// ZERO: the Install / Update of a Discover modpack. Shows the install review, then runs the provider's task while the dialog is
+    /// alive (its tasks parent their own dialogs to it); a toast with "Show in Library" follows a successful install.
+    void installModpack(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& updateInstanceId);
+    /// ZERO: the Add / Update of a Discover mod (`installedFileId` non-empty = update that file). Shows the review dialog (version, dependencies),
+    /// downloads the chosen mods like ModFolderPage does, reads the mods folder again and toasts "Added ... to <instance>" with "Show mods".
+    void installMod(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId, const QString& installedFileId);
+    /// ZERO: the Add / Update of a Discover resource pack: the review dialog (version only), one ResourceDownloadTask into the instance's
+    /// `resourcePackList()`, the folder read again, a toast "Added ... to <instance>". Packs are never turned on here (that is the packs page).
+    void installResourcePack(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId, const QString& installedFileId);
+    /// ZERO: the Add / Update of a Discover shader: the same flow as a resource pack over `shaderPackList()` (no "Turn it on": the game
+    /// picks the shader), toast "Added ... to <instance>" with "Show shaders".
+    void installShaderPack(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId, const QString& installedFileId);
+    /// ZERO: the Add of a Discover world (CurseForge). The review dialog (file, version note), then ONE task under a ProgressDialog: a NetJob
+    /// downloads the zip into `<instance>/.zero/world-download/` (CurseForge's hash checked), Prism's `worldList()->createInstallWorldTask`
+    /// unpacks the folder with level.dat into `saves/`; the zip is deleted whatever happens. Refused while the target runs. Toast
+    /// "Added ... to <instance>" with "Show worlds".
+    void installWorld(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId);
+    /// ZERO: "Review and add to <instance>" of Discover's selection bar. Shows the cart review (versions, dependencies of all the mods together),
+    /// downloads everything in one task into the mods / resourcepacks / shaderpacks folders of the target, turns the resource packs on (one
+    /// options.txt write) and toasts "Added 3 mods and 1 shader to <instance>" with "Show". Added entries leave the cart; failed ones stay.
+    void installCart();
+    /// ZERO: what runInstallPlan() did: `done` = the downloads whose task succeeded (a failed or never-run one is not in it), `packFiles` = the
+    /// resource pack files to turn on, `instanceGone` = the instance disappeared meanwhile (nothing else is valid).
+    struct PlanRun {
+        Zero::Content::CartInstallPlan done;
+        QStringList packFiles;
+        bool instanceGone = false;
+    };
+    /// ZERO: the download half of installCart() (one ConcurrentTask under a ProgressDialog, folders read again), shared with Boost performance.
+    PlanRun runInstallPlan(const QString& targetInstanceId, const Zero::Content::CartInstallPlan& plan);
+    /// ZERO: "Boost performance" of an instance (Library details button, command palette): the dialog, the mods through runInstallPlan(), the
+    /// memory settings, the toast "Boosted <instance>" with "Show mods"; "Fix" of its Java line opens Tools > Java Doctor.
+    void boostPerformance(const QString& instanceId);
+    /// ZERO: the Library Export button. Asks Full copy / Modrinth pack / CurseForge pack, then opens that Prism export dialog.
+    void exportInstanceZero(const QString& instanceId);
     void recordTransitionFrames(const QString& path, const std::function<void()>& trigger, const std::function<void()>& done);
    signals:
     void isClosing();
@@ -160,6 +223,7 @@ class MainWindow : public QMainWindow {
     void on_actionManageSkins_triggered();
 
     void on_actionManageAccounts_triggered();
+    void addAccountZero();  // ZERO: the Add account dialog
 
     void on_actionReportBug_triggered();
 
@@ -249,11 +313,23 @@ class MainWindow : public QMainWindow {
     void refreshCurrentInstance();
 
    private:
+    /// The one body of installResourcePack / installShaderPack (`kind` = Kind::ResourcePack or Kind::Shader).
+    void installFolderContent(Zero::Content::Kind kind, const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId,
+                              const QString& installedFileId);
     void retranslateUi();
 
     void updateInstanceToolBarOrientation(Qt::Orientation orientation);
 
     void addInstance(const QString& url = QString(), const QMap<QString, QString>& extra_info = {}, const QString& initialPage = QString());
+    // ZERO: the classic New Instance dialog (deep links, classic pages) and the ZERO Create Instance dialog
+    void addInstanceClassic(const QString& groupName, const QString& url, const QMap<QString, QString>& extra_info, const QString& initialPage);
+    void addInstanceZero(const QString& groupName, bool import);
+    void zeroScreenshotCreate(const QString& path, const QString& kind);
+    void zeroScreenshotInstance(const QString& path, const QString& spec);
+    void zeroScreenshotRollback(const QString& path, const QString& instanceId);
+    // ZERO: safe modpack update (docs/zero/ARCHITECTURE.md, "Modpack snapshots")
+    bool saveCopyBeforeModpackUpdate(const QString& instanceId, const QString& newVersion, QString* zipPath);
+    void rollBackModpackUpdate(const QString& instanceId);
     void setCatBackground(bool enabled);
     void updateCatState();
     void updateInstanceToolIcon(QString new_icon);
@@ -270,6 +346,7 @@ class MainWindow : public QMainWindow {
     void setupZeroShell();
     void hideLegacyChrome();
     void updateAccountChip();
+    static QString accountChipSubtitle(AccountType type);  // ZERO: "Microsoft account" / "Ely.by account" / "Offline"
     void showAccountMenu(const QPoint& anchor);
     void showMoreMenu(const QPoint& anchor);
     void setupCommandPalette();
@@ -304,6 +381,7 @@ class MainWindow : public QMainWindow {
     Zero::ZeroShell* m_shell = nullptr;
     Zero::HomePage* m_home = nullptr;
     Zero::LibraryPage* m_library = nullptr;
+    Zero::DiscoverPage* m_discover = nullptr;  // ZERO
     Zero::WorldsPage* m_worlds = nullptr;  // ZERO
     Zero::ScreenshotsPage* m_screenshots = nullptr;  // ZERO
     Zero::ServersPage* m_servers = nullptr;  // ZERO
@@ -312,7 +390,20 @@ class MainWindow : public QMainWindow {
     Zero::ZeroSettingsPage* m_settingsPage = nullptr;
     Zero::ZeroCommandPalette* m_palette = nullptr;
     Zero::ZeroShortcutSheet* m_shortcutSheet = nullptr;
+    QAction* m_actionAddAccount = nullptr;  // ZERO: "Add account..." in the account menu
     QList<QAction*> m_accountActions;  // per-account actions (they carry the Ctrl+N shortcuts), recreated on repopulate
+    // ZERO: dev screenshot aid only (ZERO_SCREENSHOT_CREATE): called with the Create Instance dialog before it is shown
+    std::function<void(Zero::Create::CreateInstanceDialog*)> m_zeroCreateHook;
+    // ZERO: dev screenshot aid only (ZERO_SCREENSHOT_DISCOVER_INSTALL): called with the modpack install dialog before it is shown
+    std::function<void(Zero::Content::ModpackInstallDialog*)> m_zeroInstallHook;
+    // ZERO: dev screenshot aid only (ZERO_SCREENSHOT_DISCOVER_INSTALL with the Mods section): called with the mod install dialog before it is shown
+    std::function<void(Zero::Content::ModInstallDialog*)> m_zeroModInstallHook;
+    // ZERO: dev screenshot aid only (ZERO_SCREENSHOT_DISCOVER_CART_REVIEW): called with the cart review before it is shown
+    std::function<void(Zero::Content::CartReviewDialog*)> m_zeroCartHook;
+    // ZERO: dev screenshot aid only (ZERO_SCREENSHOT_BOOST): called with the Boost performance dialog before it is shown
+    std::function<void(Zero::Perf::PerformanceDialog*)> m_zeroBoostHook;
+    // ZERO: dev screenshot aid only (ZERO_SCREENSHOT_EXPORT): called with the export chooser before it is shown
+    std::function<void(Zero::ExportChooserDialog*)> m_zeroExportHook;
 
     unique_qobject_ptr<NewsChecker> m_newsChecker;
 

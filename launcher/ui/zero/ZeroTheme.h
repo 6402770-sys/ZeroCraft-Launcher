@@ -12,11 +12,13 @@ namespace Zero {
 void setThemeActive(bool active);
 bool isThemeActive();
 
-/// True for the ids of every built-in ZERO theme ("zero-obsidian", "zero-minecraft", ...).
+/// True for the ids of every ZERO theme: the built-ins ("zero-obsidian", "zero-minecraft") and the user's custom ones
+/// ("zero-custom-<slug>").
 bool isZeroThemeId(const QString& id);
 
-/// The ThemeSpec behind a built-in ZERO theme id (before user settings such as motion are merged in). False for ids
-/// that are not ZERO themes. Used by the Appearance page to preview a theme without applying it.
+/// The ThemeSpec behind a ZERO theme id (before user settings such as motion are merged in). Custom ids are answered from
+/// the themes ThemeManager has loaded. False for ids that are not (loaded) ZERO themes. Used by the Appearance page to
+/// preview a theme without applying it.
 bool specForThemeId(const QString& id, ThemeSpec* out);
 
 /// Applies a ZERO ThemeSpec app-wide: Fusion base style, palette, base font and the generated stylesheet.
@@ -58,10 +60,18 @@ class ZeroMinecraftTheme : public ZeroTheme {
     ThemeSpec baseSpec() override;
 };
 
+/// Applies `spec` app-wide exactly like ZeroTheme::apply does for a built-in theme (spec -> Theme::setCurrent, Fusion base style,
+/// palette, generated stylesheet, role fonts), without registering anything with ThemeManager and without a transition. The
+/// motion setting is merged into the spec. For live previews (the theme editor); the caller restores the real theme afterwards.
+void applySpecLive(const ThemeSpec& spec);
+
 /// The ZERO default theme: Minecraft (first start, empty setting, first card on the Appearance page).
 inline constexpr const char* kDefaultThemeId = ZeroMinecraftTheme::kId;
 
-/// Resource path of the app mark that matches the active theme (the pixel-art mark under the Minecraft theme).
+/// The app mark file a theme shows: its own icon when it has one (and the file exists), else the mark of its base theme (the pixel-art
+/// mark for a Minecraft one).
+QString logoPathFor(const ThemeSpec& spec);
+/// Path of the app mark that matches the active theme: logoPathFor(the current spec) while a ZERO theme is active, else the plain mark.
 QString appLogoPath();
 /// The app mark of the active theme (window / taskbar icon, rail header).
 QIcon appLogo();

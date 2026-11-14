@@ -234,6 +234,22 @@ class ModHealthTest : public QObject {
         row("yes-beats-unknown-in-or", "1.20", "1.20 || abc", "Y");
         row("unknown-in-or", "1.21", "1.20 || abc", "U");
         row("wildcard-with-operator", "1.20.1", ">=1.x", "U");
+        // a trailing "-" is the lowest pre-release of that version (Mod Menu: "minecraft": ">=1.19.4-")
+        row("lowest-ge-yes", "1.21.1", ">=1.19.4-", "Y");
+        row("lowest-ge-equal", "1.19.4", ">=1.19.4-", "Y");
+        row("lowest-ge-prerelease", "1.19.4-beta.1", ">=1.19.4-", "Y");
+        row("lowest-ge-no", "1.19.3", ">=1.19.4-", "N");
+        row("lowest-lt-yes", "1.19.3", "<1.19.4-", "Y");
+        row("lowest-lt-no", "1.19.4", "<1.19.4-", "N");
+        row("lowest-lt-prerelease", "1.19.4-rc1", "<1.19.4-", "N");
+        row("lowest-gt-yes", "1.21", ">1.19.4-", "Y");
+        row("lowest-gt-prerelease", "1.19.4-rc1", ">1.19.4-", "U");
+        row("lowest-le-below", "1.19.3", "<=1.19.4-", "Y");
+        row("lowest-le-equal", "1.19.4", "<=1.19.4-", "N");
+        row("lowest-range", "1.20.1", ">=1.19.4- <1.21-", "Y");
+        row("lowest-range-upper", "1.21", ">=1.19.4- <1.21-", "N");
+        row("lowest-caret", "1.20.1", "^1.19.4-", "Y");
+        row("lowest-snapshot", "23w13a", ">=1.19.4-", "U");
     }
     void fabricPredicate()
     {
@@ -290,6 +306,8 @@ class ModHealthTest : public QObject {
         QCOMPARE(describePredicate(QStringLiteral("[1.20,)"), true), QStringLiteral("1.20 or newer"));
         QCOMPARE(describePredicate(QStringLiteral("[1.20,1.21)"), true), QStringLiteral("1.20 up to, but not including, 1.21"));
         QCOMPARE(describePredicate(QStringLiteral("*"), false), QStringLiteral("any version"));
+        QCOMPARE(describePredicate(QStringLiteral(">=1.19.4-"), false), QStringLiteral("1.19.4 or newer"));
+        QCOMPARE(describePredicate(QStringLiteral("<1.21- >=1.19.4-"), false), QStringLiteral("older than 1.21 and 1.19.4 or newer"));
     }
 
     // ---------------------------------------------------------------------------------------------------- parsers

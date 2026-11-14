@@ -2,14 +2,20 @@
 #include "AppearancePage.h"
 
 #include <QButtonGroup>
+#include <QDebug>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QPainter>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QVariantAnimation>
+#include <algorithm>
 #include "Application.h"
 #include "settings/Setting.h"
 #include "settings/SettingsObject.h"
@@ -24,6 +30,10 @@
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
+#include "ui/zero/pages/ThemeEditorPanel.h"
+#include "ui/zero/pages/ThemeLibrary.h"
+#include "zero/theme/ThemeArchive.h"
+#include "zero/theme/ThemeEditorModel.h"
 
 namespace Zero {
 
@@ -198,9 +208,10 @@ class ThemePreview : public QWidget {
         connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
     }
 
-    void setSpec(const ThemeSpec& spec, bool animate)
+    /// `force`: repaint even when the id is the one shown (an edited theme keeps its id).
+    void setSpec(const ThemeSpec& spec, bool animate, bool force = false)
     {
-        if (spec.id == m_to.id && m_t >= 1.0)
+        if (!force && spec.id == m_to.id && m_t >= 1.0)
             return;
         m_anim.stop();
         const int ms = animate ? Motion::duration(Tokens::durBase) : 0;
@@ -259,22 +270,27 @@ class SwatchRow : public QWidget {
     SwatchRow(const ThemeSpec& spec, QWidget* parent) : QWidget(parent), m_spec(spec)
     {
         setFixedHeight(24);
-        setMinimumWidth(4 * 32 + 3 * 6);
+        setMinimumWidth(4 * 14 + 3 * 4);  // narrower cards (the editor panel is open) squeeze the swatches
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     }
+
+    QSize sizeHint() const override { return { 4 * 32 + 3 * 6, 24 }; }
 
    protected:
     void paintEvent(QPaintEvent*) override
     {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing, true);
-        const QColor colors[4] = { m_spec.bg, m_spec.surface, m_spec.accent, m_spec.accent2 };
-        int x = 0;
+        const QColor colors[4] = { m_spec.bg, m_spec.surfaceSolid(), m_spec.accent, m_spec.accent2 };
+        const qreal gap = width() >= 4 * 32 + 3 * 6 ? 6.0 : 4.0;
+        const qreal w = std::min<qreal>(32.0, (width() - 3 * gap) / 4.0);
+        qreal x = 0;
         for (const QColor& c : colors) {
-            const QRectF r(x + 0.5, 0.5, 31, 23);
+            const QRectF r(x + 0.5, 0.5, w - 1, 23);
             p.setBrush(c);
             p.setPen(QPen(m_spec.borderStrong, 1));
             p.drawPath(Paint::panelPath(r, m_spec.radiusSm, m_spec.corners));
-            x += 38;
+            x += w + gap;
         }
     }
 
@@ -285,7 +301,7 @@ class SwatchRow : public QWidget {
 /// Selectable card for one theme: swatches, name, tooltip text and a "Current" badge.
 class ThemeCard : public ZeroCard {
    public:
-    ThemeCard(const QString& id, const ThemeSpec& spec, const QString& name, const QString& description, QWidget* parent)
+    ThemeCard(const QString& id, const ThemeSpec& spec, const QString& name, const QString& description, bool custom, QWidget* parent)
         : ZeroCard(parent), m_id(id), m_spec(spec)
     {
         setClickable(true);
@@ -293,15 +309,35 @@ class ThemeCard : public ZeroCard {
         auto* lay = new QVBoxLayout(this);
         lay->setContentsMargins(Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg);
         lay->setSpacing(Tokens::spaceSm);
-        auto* top = new QHBoxLayout;
+        // The top row has the same height on every card (the options button of a custom theme is taller than the swatches), so
+        // the names line up across a row of cards.
+        auto* topRow = new QWidget(this);
+        topRow->setFixedHeight(28);
+        auto* top = new QHBoxLayout(topRow);
         top->setContentsMargins(0, 0, 0, 0);
-        top->addWidget(new SwatchRow(spec, this), 0, Qt::AlignLeft);
+        top->addWidget(new SwatchRow(spec, topRow), 0, Qt::AlignLeft | Qt::AlignVCenter);
         top->addStretch(1);
-        m_badge = new QLabel(tr("Current"), this);
+        if (custom) {
+            // Options of a user-made theme (Edit, Duplicate, Export, Delete); keyboard reachable, left of the "Current" badge.
+            m_menu = new QToolButton(topRow);
+            Style::setProperty(m_menu, "zeroVariant", "ghost");
+            Style::setProperty(m_menu, "zeroSize", "icon");
+            m_menu->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            m_menu->setIconSize(QSize(16, 16));
+            m_menu->setFixedSize(28, 28);
+            m_menu->setCursor(Qt::PointingHandCursor);
+            m_menu->setToolTip(tr("Theme options"));
+            m_menu->setAccessibleName(tr("Theme options for %1").arg(name));
+            const auto tint = [this]() { m_menu->setIcon(Icons::icon(QStringLiteral("ellipsis"), Theme::current().textSecondary)); };
+            tint();
+            connect(&Theme::instance(), &Theme::changed, m_menu, tint);
+            top->addWidget(m_menu);
+        }
+        m_badge = new QLabel(tr("Current"), topRow);
         Style::setProperty(m_badge, "zeroBadge", "neutral");
         m_badge->hide();
         top->addWidget(m_badge);
-        lay->addLayout(top);
+        lay->addWidget(topRow);
         lay->addWidget(makeLabel(name, Role::Heading, this));
         auto* desc = makeLabel(description, Role::Caption, this, true);
         desc->setWordWrap(true);
@@ -313,6 +349,8 @@ class ThemeCard : public ZeroCard {
 
     QString id() const { return m_id; }
     const ThemeSpec& spec() const { return m_spec; }
+    /// The "..." options button; null for the built-in themes.
+    QToolButton* menuButton() const { return m_menu; }
     void setCurrent(bool current) { m_badge->setVisible(current); }
     void setSelected(bool selected)
     {
@@ -338,6 +376,7 @@ class ThemeCard : public ZeroCard {
     QString m_id;
     ThemeSpec m_spec;
     QLabel* m_badge;
+    QToolButton* m_menu = nullptr;
     bool m_selected = false;
 };
 
@@ -345,8 +384,9 @@ class ThemeCard : public ZeroCard {
 
 AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
 {
-    auto* pageLay = new QVBoxLayout(this);
+    auto* pageLay = new QHBoxLayout(this);  // [page | theme editor panel]
     pageLay->setContentsMargins(0, 0, 0, 0);
+    pageLay->setSpacing(0);
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -355,7 +395,7 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
     scroll->setWidget(inner);
     inner->setAutoFillBackground(false);
     scroll->viewport()->setAutoFillBackground(false);
-    pageLay->addWidget(scroll);
+    pageLay->addWidget(scroll, 1);
 
     auto* outerRow = new QHBoxLayout(inner);
     outerRow->setContentsMargins(Tokens::spaceXl, Tokens::spaceXl, Tokens::spaceXl, Tokens::spaceXl);
@@ -370,15 +410,31 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
     col->setSpacing(0);
 
     // ----- Theme -----
-    col->addWidget(makeLabel(tr("Theme"), Role::Heading, column));
+    auto* themeHead = new QHBoxLayout;
+    themeHead->setContentsMargins(0, 0, 0, 0);
+    themeHead->setSpacing(Tokens::spaceSm);
+    themeHead->addWidget(makeLabel(tr("Theme"), Role::Heading, column), 1);
+    auto* createButton = new QPushButton(tr("Create theme"), column);
+    Style::setProperty(createButton, "zeroVariant", "secondary");
+    createButton->setCursor(Qt::PointingHandCursor);
+    createButton->setAccessibleName(tr("Create theme"));
+    themeHead->addWidget(createButton);
+    auto* importButton = new QPushButton(tr("Import\u2026"), column);
+    Style::setProperty(importButton, "zeroVariant", "ghost");
+    importButton->setCursor(Qt::PointingHandCursor);
+    importButton->setAccessibleName(tr("Import theme"));
+    themeHead->addWidget(importButton);
+    col->addLayout(themeHead);
     col->addSpacing(Tokens::spaceMd);
     m_preview = new ThemePreview(column);
     col->addWidget(m_preview);
     col->addSpacing(Tokens::spaceLg);
     m_cardRow = new QWidget(column);
-    auto* cards = new QHBoxLayout(m_cardRow);
-    cards->setContentsMargins(0, 0, 0, 0);
-    cards->setSpacing(Tokens::spaceLg);
+    m_cardGrid = new QGridLayout(m_cardRow);
+    m_cardGrid->setContentsMargins(0, 0, 0, 0);
+    m_cardGrid->setSpacing(Tokens::spaceLg);
+    for (int c = 0; c < 3; ++c)
+        m_cardGrid->setColumnStretch(c, 1);
     col->addWidget(m_cardRow);
     col->addSpacing(Tokens::spaceLg);
 
@@ -388,6 +444,8 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
     m_apply = new QPushButton(tr("Apply theme"), column);
     Style::setProperty(m_apply, "zeroVariant", "primary");
     connect(m_apply, &QPushButton::clicked, this, [this]() {
+        if (m_editor && m_editor->isOpen())
+            m_editor->cancel();  // the editor's live look would otherwise fight the theme being applied
         if (!m_selectedId.isEmpty() && m_selectedId != m_currentId)
             emit applyThemeRequested(m_selectedId);
     });
@@ -447,6 +505,30 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
     col->addLayout(moreRow);
     col->addStretch(1);
 
+    // Custom themes: the editor panel (right of the page) and the file actions behind it.
+    auto* themes = APPLICATION->themeManager();
+    ThemeLibrary::Hooks hooks;
+    hooks.themesRoot = themes->getApplicationThemesFolder().absolutePath();
+    hooks.loadTheme = [](const QString& folder) { return APPLICATION->themeManager()->loadCustomTheme(folder); };
+    hooks.removeTheme = [](const QString& id) { APPLICATION->themeManager()->removeCustomTheme(id); };
+    hooks.applyTheme = [this](const QString& id) { emit applyThemeRequested(id); };
+    hooks.reapplyTheme = [](const QString& id) {
+        APPLICATION->themeManager()->setApplicationTheme(id.isEmpty() ? QString::fromLatin1(kDefaultThemeId) : id, false);
+    };
+    hooks.activeThemeId = [this]() { return currentThemeId(); };
+    m_library = new ThemeLibrary(std::move(hooks), this, this);
+    m_editor = new ThemeEditorPanel(m_library, this);
+    pageLay->addWidget(m_editor);
+    connect(m_library, &ThemeLibrary::themesChanged, this, [this](const QString& select) { buildThemeCards(select); });
+    connect(m_editor, &ThemeEditorPanel::previewed, this, [this](const ThemeSpec& spec) { m_preview->setSpec(spec, false, true); });
+    connect(m_editor, &ThemeEditorPanel::openChanged, this, [this](bool open) {
+        refreshRings();
+        if (!open)
+            showSelectedInPreview();  // back to the selected card's theme (after Save: the saved theme)
+    });
+    connect(createButton, &QPushButton::clicked, this, [this]() { m_editor->openNew(); });
+    connect(importButton, &QPushButton::clicked, this, [this]() { m_library->importWithDialog(); });
+
     buildThemeCards();
     syncMotion();
 
@@ -470,32 +552,126 @@ QString AppearancePage::currentThemeId() const
     return id.isEmpty() ? QString::fromLatin1(kDefaultThemeId) : id;  // empty = ThemeManager's ZERO default
 }
 
-void AppearancePage::buildThemeCards()
+void AppearancePage::buildThemeCards(const QString& select)
 {
-    auto* lay = qobject_cast<QHBoxLayout*>(m_cardRow->layout());
+    const QString previous = m_selectedId;
+    for (auto* c : std::as_const(m_cards)) {
+        m_cardGrid->removeWidget(c);
+        c->hide();
+        c->deleteLater();
+    }
+    m_cards.clear();
     m_currentId = currentThemeId();
-    for (ITheme* theme : APPLICATION->themeManager()->getValidApplicationThemes()) {
+
+    // The built-in themes first, then the user's own by name.
+    QList<ITheme*> themes = APPLICATION->themeManager()->getValidApplicationThemes();
+    std::stable_sort(themes.begin(), themes.end(), [](ITheme* a, ITheme* b) {
+        const bool ca = Custom::isCustomThemeId(a->id()), cb = Custom::isCustomThemeId(b->id());
+        if (ca != cb)
+            return !ca;
+        return ca && a->name().localeAwareCompare(b->name()) < 0;
+    });
+    int index = 0;
+    for (ITheme* theme : std::as_const(themes)) {
         ThemeSpec spec;
         if (!isZeroThemeId(theme->id()) || !specForThemeId(theme->id(), &spec))
             continue;
-        auto* card = new ThemeCard(theme->id(), spec, theme->name(), theme->tooltip(), m_cardRow);
-        connect(card, &ZeroCard::clicked, this, [this, id = theme->id()]() { selectTheme(id); });
-        lay->addWidget(card, 1);
+        const QString id = theme->id();
+        auto* card = new ThemeCard(id, spec, theme->name(), theme->tooltip(), Custom::isCustomThemeId(id), m_cardRow);
+        connect(card, &ZeroCard::clicked, this, [this, id]() { selectTheme(id); });
+        if (QToolButton* menu = card->menuButton())
+            connect(menu, &QToolButton::clicked, this, [this, id, menu]() { showThemeMenu(id, menu); });
+        m_cardGrid->addWidget(card, index / 3, index % 3);
         m_cards << card;
+        ++index;
     }
-    lay->addStretch(m_cards.size() < 3 ? 3 - m_cards.size() : 0);
-    // Start on the applied theme (or the first card when a non-ZERO theme is active).
-    QString start = m_currentId;
-    bool found = false;
-    for (auto* c : std::as_const(m_cards))
-        found = found || c->id() == start;
-    if (!found && !m_cards.isEmpty())
+    // Selection: what was asked for, else what was selected, else the applied theme (or the first card).
+    const auto has = [this](const QString& id) {
+        return !id.isEmpty() && std::any_of(m_cards.cbegin(), m_cards.cend(), [&id](ThemeCard* c) { return c->id() == id; });
+    };
+    QString start = has(select) ? select : has(previous) ? previous : m_currentId;
+    if (!has(start) && !m_cards.isEmpty())
         start = m_cards.first()->id();
     m_selectedId.clear();
     selectTheme(start);
-    for (auto* c : std::as_const(m_cards))
+    for (auto* c : std::as_const(m_cards)) {
         c->setCurrent(c->id() == m_currentId);
+        if (c->id() == m_selectedId && !(m_editor && m_editor->isOpen()))
+            m_preview->setSpec(c->spec(), false, true);  // an edited theme keeps its id but not its look
+    }
+    refreshRings();
     refreshApplyButton();
+}
+
+void AppearancePage::showThemeMenu(const QString& themeId, QWidget* anchor)
+{
+    QMenu menu(this);
+    const auto& t = Theme::current();
+    auto* edit = menu.addAction(Icons::icon(QStringLiteral("pencil"), t.text), tr("Edit"));
+    auto* duplicate = menu.addAction(Icons::icon(QStringLiteral("copy"), t.text), tr("Duplicate"));
+    auto* exportAction = menu.addAction(Icons::icon(QStringLiteral("upload"), t.text), tr("Export…"));
+    menu.addSeparator();
+    auto* remove = menu.addAction(Icons::icon(QStringLiteral("trash-2"), t.danger), tr("Delete"));
+    const QAction* chosen = menu.exec(anchor->mapToGlobal(QPoint(anchor->width() - menu.sizeHint().width(), anchor->height() + 4)));
+    if (chosen == edit) {
+        m_editor->openEdit(themeId);
+    } else if (chosen == duplicate) {
+        m_library->duplicateTheme(themeId);
+    } else if (chosen == exportAction) {
+        m_library->exportThemeWithDialog(themeId);
+    } else if (chosen == remove) {
+        m_library->deleteTheme(themeId);
+    }
+}
+
+void AppearancePage::paintThemeMenu(QPixmap* shot, QWidget* window, const QString& themeId)
+{
+    for (auto* c : std::as_const(m_cards)) {
+        if (c->id() != themeId || !c->menuButton())
+            continue;
+        QMenu menu(this);
+        const auto& t = Theme::current();
+        menu.addAction(Icons::icon(QStringLiteral("pencil"), t.text), tr("Edit"));
+        menu.addAction(Icons::icon(QStringLiteral("copy"), t.text), tr("Duplicate"));
+        menu.addAction(Icons::icon(QStringLiteral("upload"), t.text), tr("Export…"));
+        menu.addSeparator();
+        menu.addAction(Icons::icon(QStringLiteral("trash-2"), t.danger), tr("Delete"));
+        menu.ensurePolished();
+        menu.resize(menu.sizeHint());
+        const QPixmap picture = menu.grab();
+        QToolButton* anchor = c->menuButton();
+        const QPoint at = anchor->mapTo(window, QPoint(anchor->width() - menu.width(), anchor->height() + 4));
+        QPainter p(shot);
+        p.drawPixmap(at, picture);
+        return;
+    }
+}
+
+void AppearancePage::openThemeEditor(const QString& target)
+{
+    const QStringList parts = target.split(QLatin1Char(','));
+    const QString what = parts.value(0);
+    if (what == QLatin1String("new"))
+        m_editor->openNew();
+    else if (!m_editor->openEdit(what))
+        qWarning() << "ZERO_SCREENSHOT_THEME_EDITOR: unknown custom theme" << what;
+    auto* model = m_editor->model();
+    for (int i = 1; i < parts.size(); ++i) {
+        if (parts[i] == QLatin1String("minecraft"))
+            model->setBase(Custom::Base::Minecraft);
+        else if (parts[i] == QLatin1String("hard"))
+            model->setColor(Custom::MainColor::Text, model->color(Custom::MainColor::Background).lighter(135));  // barely above the background
+        else if (parts[i] == QLatin1String("all"))
+            m_editor->setAllColorsExpanded(true);
+    }
+    m_editor->flushPreview();
+}
+
+void AppearancePage::resizeEvent(QResizeEvent* event)
+{
+    ShellPage::resizeEvent(event);
+    if (m_editor)
+        m_editor->fitTo(event->size().width());
 }
 
 void AppearancePage::selectTheme(const QString& id)
@@ -503,13 +679,33 @@ void AppearancePage::selectTheme(const QString& id)
     if (id == m_selectedId)
         return;
     for (auto* c : std::as_const(m_cards)) {
-        c->setSelected(c->id() == id);
-        if (c->id() == id) {
+        if (c->id() != id)
+            continue;
+        // While the editor is open the big preview shows the theme being edited, not this card.
+        if (!(m_editor && m_editor->isOpen()))
             m_preview->setSpec(c->spec(), !m_selectedId.isEmpty());
-            m_selectedId = id;
-        }
+        m_selectedId = id;
     }
+    refreshRings();
     refreshApplyButton();
+}
+
+void AppearancePage::refreshRings()
+{
+    // The selection ring is on the selected card; while the editor is open it is on the card of the theme being edited (none for a
+    // new theme). The "Current" badge is separate: it always marks the applied theme.
+    const bool editing = m_editor && m_editor->isOpen();
+    const QString ring = editing ? m_editor->editingThemeId() : m_selectedId;
+    for (auto* c : std::as_const(m_cards))
+        c->setSelected(!ring.isEmpty() && c->id() == ring);
+}
+
+void AppearancePage::showSelectedInPreview()
+{
+    for (auto* c : std::as_const(m_cards)) {
+        if (c->id() == m_selectedId)
+            m_preview->setSpec(c->spec(), true, true);
+    }
 }
 
 void AppearancePage::syncCurrent()

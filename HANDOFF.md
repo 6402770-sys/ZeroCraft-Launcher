@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-11 (session 6, Mission 002) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-13 (session 13: Ely.by password + client ID `zerocraft-launcher` done, owner QA pending; see "Session 13" inside Mission 003 › item 9 Release) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -9,8 +9,8 @@ Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Docum
 `docs/zero/DESIGN.md` (read the **Design v2** section at the end) → `docs/zero/SHELL.md` → `filemap.md`.
 
 ## How the owner works
-Speaks Spanish, so reply in Spanish. Runs `/savvy-flow` (Opus orchestrates; `savvy-medium` default, `savvy-careful` for
-delicate UI refactors/security/migration; one worker at a time on a Claude Pro budget). Local commits on
+Speaks Spanish, so reply in Spanish. Runs `/savvy-flow` 1.0 (Opus orchestrates, designs and reviews; `savvy-medium`
+implements ordinary work, `savvy-careful` delicate UI refactors/security/migration; one worker at a time). Local commits on
 `zero-development` are authorized as checkpoints; **never push**. Autonomous decisions are expected; don't ask for
 ordinary engineering choices. Multi-session roadmap: leave every session compiling, tested, committed, documented.
 
@@ -61,6 +61,562 @@ ordinary engineering choices. Multi-session roadmap: leave every session compili
   `PageContainer` (side list with summaries, explanations, option help strip; `ui/zero/ZeroPageNav`, `ZeroPageHelp`) used
   by Settings, the **instance window** (header card, Play/Stop styling) and every page dialog. Then rail tooltips that say
   what each section is for, and selecting a section through accessibility switches the page.
+
+## Mission 003 — Content Experience Rework (session 7, IN PROGRESS)
+Owner brief (pasted in chat, summarised here; binding): redesign **Create Instance**, fix/verify **Technic preview**,
+premium **Modpacks** discovery + install, **Mods** discover + installed manager + Dependency Inspector, **Resource
+Packs** visual gallery + installed order management, **Shaders** cinematic discovery (+ performance labels only from
+real metadata), one shared **ZERO Filter System** for the four sections, **modpack cards must enter from the RIGHT**
+(~24 px, ~320 ms, ~32 ms stagger, OutCubic, only new rows, reduced motion respected), optional Install Queue /
+comparison / collections / What's new. Real data only, no mocks, preserve provider + install engines, English UI.
+Milestones A (Create Instance + common content architecture) → B (Modpacks + Technic) → C (Mods) → D (Resource
+Packs) → E (Shaders) → F (filters/animation polish, Install Queue); per milestone: review, build, test, real-app
+screenshots (both themes, several sizes), **local commit**, update this file. Never push.
+
+**Binding spec written this session: `docs/zero/CONTENT.md`** (architecture layers, IndexedPack fields, Filter System
+state/chips/facets per section, RemoteImageCache, motion numbers, Discover page, Modpacks, Create Instance layout).
+Read it before continuing. Decision since: Provider facet is **single choice** (one source at a time).
+
+State at the time of writing (repo `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`, branch `zero-development`):
+- Baseline before changes: **47/47 ctest + FileSystem 25/25** at `fe4fab8f9`.
+- Committed: `4936eab82` docs(content): `docs/zero/CONTENT.md` + 30 new Lucide icons (sparkles, sliders-horizontal,
+  blocks, layers, sun, gauge, cuboid, file-archive, upload, puzzle, grip-vertical, funnel-x, images, …) in `zero.qrc`.
+- Technic preview: already fixed and committed in `fe4fab8f9` (display name, author, MC/version, cached details,
+  stale answers dropped, inline loading/failure, 43 test cases). Still missing (do it in the Discover Modpacks
+  section, not in the old dialog): logo/background artwork, skeleton while loading, installs/runs, feed as "What's new".
+- **Work that was running when the session hit its limit (uncommitted, verify before trusting):**
+  1. **DONE + committed `635575ec6`** (reviewed, 49/49 ctest + FileSystem 25/25; architect fix: CurseForge with several
+     MC versions sends none and filters on the client). Not yet independently audited (audit task pending). Was:
+     Task "Content core metadata and filters" in the MAIN checkout (files `launcher/modplatform/ModIndex.*`,
+     `ResourceAPI.h`, `modrinth/ModrinthAPI.*`, `ModrinthPackIndex.cpp`, later `flame/*`, new
+     `launcher/zero/content/ContentFilter.*`, `tests/ContentMetadata_test.cpp`, `tests/ContentFilter_test.cpp`,
+     `tests/testdata/ContentMetadata/`). Goal: new `IndexedPack` fields (downloads, follows, categories, gameVersions,
+     loaderNames, gallery, featuredImageUrl, dates, license), `IndexedVersion` fileSize/downloads, `Category::header`,
+     categories for modpack/mod/resourcepack/shader on both APIs, details merge keeps search-hit authors, and the
+     pure `Zero::Content` filter API (facetsFor, FilterState, chipsFor, withoutChip, clearAll, showEverything,
+     needsNewSearch, sortOptions, toSearchArgs, matchesClient, performanceLabel, resolutionsOf). If it is incomplete:
+     `git diff` shows how far it got; finish it, run `scripts/zero/build.sh test`, review, commit.
+  2. Task "Create Instance redesign" in worktree `.claude/worktrees/agent-a3755eb0ef6f0919a` (branch
+     `worktree-agent-a3755eb0ef6f0919a`, from `4936eab82`): `launcher/zero/content/CreateInstanceModel.*` (pure:
+     version filters, loader availability from real meta incl. `net.fabricmc.intermediary` for Fabric/Quilt, name
+     rules), `launcher/ui/zero/create/CreateInstanceDialog.*` + helpers, MainWindow `addInstance` uses it for New /
+     Import (deep links keep `NewInstanceDialog`), dev aid `ZERO_SCREENSHOT_CREATE=<vanilla|modded|modpack|import>`,
+     tests `CreateInstanceModel_test` / `ZeroCreateInstance_test`. Workers do not commit: review its diff there
+     (`git -C <worktree> diff` + untracked files), bring it over (`git -C <worktree> diff | git apply` + copy new
+     files), build + test together, then commit. If the worktree is empty, redo the task from CONTENT.md.
+  - Two older worktrees (`agent-a6232f2ff8a9d1a3e`, `agent-a8cfd5f5596cb9bce`, at `4c18e3954`) are leftovers of
+    session 6; check they hold nothing needed, then remove them with `git worktree remove`.
+  3. Task "Discover kit and Modpacks" **started in the MAIN checkout after `635575ec6`** (uncommitted while running;
+     files `launcher/ui/zero/content/**`, `ui/zero/pages/DiscoverPage.*`, MainWindow Discover hooks, Application
+     metacache base `ZeroContent` + `ZeroDiscover*` settings, `ZeroSkeleton`/`ZeroReveal`, tests `ZeroDiscover_test`).
+     If the session died mid-way: `git status` / `git diff` show the partial state; finish against the description below.
+- **Milestone B scope (task 3):** "Discover kit and Modpacks": `ui/zero/content/` kit
+  (RemoteImageCache with metacache base `ZeroContent`, ContentToolbar, FilterChipStrip, FilterPanel, ContentReveal
+  slide-from-right, skeleton shapes Cards/Gallery/Cinematic), rail page **Discover** after Library (Alt+3; later
+  pages shift by one) with sections Modpacks · Mods · Resource Packs · Shaders, Modpacks section (featured strip
+  from CurseForge "Featured" sort labelled as such, else "Popular on Modrinth"; cards; details panel with gallery,
+  versions, changelog; `ModpackInstallDialog` review → `InstanceImportTask(downloadUrl, true, parent, {pack_id,
+  pack_version_id})` like `ModrinthPage::suggestCurrent`, Technic via `TechnicDetailsStore` + Solder/zip tasks;
+  "Installed" = `BaseInstance::isManagedPack()` + `getManagedPackType/ID`), then wire Create Instance's
+  "Browse all modpacks" and Modrinth/CurseForge/Technic tiles to Discover. Then adversarial review by the orchestrator,
+  real-app screenshots, commit, then Milestone C (Mods).
+### Session 8 live state (owner rule this mission: **NO commits**, owner commits; HANDOFF/MISSION/CONTENT are protected except this section, which the owner asked for)
+Everything below is **uncommitted in the MAIN checkout** on top of `635575ec6`. Worker briefs (self-contained, reusable as-is
+with `/savvy-flow`) are in `.claude/zero-briefs/` (untracked). Old worktrees `agent-a3755…` (Create Instance, already
+copied into main), `agent-a6232…`, `agent-a8cfd…` (earlier kit attempt, already ported) hold nothing needed any more:
+remove them with `git worktree remove --force <path>` once the owner agrees.
+- ✅ **Create Instance** brought over from its worktree, reviewed (screenshots both themes), audited (audit A: no
+  Critical/High) and fixed (`brief-create-fixes.md`: Modded layout, keyboard-only focus ring, provider-safe
+  `toSearchArgs(..., facets)`, `PrismMetaSource` restart guard, remembered kind, Enter/digit keys, name truncation,
+  a11y). Tests `CreateInstanceModel`, `ZeroCreateInstance` (17). Known limit: Prism's inner meta entity tasks can still be
+  started twice if a list is loading elsewhere (same pattern as the classic dialog; a shared app-level `MetaSource` would
+  fix it). CONTENT.md says CurseForge "sends the first" MC version; code sends none when several are selected (spec
+  text to update by the owner).
+- ✅ **Discover kit** (`launcher/ui/zero/content/`: RemoteImageCache, ContentToolbar, FilterChipStrip, FilterPanel,
+  ContentReveal, ContentStates; ZeroSkeleton Cards/Gallery/Cinematic; metacache base `ZeroContent`; test `ZeroContentKit`).
+  Visual review pending until the page exists. Not in the kit: rows dimmed to 0.5 during a pending search (page task).
+- Last verified totals: **53/53 ctest + FileSystem 25/25** (orchestrator run, after Discover).
+- ✅ **Discover page and Modpacks** (`brief-discover.md`): rail Discover after Library (Alt+3; Worlds Alt+4 … Appearance
+  Alt+8), only the Modpacks section; `zero/content/ModpackSource*` (Modrinth/CurseForge/Technic adapters, generation
+  tokens, `ResultPager` de-duplicates by provider:id), `ui/zero/content/{ModpacksSection,ModpackRows,ContentHeroCard,
+  FeaturedStrip,ContentDetailsPanel,ContentGalleryViewer,ContentDraw}`, `ui/zero/pages/DiscoverPage`, settings
+  `ZeroDiscoverSection/ModpacksFilter/ModpacksView`, `MainWindow::showDiscover(section, provider)`, palette entries, dev
+  aids in SHELL.md, test `ZeroDiscover` (33). Screenshots reviewed by the orchestrator (both themes, 3 sizes, details per
+  provider, filters, Technic). Known gaps: Technic never "Installed" (Prism stores no managed pack for it); caption "N
+  loaded" (parsers drop the providers' total); Modrinth details make one extra GET for gallery `raw_url`; versions
+  beyond 40 behind "Show all". Install/Update only emit `installRequested(item, updateInstanceId)` until the next task.
+- ✅ Create Instance → Discover: Modrinth/CurseForge/Technic tiles and "Browse all modpacks" now close the dialog and open
+  Discover › Modpacks with that provider (`MainWindow::addInstanceZero`); "More sources" keeps the classic dialog. Not
+  clicked in the real app yet.
+- ✅ **Modpack install flow** (`brief-install.md`): `zero/content/ModpackInstall.*` (pure `planInstall` /
+  `createInstallTask`, checked line by line against Modrinth/Flame/TechnicPage::suggestCurrent + `extractTask`),
+  `ui/zero/content/ModpackInstallDialog.*`, `MainWindow::installModpack` (task runs while the dialog lives; toast "Installed
+  <name>" + Show in Library), dev aid `ZERO_SCREENSHOT_DISCOVER_INSTALL=1|accept`, test `ZeroModpackInstall` (21). Real
+  install verified: Modrinth "Sodium Plus 2.3.7" into a temp data dir → instance with `ManagedPack*` keys, Library shows it,
+  Discover card turns Installed + Update. Fixed on the way: stale version pills painted after `deleteLater`.
+- ✅ **Audit Discover and Modpacks** (session 8, read-only `savvy-careful`): no Critical. Fixed: High Ctrl+F registered
+  twice (ambiguous → dead); Update compared against newest-of-any-type instead of the dialog's default version; "already
+  installed" note now says Prism will ask update vs separate instance (creation tasks match by pack name); overview images
+  get metacache base `ZeroContent`; Retry also retries failed images, Featured, categories, MC version meta; search text
+  percent-encoded for Modrinth/CurseForge (adapter only); description/What's new links open only http/https; install
+  dialog Name→Group gap; `m_detailsPending` skew. Open (Low/known): `m_versions`/`m_changelogs` never invalidated after an
+  install; FilterPanel rebuild drops a pending change when facets arrive late; primary action chosen by comparing `tr()`
+  text; several instances of one pack → only the first counts; CurseForge Name sort hard-coded desc in FlameAPI; Modrinth
+  details double GET; gallery viewer no focus trap / alt text; no ZeroContent cache size cap; `ZeroDiscoverSection`
+  written but never read; Mods/RP/Shaders segmented control + target instance not built (hidden); caption lacks provider
+  total; one-column cards up to 440 px (spec 280-340). No tests drive the real network adapters.
+- Milestone B verified at **54/54 ctest + FileSystem 25/25**, then Milestone C started in the same session (all uncommitted).
+- **Milestone C (Mods)** — spec `docs/zero/CONTENT-MODS.md` (new; CONTENT.md is owner-protected, fold it in later), Prism
+  engine notes with file:line `.claude/zero-briefs/research-mods.md` (download chain, GetModDependenciesTask, ModFolderModel,
+  update check tasks, page swap point, modals to avoid). Owner approved the Mods mockup.
+  - ✅ C1 generic `ui/zero/content/ContentSection` core (Modpacks is a thin subclass; screenshots byte-identical before/after);
+    sources take a `ResourceType`; `setVersionFilter` for target MC/loaders.
+  - ✅ C2 `zero/content/ModTarget` (TargetInstance, `chooseTarget`, mod-ready = MC + loader Modrinth/CurseForge accept) +
+    `TargetInstanceButton`; setting `ZeroDiscoverTarget`. Orchestrator fix: `targetFromInstance` reloads a lazily-loaded
+    PackProfile only when no profile task runs (reload() would abort an online update).
+  - ✅ C3 Discover › Mods (`ModsSection`, `ModRows`, `zero/content/InstalledMods`), Modpacks · Mods switcher (reads
+    `ZeroDiscoverSection`), target defaults as chips, Installed from packwiz metadata, Add/Installed/Update/running states,
+    CurseForge gated by key + loaders, empty state → Create Instance (Modded), palette "Browse mods", dev aid
+    `ZERO_SCREENSHOT_DISCOVER_SECTION=mods`. Test `ZeroDiscoverMods` (31).
+  - ✅ C4 mod install: `zero/content/ModInstall` (pure), `ModDependencies` (headless `GetModDependenciesTask` after the mods
+    model loaded, generation tokens, abort on close), `ui/zero/content/ModInstallDialog` + shared `InstallDialogParts`,
+    `MainWindow::installMod` (ConcurrentTask of `ResourceDownloadTask`s, toast + "Show mods"). Test `ZeroModInstall` (22).
+    Real install verified: Iris Shaders + required Sodium into a fake Fabric 1.21.1 instance (jars + `.index/*.pw.toml`),
+    section shows Installed live.
+  - Known gaps: no "Show all versions" toggle; "Update available" facet hidden until the installed manager exists; mod deps
+    Prism drops on a failed lookup are invisible; with the details panel open the sort combo clips ("Sort: Rele") and the
+    target control collapses to its icon; single-column cards up to 560 px (spec 420); running-target and CurseForge-on-Mods
+    states only unit-tested.
+  - ✅ **C5a Installed mods page** (session 9 verified it): `ui/zero/instance/{ModsPage,ModsList,ModsDialogs}`, pure
+    `zero/mods/InstalledModsModel`, swap in `InstancePageProvider.h`; base `setResourceEnabled` only, Remove = `FS::trash` per
+    file + `deleteMetadata` only for trashed files. Orchestrator fix: re-read the running state after the enable/disable
+    question (Prism's "game is running" modal was reachable if the game started while it was open). Real-app screenshots
+    both themes (rows, selection bar, running banner, empty state). Docs: SHELL.md "Instance window › Mods page", filemap.
+  - ✅ **C5b Updates** (session 9, `brief-c5b-updates.md`, `savvy-careful`): `ui/zero/instance/ModsUpdates` (`ModUpdateCheck`
+    seam, `PrismModUpdateCheck` headless Modrinth + CurseForge checks, `applyUpdatesWithPrism`), Check for updates → "Update all
+    N", Updates segment, accent "Update → x" pills, row/selection Update, "no provider info" line, abort on model reload /
+    close / game start (checked resources kept alive by `Resource::Ptr` copies; generation tokens). Shared widgets gained
+    `PillTag::Tone::Accent` and `SegmentedControl::setOptions`. Dev aid `ZERO_SCREENSHOT_MODS_CHECK=1`. Real check verified
+    against Modrinth (Mod Menu 7.2.1 → 11.0.5 in the test instance). Orchestrator fixes: toolbar split into toolbar + status row
+    (it forced the instance window to 1389 px at 1280 and 1142 at 1100; now fits 1100 in both themes); flaky
+    `theRowMenuOffersTheUpdateFirst` (popup closed under parallel GUI tests) now tests `ModsPage::fillRowMenu` directly.
+    Not verified: a real update APPLY (download + replace) was never run in the app; failure reporting uses Prism's non-modal
+    error boxes like `installMod`; Discover's "Update available" facet stays hidden (optional per spec).
+  - ✅ **C6 Dependency Inspector** (session 9; owner approved the mockup; spec CONTENT-MODS.md "Dependency Inspector";
+    brief `brief-c6-dependency-inspector.md`, `savvy-careful` + one review round): `zero/mods/ModResolver` (rules now shared
+    with ModHealth: provider index incl. nested jars / provides, environment ids, predicates), pure `DependencyInspector`,
+    async `DependencyScanner` (parse cache by path+size+mtime, generation token, 300 ms debounce after each reload),
+    `ui/zero/instance/ModDependencyPanel` (right panel: Needs / Game / Optional / Needed by / Conflicts; Enable through the
+    page's normal toggle path; Find → `MainWindow::showDiscoverMods(id, query)`), row pills "Needs X" / "Needs X · disabled" /
+    "Wrong X version" / "Conflicts with X", Issues + caption "N need attention". Review fixes: black scroll viewport, icon
+    close button, bundled jars' deps only when they are a problem (no duplicates), not-installed conflicts summarised in one
+    caption, Fabric ">=1.19.4-" evaluated in the shared `Versions` (ModHealth benefits too). Dev aid
+    `ZERO_SCREENSHOT_MODS_INSPECT=<mod name>`. Tests `DependencyInspector` (31), `ZeroModsPage` (83), ModHealth (175).
+    Known: Prism's own "Not for 1.21.1" pill (from provider metadata) can disagree with the jar's declared range shown in
+    the panel (Mod Menu 7.2.1); Find opens a Discover search by mod id (not by packwiz project id).
+- Last verified totals (session 9, after D1): **60/60 ctest + FileSystem 25/25**.
+- **Milestone D (Resource Packs)** — spec `docs/zero/CONTENT-PACKS.md` (new, written while the owner was away: **design not
+  reviewed by the owner yet**, decisions recorded there), Prism facts `.claude/zero-briefs/research-resourcepacks.md`
+  (options.txt semantics marked UNVERIFIED there; spec assumes array order bottom → top, last = highest priority).
+  - ✅ **D1 Discover › Resource Packs** (`brief-d1-discover-packs.md`, `savvy-medium`): third segment in the switcher,
+    `PacksSection` = `ModsSection` with `kind` (target = any instance with an MC version), `PackRows` gallery cards
+    (artwork, resolution pills), pack mode of `ModInstallDialog` (`env.packs`, no dependencies),
+    `MainWindow::installResourcePack` / `showDiscoverPacks(id, query)`, palette "Browse resource packs", setting
+    `ZeroDiscoverResourcePacksFilter`, test `ZeroDiscoverPacks` (21). Real screenshots reviewed (Modrinth results, add
+    dialog). Orchestrator fix: `SegmentedControl::sizeHint` now = n × widest label (segments are equal width; the sum cut
+    "Resource P…" in the top bar). Add is refused while the target runs (same as Mods).
+  - ✅ **D2 Installed resource packs** (`brief-d2-installed-packs.md`; worker code from session 9, finished and reviewed in
+    session 10): `zero/content/PackOrder` (options.txt order core + `.zero/pack-order.json` history/Undo), pure
+    `zero/content/InstalledPacks`, `ui/zero/instance/{ResourcePacksPage,PackList}`, swap in `InstancePageProvider.h` (id
+    `"resourcepacks"`), "Turn it on" in the D1 add dialog (`Packs::turnOnAtTop`), tests `PackOrder` / `ZeroResourcePacksPage`.
+    Session 10: it did not compile (`slots` Qt macro as a variable name, ambiguous `Outcome` in the test); 3 test bugs fixed
+    (greedy `"\xBFa"` hex escape, Remove test picked a header row, empty-state test read the icon label); page subtitle in
+    `ZeroPageHelp.cpp` no longer says "turn them on in the game's Options"; docs SHELL.md "Instance window › Resource packs page"
+    + filemap. Review: PackOrder byte-exact/atomic/history-before-write verified by reading; Remove never deletes for good.
+    Screenshots reviewed (obsidian, minecraft, 1100x700, running). Owner QA (session 10): toggle, move, Unhide, Remove,
+    Discover "Turn it on" download work. Fixed from QA: the classic page dialog was blank (the `ResourcePackPage` QMainWindow was
+    made with a parent, so it was its own hidden window; now made without one and adopted by the layout). Still to QA: Undo
+    (toast + "Restore previous order"), classic dialog after the fix. Owner did not find the borderless "…" overflow button
+    (same on the Mods page): visibility to decide. Running lock only via screenshot + tests (the fake instance can't launch:
+    "Null jar"). Totals **62/62 ctest + FileSystem 25/25**.
+  - Test data ready for D2 screenshots: instance `packs-1211` ("Pack Test") in the session-9 data dir below: 3 zips (formats
+    34/34/15), folder pack "Clean GUI", hidden `Low Fire.zip.disabled`, CRLF `options.txt` with
+    `["vanilla","fabric","file/Stay True.zip","file/Faithful 32x.zip"]`. Shot: `ZERO_SCREENSHOT_INSTANCE_PAGE=packs-1211:resourcepacks`.
+  - ⬜ D3 pack update checks (with E). Then **Milestone E (Shaders)**: research notes in research-resourcepacks.md section E.
+- **Owner QA pending** (needs real input): Mods page (toggle, Remove → Recycle Bin, a real update apply, Find, Dependency
+  panel Enable), Discover › Resource Packs add, and later the packs order page.
+- Session 9 screenshots + temp data dir `data`: `%LOCALAPPDATA%\Temp\claude\2a40c03b5f24bee0\b9b3752a-6775-4c00-8a35-cf3101b87464\scratchpad\`
+  (`modspage-*`, `modsupd-*`, `deps2-*`, `packs*`). Temporary: may be gone.
+- ✅ Mods Discover and Installed: done (Milestone C above).
+- Screenshots of this session: `%LOCALAPPDATA%\Temp\claude\9c55b98af98b92a0\f24cd95f-218a-43c8-ab17-29d4f1593af4\scratchpad\`
+  (`create-*`, `fix-*`, later `disc-*`, `inst-*`; temp data dir `data7`). Temporary: may be gone.
+
+- **Owner roadmap after D2 QA (session 10, 2026-11-12; owner approved, in this order; owner still commits):**
+  1. ✅ Polish (session 10): Cat controls hidden in Prism's `AppearanceWidget` + `actionCAT` never shown (the cat was already
+     never painted); `star.svg` widened 1.1× (path transform); primary split `QToolButton` styled in `obsidian.qss`
+     (`::menu-button` 32 px, `@accentPressed@` divider, `::menu-arrow` chevron-down onAccent). Screenshots both themes; 62/62.
+     Owner to check: Settings › Appearance has no Cat, star width.
+  2. ✅ **E1 Discover › Shaders** (session 10, `brief-e1-discover-shaders.md`, `savvy-medium`): `ShadersSection` (= `ModsSection`
+     `Kind::Shader`; `isPacks()` became `isFolderKind()` / `isShaders()` / `needsLoader()`), 16:9 `PackRows` cards with Modrinth
+     performance label + platform pills, Platform default chip from the target's shader mod, pure `zero/content/ShaderMod`
+     (`mods` file names → Iris/Oculus/OptiFine) + `ShaderModNotice` strip ("Find Iris" / "Find Oculus" → Discover › Mods),
+     `MainWindow::installFolderContent(kind, …)` behind installResourcePack/installShaderPack, setting `ZeroDiscoverShadersFilter`,
+     palette "Browse shaders", test `ZeroDiscoverShaders` (28). Platform is sent as a Modrinth `categories:` group (Modrinth
+     indexes loaders as categories). Orchestrator fix: the 4-segment top-bar switcher was clipped at 1100-1280 px →
+     `SegmentedControl::setNaturalWidths(true)` (each segment its own label width) for the Discover switcher only. Screenshots
+     reviewed (obsidian, minecraft, 1100x700, details, add dialog, notice, Iris chip). Totals **63/63 + FileSystem 25/25**.
+     Not built: filter-panel caption "From the shader's Modrinth tags"; installed Shader Packs page (still Prism's); selecting the
+     active shader (game config UNVERIFIED). Still open from this item: **D3 pack update checks**.
+  3. ✅ **F1 Install cart** (session 10; owner approved the mockup and chose ONE cart across Mods / Resource Packs / Shaders;
+     `brief-f1-install-cart.md`, two `savvy-careful` runs). A: pure `zero/content/InstallCart` + `InstallCartModel` (session-only,
+     cap 50) owned by `DiscoverPage`, card check boxes (`checkRect`, hover/focus/always while the cart is not empty; mod grid
+     cards top-right after review, gallery top-left), Ctrl+click / Space, details "Add to cart" / "In cart", `SelectionBar`.
+     B: pure `zero/content/CartInstall`, `CartReviewDialog` (groups by kind, version combos, skipped rows, ONE dependency run
+     for all mods via `DependencyResolver::Request::also`, packs "Turn them on" via `Packs::turnOnManyAtTop` = one history
+     entry), `MainWindow::installCart` (one ConcurrentTask into the three folders; only successful downloads leave the cart).
+     Test `ZeroInstallCart` (43). Real run (orchestrator): Iris + Mod Menu + Lithium into "Pack Test" → review listed Sodium,
+     Fabric API, Text Placeholder API as dependencies, "Add 6 mods" → 6 jars + 6 `.pw.toml`, cards Installed, toast. Totals
+     **64/64 + FileSystem 25/25**. Not run for real: a mixed-kind cart (the dev aid ticks one section only; unit-tested) and
+     several packs turned on (unit-tested on a temp options.txt). Owner QA: mixed cart by hand.
+  4. ✅ **G1 Discover › Worlds** (session 10, `brief-g1-discover-worlds.md`, `savvy-medium`): CurseForge only (`ResourceType::World`
+     = classId 17 already in Prism's FlameAPI), fifth segment only with a CurseForge key, `WorldsSection` (no default version
+     chip, not cart-eligible, no Installed state), 16:9 cards with categories + "Made for 26.3", world mode of `ModInstallDialog`
+     (all files, fit note, no downloadUrl → "Open on CurseForge"), pure `zero/content/WorldInstall`, `MainWindow::installWorld`
+     (NetJob with CurseForge hash → Prism's `InstallWorldTask` → temp zip removed always; Show worlds selects it on the rail
+     Worlds page), `ZeroSearchPill` min width 240 → 200. Test `ZeroDiscoverWorlds`. Orchestrator fixes: `worldFit` judged only
+     the newest listed version (a file listing the target AND a newer one got the warning) → target listed = fits, else newest
+     older one, warning only when all are newer; new `defaultWorldFileIndex` preselects the newest file the target can open
+     (Oneblock's newest file is for 26.3; the dialog now picks its 1.21.1-compatible file). Real run: Oneblock into "Pack Test"
+     → `saves/Oneblock Original v3.0.2` with level.dat, temp folder gone, toast. Screenshots: obsidian 1280, minecraft 1100
+     (5 segments fit). Totals **65/65 + FileSystem 25/25**. Not done: worlds in the cart; non-zip archives fail with Prism's
+     "Failed to import world."
+  5. ⏳ **Theme editor — NEXT (session 10 ended here; investigation + mockup DONE, owner approved, no code yet).**
+     Investigation (orchestrator): a theme is the runtime `ThemeSpec` (`launcher/ui/zero/ZeroTokens.h:184`: ~25 colors, radii,
+     `corners`, `bevel`, `texture`, `pixelRoles`, density); widgets read `Theme::current()` live; QSS is generated from the spec
+     (`ZeroStyle.cpp`, `@token@` placeholders); `ZeroTheme` / `ZeroMinecraftTheme` are registered in `ThemeManager.cpp:149`;
+     the window background is painted by `ZeroShell::paintEvent` (`ui/zero/shell/ZeroShell.cpp:46`, the Minecraft texture) with
+     pages transparent on top → a background image/video goes there. Prism loads `<data>/themes/<dir>/theme.json` or `*.qss`
+     (`ThemeManager.cpp:170-193`): ZERO custom themes use `<data>/themes/<slug>/zero-theme.json` + the copied background file,
+     add a ZERO branch there (`ZeroCustomTheme : ZeroTheme`, `baseSpec()` from the JSON).
+     **Owner-approved design (mockup)**: Appearance › **Create theme**; custom themes as cards next to Obsidian/Minecraft with
+     Edit / Duplicate / Delete (Recycle Bin) / **Export (.zip) / Import (.zip)** (owner said yes; zip-slip safe). Editor = right
+     panel 250-320 px: Name, Start from Obsidian|Minecraft (inherits corners/bevel/pixel font), COLORS: Accent (+5 presets),
+     Background, Surface, Text → the rest derived (hover/pressed/onAccent by contrast, surfaces stepped from bg) with a
+     "Readable / Hard to read" contrast label, "All colors" expands every token; BACKGROUND None|Image|Video, file copied into the
+     theme folder, Dim slider, Cards (surface opacity) slider; CORNERS Rounded|Square; Cancel / Save theme. **Live preview = the
+     whole app** while editing; Cancel restores the previous theme. **Video plays only on Home and Appearance** (owner choice),
+     a still frame elsewhere; always paused when minimized, while a game runs, and with motion off.
+     **Qt Multimedia INSTALLED** (session 10, owner approved): `mingw-w64-ucrt-x86_64-qt6-multimedia` 6.12.0-1 (= qt6-base
+     6.12.0-1, no installed package upgraded), 52 packages ~96 MB incl. ffmpeg 9 backend (`qt6-multimedia-ffmpeg`); CMake package
+     `Qt6Multimedia` is in `C:\msys64\ucrt64\lib\cmake`. Not yet referenced by `launcher/CMakeLists.txt` (task (c) adds it).
+     Planned tasks (one worker at a time): (a) `savvy-careful` theme core: pure JSON load/save + color derivation + contrast,
+     `ZeroCustomTheme` + ThemeManager branch, ZeroShell image background (cover, dim, card opacity via surface alpha),
+     export/import zip, tests; (b) `savvy-careful` editor panel + Appearance cards (specs above), live apply/Cancel, tests;
+     (c) video: `QMediaPlayer` + `QVideoSink` frames painted in ZeroShell (no QVideoWidget), play/pause rules above, CMake
+     `find_package(Qt6 Multimedia)`, windeployqt note for release. Then screenshots both themes + a custom one, update this file.
+     ✅ **(a) done (session 11, `brief-theme-a-core.md`, `savvy-careful`)**: pure `zero/theme/CustomTheme` (zero-theme.json
+     format 1, slug, `deriveSpec`, `contrastRatio`, `readability`) + `ThemeArchive` (export, zip-slip-safe import into a new
+     slug via a `.zero-import-*` staging folder, `trashTheme` = Recycle Bin only), `ui/zero/ZeroCustomTheme`, ThemeManager
+     `loadCustomTheme` / `removeCustomTheme` (dot-folders skipped), ThemeSpec `baseId` / `styleId()` / `backgroundImage` /
+     `backgroundDim` / `cardOpacity` / `surfaceSolid()`, QSS emits rgba only for translucent colors (menus, combo popups,
+     command palette opaque), ZeroShell cover image + dim with a cached pixmap. Test `CustomTheme` (37). Totals **66/66 +
+     FileSystem 25/25**. Screenshots reviewed (image bg Home, custom card on Appearance). Owner mockup shows Accent /
+     Background / Text only: `surface` is optional in the JSON (derived when absent). Not verified visually: a real QMenu /
+     dialog over the image. Video stored, not painted.
+     ✅ **(b) ACCEPTED after round 2** (top preview follows the editor via `ThemeEditorPanel::previewed`, selection ring on the
+     edited card / none for new via `AppearancePage::refreshRings`, "All colors" = 19 tokens `allColorsKeys()`, no window-level
+     Esc exists so the panel's `WidgetWithChildrenShortcut` Esc is safe; the "A" in the name field was not reproducible).
+     `ZeroThemeEditor` now 23. Totals **68/68 + FileSystem 25/25**. Round-1 notes kept below.
+     ✅ **(c) video ACCEPTED** (`brief-theme-c-video.md`, `savvy-careful`): Qt6 Multimedia in top CMake + linked to
+     `Launcher_logic`; `ui/zero/shell/ZeroVideoBackground` (QMediaPlayer + QVideoSink, no audio output, infinite loop, pure
+     `shouldPlay`/`coverRect`, first-frame still, one warning + flat bg on failure, releases the decoder when the theme has no
+     video); ZeroShell paints cover + dim, inputs = page, window minimized **or hidden** (orchestrator fix: Hide/Show events),
+     `Application::updateAllowedChanged` → `ZeroShell::setGameRunning`, motion; `ThemeSpec::backgroundVideo`; editor Video
+     segment (mp4 webm mkv mov, 200 MB cap); `ThemeFiles` video save; windeployqt note in ARCHITECTURE.md (Qt6Multimedia.dll,
+     `multimedia/ffmpegmediaplugin.dll`, ffmpeg DLLs). Test `ZeroVideoBackground` (11, real clip via ffmpeg.exe). Totals
+     **69/69 + FileSystem 25/25**. Screenshots reviewed (editor with Video). Risk to watch: each video frame repaints the whole
+     window (transparent pages) → measure CPU on the owner's PC. Not verified by hand: real minimize, a running game.
+     **THEME EDITOR (item 5) DONE.** Owner QA: Create/Edit/Save/Cancel, Delete → Recycle Bin, Duplicate, Export/Import .zip,
+     image and video backgrounds, CPU with a video on Home.
+     Round-1 record of (b) (session 11): `brief-theme-b-editor.md`, `savvy-careful`. New `zero/theme/ThemeEditorModel`,
+     `zero/theme/ThemeFiles` (saveTheme with temp copy + backup + rollback, duplicateTheme), `ui/zero/pages/ThemeEditorPanel`,
+     `ui/zero/pages/ThemeLibrary` (save/duplicate/export/import/delete + toasts, ThemeManager via hooks); AppearancePage
+     Create theme / Import…, 3-column card grid, "⋯" menu (Edit/Duplicate/Export…/Delete); `Zero::applySpecLive` (live apply
+     throttled 120 ms, ~113 ms per apply in Debug); ZeroShell drops the image cache on file mtime change; Save also applies +
+     persists on edit; dev aids `ZERO_SCREENSHOT_THEME_EDITOR=new|<id>[,minecraft][,hard][,all]`, `ZERO_SCREENSHOT_THEME_MENU=<id>`.
+     Tests `ThemeEditorModel` (22), `ZeroThemeEditor` (22): **68/68 + FileSystem 25/25**. Orchestrator reviewed screenshots
+     and ThemeFiles save path (OK). Returned for: top preview must show the edited spec while the panel is open; the edited
+     card is the selected one (none for a new theme); "All colors" must not repeat Accent/Background/Text; check Esc clash.
+     Save/Delete/Import/Export not clicked in the real app (widget tests only) → owner QA.
+     Then (c) video. Owner is away (2026-11-13): decide alone, log every finished piece here immediately.
+  6. Safe update: automatic snapshot before mod/modpack updates + one-click rollback.
+     Split by the orchestrator (owner away, session 11): **6a mods** (Mods page `applyKeys` → snapshot of the replaced files in
+     `<data>/zero/snapshots/<instance>/<stamp>/`, toast Undo + notice strip "Updated N mods · Roll back", retention 5, trash
+     only) and **6b modpacks** (later: whole-instance snapshot minus saves/screenshots/logs before Prism's in-place pack update).
+     ✅ **6a ACCEPTED** (`brief-6a-safe-mod-update.md`, `savvy-careful`; orchestrator read the whole rollback path):
+     pure `zero/mods/ModSnapshot` (create = verified copies of the replaced jars + `.index` tomls + `snapshot.json`; finalize =
+     `added` by listing diff, changed by hash, prunes no-op snapshots; rollback = verify all copies → stage in
+     `mods/.zero-rollback-N` → trash (Recycle Bin, no fallback) added + occupied paths → rename into place, never overwrite;
+     a stopped rollback is finished by clicking again; retention 5), `ui/zero/instance/ModSnapshotNotice` strip ("Updated N
+     mods · 2 h ago" + Roll back + ×, disabled "Close the game first" while locked), ModsPage `applyKeys` snapshots first (no
+     snapshot → no update + error toast), toast "Updated N mods" + Undo, confirm dialog with old ← new versions. Work runs on
+     a pool thread with the page locked. Dev aid `ZERO_SCREENSHOT_MODS_SNAPSHOT=dialog`. Tests `ModSnapshot` (25 cases),
+     `ZeroModsPage` +11. Totals **70/70 + FileSystem 25/25**. Screenshots reviewed (strip Minecraft, dialog Obsidian).
+     Known/low: a crash mid-rollback leaves `mods/.zero-rollback-N` (may show as a folder entry); an unfinished snapshot
+     (crash, no outcome) hides older active ones until retention. Worker left 4 tiny temp test files in the real Recycle Bin.
+     NOT verified: a real Modrinth update apply + Undo/Roll back click-through → owner QA.
+     ⏳ **6b IN PROGRESS**: `brief-6b-safe-modpack-update.md` → `savvy-careful` (zip snapshot of the instance minus
+     saves/screenshots/logs/crash-reports/.cache before `installModpack` update; roll back = staged swap keeping play data +
+     playtime, only `ManagedPack*` cfg keys restored; Library details "Roll back update"; toast Undo; retention 2). Resume:
+     check `git status` for `PackSnapshot`; if present review + build/test, else re-delegate as-is.
+     🔄 6b built (round 1): `WorldBackup` gained `Options` (exclude predicate, fixed name, manifest extra, cancel, progress),
+     `readBackupInfo`, `extractBackup`, `renamePath` (worlds unchanged, WorldBackup 70 green); new `zero/backup/PackSnapshot`
+     + `PackSnapshotTasks` (pool thread, launch lock); `InstanceList::reloadInstance` + `discoverInstances` skips `.zero-*`;
+     MainWindow `saveCopyBeforeModpackUpdate` / `rollBackModpackUpdate`, toast Undo; details panel "Roll back update"
+     (`arrow-left` icon); outcome/rolledBack in a `.json` sidecar; snapshot bound to pack id. Totals 71/71 + FileSystem 25/25.
+     Returned for: startup recovery of interrupted rollbacks (`.zero-restore-*` / `.zero-replaced-*`), carry over
+     symlinks/junctions, own wording for reserved file names. Not verified: real pack update + rollback (network).
+     ✅ **6b ACCEPTED after round 2**: `Pack::recoverInterrupted(instancesDir)` runs in the `InstanceList` constructor before the
+     first discovery (`// ZERO`): replaced-without-instance → renamed back; play data stuck in `.zero-restore-*` → moved back
+     (never overwrites; staging kept + logged `ZERO recovery:` if anything of the player remains); replaced-with-instance →
+     Recycle Bin; a trash failure after a successful rollback leaves `.zero-leftover-<id>-<ts>` (never renamed back, so a deleted
+     instance is not resurrected). Links/junctions carried over in rollback and recovery (`Hooks::isLink`, real `mklink /J`
+     run OK). Own reserved-name text (`WorldBackup::Options::unsafeName`). `PackSnapshot` 48, `WorldBackup` 70. Orchestrator
+     re-ran: **71/71 + FileSystem 25/25**. Known/low: if the game recreated `saves` before recovery, the stuck world stays in
+     the hidden staging folder (only logged, no UI notice). **ITEM 6 DONE.** Owner QA: real modpack update → Undo / Roll back
+     update in Library; real mod update → strip Roll back.
+  7. Performance profile: one click installs the right Sodium/Lithium/etc. for version+loader and tunes RAM/Java to the PC.
+     ✅ **ITEM 7 DONE (session 11)**, owner approved the proposal as written; `brief-7-performance-profile.md`, `savvy-careful`.
+     Pure `zero/perf/PerformanceProfile` (curated table per loader, NeoForge sodium→embeddium fallback, row states incl.
+     OptiFine conflict / alternative installed, memory rule, texts) + `PerformanceCatalog` (async seam, Modrinth); dialog
+     `ui/zero/perf/PerformanceDialog`; `MainWindow::runInstallPlan` = the download half of `installCart` (cart unchanged) used
+     by `boostPerformance`; Library details button "Boost performance" (`gauge`, hidden while running) + palette entry; Java
+     "Fix" → Tools › Java Doctor (it has no per-instance focus, lists problems first); dev aids `ZERO_SCREENSHOT_BOOST` /
+     `_APPLY`. Slugs checked on Modrinth (all 7 OK). Real Apply into a temp Fabric 1.21.1 instance: 6 mods + Fabric API with
+     `.pw.toml`, `OverrideMemory=true MaxMemAlloc=5120 MinMemAlloc=1024`. Tests `PerformanceProfile` (34), `ZeroPerformanceDialog`
+     (34). Orchestrator reviewed screenshots (both themes, OptiFine + Java line) and the Apply path, re-ran: **73/73 +
+     FileSystem 25/25**. Not verified: Library button / palette / "Show mods" clicked in the real app, a real NeoForge/Forge
+     instance, loading/error states on screen (tests only). Owner QA: click Boost performance on a real instance.
+     Earlier status:
+     (was) ⏸ WAITING FOR OWNER APPROVAL (session 11): investigation + design proposal in
+     `.claude/zero-briefs/proposal-7-performance-profile.md` (dialog "Boost performance": curated mods per loader resolved on
+     Modrinth, memory rule, Java line via Java Doctor; 3 open questions). Not built on purpose: new screen, owner approves
+     mockups first. Next session: show the proposal (mockup), get answers, then delegate the brief draft at its end.
+  8. Share instance: export as a code/link; a friend pastes it and gets the same instance.
+     ❌ **Share code DROPPED by the owner** (session 11; `proposal-8-share-instance.md` kept only as history). Owner wants
+     Prism's three exports kept (zip, Modrinth `.mrpack`, CurseForge) with a better design that explains them.
+     ✅ **ITEM 8 DONE (session 11)**, `brief-8-export-chooser.md`, `savvy-medium`: `ui/zero/pages/ExportChooserDialog` (three
+     cards with the approved copy, info box, keys 1-3/arrows/Enter/double-click, CurseForge disabled with the reason for
+     snapshots, last choice in setting `ZeroExportFormat`); details-panel Export emits `exportRequested(id)` →
+     `MainWindow::exportInstanceZero(id)` → Prism's `ExportInstanceDialog` / `ExportPackDialog` (unchanged); Library top bar
+     **Import** button (`ui/zero/pages/LibraryImportButton`, → existing `importRequested` = Create Instance on Import);
+     dev aid `ZERO_SCREENSHOT_EXPORT`. Test `ZeroExportChooser` (8). Orchestrator fix: the button stayed icon-only at 1100
+     (looked like a view toggle) → compact only below 900 px page width, label kept at 1100 (subtitle elides). Screenshots
+     reviewed; **74/74 + FileSystem 25/25** (one parallel-run flake of `ZeroModpackInstall`, passed alone and on the rerun).
+     Not verified: Continue → real Prism export dialogs and the file they write. Owner QA: export each format and import it.
+     Design:
+     (was ⏸) **New item 8 = Export chooser, mockup shown**: details-panel Export opens a ZERO dialog with three
+     cards (Full copy .zip / Modrinth pack .mrpack / CurseForge pack .zip; each "what it is" + "Best for …"), a "How your
+     friend opens it" box (ZERO: New instance › Import or drag onto the window; Prism: Add instance › Import; Modrinth App /
+     CurseForge app: their Import), Continue → Prism's existing `ExportInstanceDialog` / `ExportPackDialog`
+     (`MainWindow.cpp:2435-2463`; CurseForge card disabled with the reason for snapshots instead of Prism's QMessageBox).
+     Import already exists: Create Instance "Import" card (.zip/.mrpack), Home/Library Import, drag-drop (`processURLs`).
+  9. **Release LAST**: installer, auto-update, own MSA client ID + CurseForge key; the owner's GitHub repo "ZeroCraft Launcher"
+     (originally the Prism fork) gets reworked and made pretty for the release.
+     ⏳ **Release PREP started (session 11, owner asked while away; owner tests on return)**. Found: `windeployqt6` present,
+     **NSIS not installed** (needs owner OK to install), credentials guard exists (`docs/zero/CREDENTIALS.md`), owner repo =
+     `github.com/6402770-sys/ZeroCraft-Launcher` (public fork, no releases), Prism deploy script at `launcher/CMakeLists.txt:1842`.
+     9a packaging IN PROGRESS: `brief-9a-packaging.md` → `savvy-careful` (`scripts/zero/package.sh`, Release build in
+     `build-release/`, self-contained `dist/` portable zip + SHA256SUMS, Setup.exe when makensis exists, updater pointed at the
+     owner repo; verify by running the zip with a minimal PATH). Resume: check for `scripts/zero/package.sh`.
+     ✅ **9a packaging ACCEPTED**: `scripts/zero/package.sh` (`--version`, `--preview` default, `--release` needs env
+     `ZERO_MSA_CLIENT_ID` / `ZERO_CURSEFORGE_API_KEY`, `--no-installer`, `--no-smoke`) → Release build in `build-release/`,
+     Prism's install-time Qt deploy + 77 MSYS2 DLLs by `objdump -p` closure → `dist/stage/`, `dist/ZEROLauncher-0.1.0-Windows-
+     Portable.zip` (96 MB) + `SHA256SUMS.txt`; Setup.exe only when makensis exists. CMake: `ZERO_VERSION` override;
+     `-mguard=cf` only for Clang (GCC rejected it). Updater: repo `github.com/6402770-sys/ZeroCraft-Launcher`, artifact
+     `Windows` (assets must be named `…-Windows-Portable.zip` / `…-Windows-Setup.exe`, nothing else containing "windows").
+     NSIS template: multimedia folder, quoted Open-with, URL handlers removed only if still ZERO's. Verified: zip runs on a
+     minimal PATH (HTTPS OK, video theme plays: `[qt.multimedia.ffmpeg]` + `ZeroVideoBackground: play`); dev build intact,
+     **74/74 + FileSystem 25/25**. Untested: installer (no NSIS), `--release` path, upgrade install, GitHub upload. A branch
+     build shows `0.1.0-zero-development`; a release must be built from a commit tagged `X.Y.Z`. The preview zip carries
+     Prism's dev credentials: test only, never publish. First non-portable run offers (Yes/No) to COPY Prism data
+     (`handleDataMigration`, ZERO-guarded: fresh installs only, source untouched).
+     🧪 **OWNER QA RESULTS (session 11, 2026-11-13)** — OK: themes (rest), Boost performance, Export/Import, mod safe update
+     (except below), modpack safe update (mostly), Discover + cart (mostly); CPU with a video background 2-3 %.
+     To fix: (B1) theme editor: QColorDialog becomes translucent and clipped after picking a color (cardOpacity surface on a
+     top-level dialog + live re-apply of the app stylesheet while it is open); (B2) after a mod Roll back, Check for updates
+     says all up to date and "2 mods have no provider info and can't be checked" (restored mods lose their metadata link);
+     (B3) cart "checking dependencies" sometimes never finishes (closing/reopening the cart works) — intermittent;
+     (B4) installed build: Microsoft sign-in via browser fails `invalid_request redirect_uri` (`zerolauncher://oauth/microsoft`
+     is not registered for Prism's client ID); the device-code path (microsoft.com/link) works; (B5) once: modpack
+     26.3 → 26.2 update errored that mods should be compatible with 26.3; not reproduced since (watch).
+     To add (theme editor): (F1) custom launcher icon per theme, (F2) optional video sound, (F3) custom fonts.
+     ✅ B4 FIXED by the orchestrator: `MSAStep.cpp` uses the localhost reply handler whenever the client ID is Prism's upstream
+     one (`zerolauncher://` redirect is only valid for ZERO's own Azure app; RELEASE.md step 2 now lists both redirect URIs).
+     Builds; real sign-in not re-tested (owner). ⏳ IN PROGRESS (parallel): `brief-theme-d-qa.md` (B1 + F1-F3) → `savvy-careful`;
+     `brief-cart-deps-hang.md` (B3, DONE above). B2 → `brief-6a-fix-provider-info.md` **DELEGATED to `savvy-careful`, IN
+     PROGRESS** (if cut: check `git status` for changes in `ModSnapshot*` / `ModsPage*`, else re-delegate; suspected cause: the snapshot never captured the `mods/.index/*.pw.toml` or the update renamed it) →
+     `savvy-careful` once a worker slot frees (max 2 at once). Then rebuild `scripts/zero/package.sh` for the owner.
+     ✅ **B3 FIXED** (`savvy-heavy`): root cause in `CartReviewDialog::runDependencyCheck()` — it steps aside while any row
+     loads and only MOD rows rescheduled it; a resource pack / shader row finishing (or failing / removed) last left the cart
+     on "Checking…" forever (network-order dependent; reopen worked because versions were cached). Proven by a test that
+     failed before the fix. Fix: postponed flag + `resumeDependencyCheck()` for pack/shader rows; watchdog 60 s → Failed
+     "The check took too long." + Retry. Resolver: whole-run limit 45 s (`kRunTimeoutMs`), destroyed model fails at once,
+     `finished`-only task fails, single `finish()` path. Tests: `ZeroInstallCart` +5, new `ZeroModDependencies` (11, incl.
+     40-run stress). **75/75 + FileSystem 25/25**, cart/resolver tests 5× green. Not reproduced in the real app (owner re-test).
+     ✅ **B2 FIXED** (`savvy-careful`; orchestrator read the diff): not the snapshot (it held jar + toml) but a race — rollback
+     restores jars then `.index` tomls; the folder watcher reloads in between, reads the jar without its entry, and Prism's
+     `ResourceFolderModel::applyUpdates` kept that metadata-less resource because it only compared the jar mtime. Fix (upstream
+     file, `// ZERO`, CRLF kept): a kept resource also counts as changed when its metadata appeared / went away / differs
+     (slug, projectId, fileId, hash, filename). Tests: `ZeroModsPage` +3 (mid-way reload, Check for updates finds the updates
+     again, entry renamed by the update), `ModSnapshot` +1. **76/76 + FileSystem 25/25.** Not run with real Modrinth in the app.
+     ✅ **Theme (d) BUILT, review pending** (`savvy-careful`): B1 not reproduced by the worker; made robust (all top-level dialog
+     classes + tooltips opaque via new `@bgSolid@` / `@elevatedSolid@` in obsidian.qss, FilterPanel popup solid, colour dialog
+     previews in the row and applies once on OK). F1 icon / F2 sound (QAudioOutput only when on) / F3 font (`ui/zero/ZeroCustomFont`,
+     from memory) + JSON keys `icon`, `font`, `background.sound/volume`; archive allows `icon.(png|svg|ico)` ≤2 MB, `font.(ttf|otf)`
+     ≤20 MB; new test `ZeroThemeAssets`. Screenshots: scratchpad `qa-d/shots/` (b1-after-dialog, f-icon, icon-window-screen,
+     f-font-final, f-video) — NOT yet reviewed by the orchestrator.
+     🔴 **OPEN CRASH (session 11 end, owner saw it)**: while running the suite, `LauncherTests.exe` (ZeroModsPage test window:
+     Alpha/Beta/Gamma, strip "Updated 1 mod · just now", "1 mod has no provider info") died with Windows "excepción con error
+     inmediato" (fail-fast, e.g. abort / stack-buffer / invalid parameter). Workers also reported one `ResourceFolderModel`
+     segfault in a parallel run. Suspects: the B2 change in `ResourceFolderModel::applyUpdates` (metadata compare on a resource
+     whose metadata pointer is touched concurrently by the folder watcher / parse task) or the new B2 page tests (slowed rename
+     hook + real watcher). **Next session first:** `cd build; ctest -R "ZeroModsPage|ResourceFolderModel" --repeat until-fail:10`
+     (Git Bash with `export PATH=/c/msys64/ucrt64/bin:$PATH`), get the failing test name + gdb backtrace
+     (`gdb -batch -ex run -ex bt LauncherTests.exe`-style on that test binary), fix (likely `savvy-heavy`), then full suite.
+     After that: review theme (d) screenshots, `scripts/zero/package.sh`, tell the owner what to re-test.
+     Narrowed (orchestrator, last run): full suite 76/76 + FileSystem 25/25 once; then `ctest -R "^ResourceFolderModel$|^ZeroModsPage$"`
+     ×8 → ResourceFolderModel always green, **ZeroModsPage crashed 1 of 8 (~15.7 s)** → the flaky crash is in the ZeroModsPage
+     test (most likely the new B2 rollback tests with the real watcher / slowed rename hook), not in ResourceFolderModel's own test.
+     ✅ **CRASH FIXED (session 12, orchestrator)**: test-only bug. gdb run: `QFATAL ... ASSERT failure in QList::at: "index out of
+     range"` (qlist.h:514, inline Qt asserts are live in our Debug build → abort → Windows fail-fast 0xc0000602) in
+     `undoRollsTheModBack…`: `QTRY_VERIFY(rowAt(rowOf("Alpha")).version == "1.0")` polled while a mid-rollback folder read listed no
+     Alpha → `rowAt(-1)`. Fix in `tests/ZeroModsPage_test.cpp`: `Rig::rowNamed` returns an empty `Row` when the mod is not listed,
+     the two raw `rowAt(rowOf(...))` calls use it. Rule for future tests: never index `rowAt(rowOf(x))` directly.
+     Theme (d) screenshots reviewed by the orchestrator: colour dialog opaque and whole, custom icon in rail + title bar, custom font
+     app-wide + preview line, video Sound + Volume rows — accepted.
+     Owner (session 12): cannot create the Azure app (Azure refuses prepaid cards). ElyPrismLauncher (`github.com/ElyPrismLauncher/
+     Launcher`) ships **Prism's own MSA client ID and CurseForge key unchanged** in CMakeLists.txt (no own Azure app).
+     ✅ **Owner decided: releases keep Prism's MSA client ID, like Ely.** `ZERO_RELEASE_BUILD` now only refuses Prism's CurseForge key
+     (CurseForge terms require an own key for derivative works) and prints a status line for the MSA ID; `package.sh --release`
+     needs only `ZERO_CURSEFORGE_API_KEY` (`ZERO_MSA_CLIENT_ID` optional). Verified: configure ON with defaults fails on CF; with a
+     dummy CF key passes. CREDENTIALS.md + RELEASE.md (step 2 optional, step 3 = the one left) updated.
+     ✅ **Own CurseForge key received** (owner pasted it in chat, session 12): verified against `api.curseforge.com` (HTTP 200,
+     modpack search answers), stored ONLY in `%USERPROFILE%\.zero\curseforge-api-key` (outside the repo, grep-checked: not in any
+     repo file). `package.sh --release` reads that file when the env var is unset. Preview packages still use Prism's key. Not yet
+     built with `--release` (a release build should come from a tagged commit, owner commits).
+     🔎 **Ely.by sign-in, investigated (session 12, owner asked "can users sign in with ely.by?"; not started)**. ElyPrismLauncher
+     (GPL-3.0, portable code, keep its headers): `AccountType` gets Ely; `ElyStep` = `MSAStep` subclass (client id
+     `Launcher_ELY_CLIENT_ID`, scopes `account_info offline_access minecraft_server_session`, authorize
+     `https://account.ely.by/oauth2/v1`, token `https://account.ely.by/api/oauth2/v1/token`), `ElyDeviceCodeStep` (devicecode
+     `https://account.ely.by/api/oauth2/v1/devicecode`), `ElyYggdrasilTokenStep` (yggdrasil token = oauth token),
+     `MinecraftProfileStepEly` (`https://account.ely.by/api/mojang/services/minecraft/profile`), `ElyLoginDialog`, and at launch
+     `ElyPatchTask`: swaps `com.mojang:authlib` for meta `by.ely.authlib` (Ely's patched authlib, skins on any server) or falls back
+     to meta `moe.yushi.authlibinjector`. Both meta uids exist only on THEIR meta server (`meta.pineconemc.ru`), not on
+     `meta.prismlauncher.org` (404) → ZERO must fetch authlib-injector itself (its own release API) or depend on pineconemc.
+     Their Ely client id `pineconemc` is their own registration: ZERO needs its own (free, account.ely.by developer apps).
+     Our tree today: `AccountType { MSA, Offline }`, no authlib/yggdrasil support.
+     ✅ **Ely.by accounts BUILT + accepted** (owner: "now, before release"; `brief-ely-signin.md`, `savvy-careful`; orchestrator read
+     AuthFlow / refresh / session / launch diffs): `AccountType::Ely` (saved as "Ely", token in the msa slot), device-code only
+     (`ElyDeviceCodeStep`), own `ElyRefreshStep` (keeps old refresh token, optional `Launcher_ELY_CLIENT_SECRET`),
+     `MinecraftProfileStepEly` (sets ownsMinecraft), `zero/auth/{ElyAuth,AuthlibInjector,EnsureAuthlibInjector}` (latest.json +
+     SHA-256 verified jar in `<data>/zero/authlib-injector/`, cached fallback offline, `-javaagent:<jar>=ely.by` only for Ely
+     sessions), "Add Ely.by" hidden while `Launcher_ELY_CLIENT_ID` is empty (default). Test `ZeroElyAuth` (25, live case behind
+     `ZERO_LIVE_NETWORK_TESTS=1`); worker run 77/77 + FileSystem 25/25. NOT verified: real Ely sign-in (owner must register the app,
+     RELEASE.md Paso 3b), a real game launch with the agent.
+     ✅ **Add account dialog BUILT** (owner approved mockup: step 1 Microsoft/Ely.by/Offline cards, step 2 code + QR + "Open …" button;
+     `brief-add-account-dialog.md`, `savvy-careful`; ACCEPTED: orchestrator reviewed choose/Ely/Microsoft/error/offline screenshots in both themes): `launcher/ui/zero/accounts/AddAccountDialog` +
+     `AddAccountScreenshot` (docs/zero/ARCHITECTURE.md "Add account dialog"). Wired into Settings > Accounts (one "Add account" action),
+     the account menu ("Add account..." above Manage accounts), the setup wizard and `LaunchController` re-login (`run(parent, type)`).
+     `ElyLoginDialog` removed, `MSALoginDialog.*` back to upstream (backup of the old Ely mode in the session scratchpad). Test
+     `ZeroAddAccount` (31 cases). Dev aid `ZERO_SCREENSHOT_ADD_ACCOUNT=<choose|microsoft|ely|offline|error|success>`. NOT verified: a real
+     Microsoft / Ely.by sign-in through the new dialog (needs the owner; Ely.by also needs its client ID). ⏳ **Installer v2** (owner approved animated Minecraft-style mockup;
+     own Qt static installer in `installer/`, payload appended, same footprint as NSIS) → `brief-installer-v2.md`, `savvy-careful`,
+     RUNNING. `qt6-static` 6.12.0-2 installed with owner OK (3.2 GB, `/c/msys64/ucrt64/qt6-static`).
+     ✅ **Installer v2 ACCEPTED** (screenshots reviewed by the orchestrator, one return round): `installer/` standalone CMake project
+     (`build.sh dev|release [test]`, README has switches, payload format and the NSIS footprint table), static stub 36 MB (only
+     Windows DLLs), Setup.exe 132 MB (NSIS was 96), per-user HKCU footprint identical to `win_install.nsi.in` incl. `/S` `/D=`;
+     motion ALWAYS on (owner's Windows has animations off; `ZERO_SETUP_REDUCE_MOTION=1` for tests); uninstall "Also move my worlds
+     and settings to the Recycle Bin" (`QFile::moveToTrash`, no permanent fallback; on failure nothing is removed); desktop
+     shortcut on by default (NSIS: off). `package.sh` builds it (NSIS fallback when qt6-static missing, `--nsis` forces). Tests 56/56;
+     real payload installed with `--target <scratch> --no-system`, 144 hashes identical, launcher starts. NOT run: a real install
+     (owner tests it), `WinSystem` registry/shortcut/Recycle Bin code, full `package.sh` end to end. Docs merge into filemap /
+     ARCHITECTURE done by the orchestrator.
+     ✅ **Session 12 close (orchestrator)**: `scripts/zero/build.sh test` **78/78 + FileSystem 25/25**; `scripts/zero/package.sh` end to
+     end OK (ZERO Setup v2 static, payload 96 MB, portable zip smoke OK) → `dist/ZEROLauncher-0.1.0-Windows-Setup.exe` (132 MB) + zip
+     (96 MB) + SHA256SUMS. Final Setup.exe checked with `/S --target <scratch> --no-system` (Git Bash needs `MSYS2_ARG_CONV_EXCL='*'`):
+     rc 0, 144 files identical to the stage + `.zero-install.json` + `uninstall.exe`. Owner re-test list given: real install of the new
+     Setup (animation, Options, shortcuts, Launch ZERO, later Uninstall), Add account dialog (Microsoft sign-in in the installed build,
+     Offline), colour dialog, icon, sound, font, cart, mod roll back. Nothing committed (owner commits). Next: owner registers Ely.by
+     (RELEASE.md Paso 3b) → set `Launcher_ELY_CLIENT_ID`, real Ely sign-in + game launch with authlib-injector.
+     🧪 Owner QA (session 12): new installer works. Microsoft "Open Microsoft sign-in" opens login.live.com with
+     `redirect_uri=http://127.0.0.1:<port>/` (localhost flow, as intended); completion not yet reported. Owner can't find where to
+     register an Ely.by app (Ely docs: `account.ely.by/dev/applications/new`, SPA, needs Ely login) → decision pending: Ely sign-in by
+     email + password via `authserver.ely.by` (no registration needed) vs keep waiting for an own client ID.
+     ✅ First run with no account: Prism's setup wizard page "Add Microsoft account" (`LoginWizardPage`) is no longer added;
+     `Application::performMainStartupAction` queues `MainWindow::addAccountZero` (Add account dialog, step 1) over the main window
+     when no valid account exists and MSA or Ely is available. Verified in the real dev build (fresh `-d` temp dir: "Add account"
+     window opens after the temp-folder notice). 78/78 + FileSystem 25/25; `package.sh` rebuilt `dist/` (Setup 132 MB, zip 96 MB).
+     ✅ **Session 13**: Ely password work found complete in code; `scripts/zero/build.sh test` **78/78 + FileSystem 25/25**. Owner
+       registered ZERO's Ely.by app: client ID **`zerocraft-launcher`** (Website type) is now the `Launcher_ELY_CLIENT_ID` default in
+       `CMakeLists.txt`; `package.sh` passes `-ULauncher_ELY_CLIENT_ID` so old caches pick it up; `build/` reconfigured; tests still green.
+       Live check: `POST account.ely.by/api/oauth2/v1/devicecode` with it → HTTP 200. Not checked: the token exchange (may need the
+       client secret of a Website app — owner says Ely issued none; if the real code sign-in fails at the token step, that is why).
+       Orchestrator review of the password work: OK (no password in accounts.json or logs, wiped after the body is built; Net
+       layer logs URLs only; tests cover 2FA, texts, refresh refused/offline, prefill, abort). Docs: ARCHITECTURE "Add account
+       dialog" + "Ely.by accounts", RELEASE Paso 3b (hecho), filemap, SHELL dev aid states. Screenshots (both themes: choose, ely,
+       ely-password, ely-2fa, ely-wrong) reviewed, fine. `package.sh` OK → `dist/` Setup 132 MB + zip 96 MB, smoke OK; Setup
+       `/S --target <scratch> --no-system`: rc 0, 144 files identical, exe contains the client ID. Nothing committed (owner commits).
+       🧪 Owner QA (session 13): **Ely.by code sign-in works in the installed build** (client ID `zerocraft-launcher`, no secret needed).
+       🧪 Owner QA (session 13): Ely.by email+password sign-in (incl. wrong password text), playing with the Ely account (game starts,
+       Ely skin shows) and Microsoft sign-in completion in the installed build: **all OK**.
+       🧪 Owner QA (session 13): theme editor (colour dialog solid, custom icon, custom font, video sound), mixed install cart (deps
+       check finishes) and mod Roll back → Check for updates offers the update again: **all OK**. Session 12/13 QA list closed.
+       (was: owner QA of the earlier list (colour dialog, icon, sound,
+       font, cart, mod roll back).)
+     🔴 **Session 12 RESUME HERE** (session hit its limit while a worker ran; nothing committed — owner commits):
+     - Owner decided: **Ely.by signs in with email + password** (authserver.ely.by, no app registration; OAuth code path kept only
+       when `Launcher_ELY_CLIENT_ID` is set). Brief `.claude/zero-briefs/brief-ely-password.md` (self-contained, binding design)
+       was DELEGATED to `savvy-careful` and was RUNNING. Check `git status` / `git diff` for `ElyPassword*` / `ElyAuthserver*` steps,
+       `ely-auth` in `AccountData.cpp`, password form in `ui/zero/accounts/AddAccountDialog.*`. If missing or half done: re-delegate
+       the brief as-is ("continue from the current files"). Then orchestrator review: password never saved/logged (grep accounts.json
+       save code + tests), 2FA path, refresh FAILED_HARD → re-login at the Ely step, screenshots `scratchpad/account-shots/`
+       (`ely-password`, `ely-2fa`, `ely-wrong`, `choose` with the Ely card, both themes).
+     - Then: `scripts/zero/build.sh test` (last 78/78 + FileSystem 25/25), `scripts/zero/package.sh` (ZERO Setup v2 static,
+       needs `/c/msys64/ucrt64/qt6-static`), check the final Setup with `MSYS2_ARG_CONV_EXCL='*' ./dist/…-Setup.exe /S --target <scratch>
+       --no-system --plan <file>` (144 files identical to `dist/stage/ZEROLauncher`), update this file.
+     - Tell the owner (Spanish, click by click) what to test: Ely.by sign-in with a real Ely account (create one free at ely.by if
+       needed) incl. 2FA if they use it, then play an instance with that account (authlib-injector download + `-javaagent`, skins on
+       Ely servers); Microsoft sign-in completion in the installed build (they reached login.live.com with the 127.0.0.1 redirect,
+       result not reported yet); first run with no account opens Add account directly (done, verify installed); earlier list still
+       open: colour dialog, icon, video sound, font, cart, mod roll back. New installer: owner confirmed it works.
+     - Briefs of this session (all self-contained): `brief-ely-signin.md`, `brief-installer-v2.md`, `brief-add-account-dialog.md`,
+       `brief-ely-password.md` in `.claude/zero-briefs/`.
+     Verified session 12: `ctest -R ^ZeroModsPage$ --repeat until-fail:25` green (crashed on run 3 before), full suite **76/76 +
+     FileSystem 25/25**, `scripts/zero/package.sh` rebuilt `dist/` (zip 95.8 MB + Setup.exe 96.5 MB + SHA256SUMS, smoke OK) with
+     B1-B4 + theme (d). Owner re-tests: colour dialog, custom icon, video sound, custom font, cart, mod roll back, Microsoft sign-in
+     in the INSTALLED build.
+     **RESUME HERE if the session was cut:** (1) `git status` — theme work shows as changes in `zero/theme/*`,
+     `ui/zero/pages/ThemeEditorPanel*`, `ZeroStyle.cpp`, `ZeroVideoBackground*` (new keys `icon`, `font`, `background.sound`);
+     cart work in `zero/content/ModDependencies*` / `ui/zero/content/CartReviewDialog*`. (2) If a piece looks half done,
+     re-delegate its brief as-is (briefs are self-contained) and tell the worker to continue from the current files.
+     (3) `scripts/zero/build.sh test` must be green (last known 74/74 + FileSystem 25/25). (4) Review screenshots, then B2,
+     then `scripts/zero/package.sh`, then tell the owner what to re-test (color picker, icon, sound, font, cart, rollback,
+     Microsoft sign-in in the installed build).
+     ✅ **NSIS installed** (owner OK, session 11: `mingw-w64-ucrt-x86_64-nsis` 3.13-2, `makensis` in ucrt64/bin). `package.sh`
+     now builds `dist/ZEROLauncher-0.1.0-Windows-Setup.exe` (96 MB) + the portable zip + SHA256SUMS, smoke test OK. The
+     installer was NOT run here on purpose (it takes over the `curseforge://` / `modrinth://` handlers from the owner's real
+     Prism, HKCU; uninstall removes them only if still ZERO's). Owner tests it (RELEASE.md step 5 warns about this).
+     ✅ `docs/zero/RELEASE.md` written (Spanish, owner step-by-step: NSIS `pacman -S mingw-w64-ucrt-x86_64-nsis` (3.13-2 in
+     the sync DB), Azure app + Mojang approval form aka.ms/mce-reviewappid (URGENT: slow), CurseForge console key, version
+     (today 0.1.0, CMakeLists.txt:191), signing optional, test the portable zip, publish only on owner OK; repo has Prism's
+     `.github/workflows` (build, publish, codeql…) to decide before publishing).
+- Investigation notes worth keeping (Prism internals): `ResourceDownloadDialog` only collects
+  `ResourceDownloadTask`s, the instance pages run them; resource packs/shaders have no MC/loader filtering today;
+  Prism never manages `options.txt` `resourcePacks` order; folder packs can't be disabled; Prism delete = trash
+  with a **permanent-delete fallback** (ZERO installed managers must not fall back); `ResourceModel` and the modpack
+  pages pop modal boxes on network errors; Modrinth/Flame modpack pages keep the previous pack's install task until
+  new versions arrive (stale-task bug Technic already fixed); `getLogo` callbacks only fire for cached logos.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
@@ -198,6 +754,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
    ~~Screenshot Gallery~~ (session 4) (Phases C–E in MISSION.md).
 5. Release engineering: windeployqt + NSIS, own MSA client ID + CurseForge key, updater feed.
 
+**Session 8 starts with Mission 003** (section "Mission 003" above: land the two running tasks, then Discover kit +
+Modpacks, then Mods, Resource Packs, Shaders). Older plan, still valid afterwards —
 **Recommended start for session 7:** run `scripts/zero/build.sh test`, skim this file and `docs/zero/SHELL.md`, then
 the owner reviews session 6 (theme, icon, animations, Settings, instance window) and says what to tune; then more
 Repair Center actions, Downloads/Update center, Discover, and ZERO translations (Spanish first) to lift the English-only

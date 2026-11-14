@@ -28,11 +28,16 @@ set(TEST_SOURCES
     Commandline_test.cpp
     ZeroStyle_test.cpp
     ZeroTheme_test.cpp
+    CustomTheme_test.cpp
+    ThemeEditorModel_test.cpp
+    ZeroThemeEditor_test.cpp
+    ZeroThemeAssets_test.cpp
     ZeroPixelFont_test.cpp
     ZeroFormat_test.cpp
     ZeroMotion_test.cpp
     ZeroPlayButton_test.cpp
     ZeroShell_test.cpp
+    ZeroVideoBackground_test.cpp
     CrashDetective_test.cpp
     CommandMatcher_test.cpp
     ZeroCommandPalette_test.cpp
@@ -40,19 +45,43 @@ set(TEST_SOURCES
     SessionHistory_test.cpp
     LibraryFilter_test.cpp
     ZeroLibrary_test.cpp
+    ZeroExportChooser_test.cpp
     WorldScanner_test.cpp
     ScreenshotScanner_test.cpp
     WorldBackup_test.cpp
+    PackSnapshot_test.cpp
     AutoBackup_test.cpp
     StorageScanner_test.cpp
     JavaDoctor_test.cpp
     ModHealth_test.cpp
+    DependencyInspector_test.cpp
     ModRepair_test.cpp
+    ModSnapshot_test.cpp
     ServerVault_test.cpp
     FavoriteStore_test.cpp
     TechnicMeta_test.cpp
     ContentMetadata_test.cpp
     ContentFilter_test.cpp
+    CreateInstanceModel_test.cpp
+    ZeroCreateInstance_test.cpp
+    ZeroContentKit_test.cpp
+    ZeroDiscover_test.cpp
+    ZeroDiscoverMods_test.cpp
+    ZeroDiscoverPacks_test.cpp
+    ZeroDiscoverShaders_test.cpp
+    ZeroDiscoverWorlds_test.cpp
+    ZeroInstallCart_test.cpp
+    ZeroModTarget_test.cpp
+    ZeroModInstall_test.cpp
+    ZeroModDependencies_test.cpp
+    ZeroModpackInstall_test.cpp
+    ZeroModsPage_test.cpp
+    PackOrder_test.cpp
+    ZeroResourcePacksPage_test.cpp
+    PerformanceProfile_test.cpp
+    ZeroElyAuth_test.cpp
+    ZeroPerformanceDialog_test.cpp
+    ZeroAddAccount_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

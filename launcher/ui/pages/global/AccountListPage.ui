@@ -52,8 +52,7 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="actionAddMicrosoft"/>
-   <addaction name="actionAddOffline"/>
+   <addaction name="actionAddAccount"/>
    <addaction name="actionRefresh"/>
    <addaction name="actionRemove"/>
    <addaction name="actionSetDefault"/>
@@ -84,14 +83,12 @@
     <string>Manage Skins</string>
    </property>
   </action>
-  <action name="actionAddMicrosoft">
+  <action name="actionAddAccount">
    <property name="text">
-    <string>&amp;Add Microsoft</string>
+    <string>&amp;Add account</string>
    </property>
-  </action>
-  <action name="actionAddOffline">
-   <property name="text">
-    <string>Add &amp;Offline</string>
+   <property name="toolTip">
+    <string>Add a Microsoft, Ely.by or offline account</string>
    </property>
   </action>
   <action name="actionRefresh">

@@ -942,7 +942,18 @@ void ResourceFolderModel::applyUpdates(QSet<QString>& currentSet, QSet<QString>&
             auto& newResource = newResources[kept];
             const auto& currentResource = m_resources.at(row);
 
-            if (newResource->dateTimeChanged() == currentResource->dateTimeChanged()) {
+            // ZERO: the packwiz entry of a jar can appear, go away or change while the jar itself stays the same (a roll back puts the
+            // jar back a moment before its entry, and the folder may be read in between): a reading that took the jar without its entry
+            // must not stay, or the mod has no provider info for good.
+            const auto currentMeta = currentResource->metadata();
+            const auto newMeta = newResource->metadata();
+            const bool metadataChanged = (currentMeta == nullptr) != (newMeta == nullptr) ||
+                                         (currentMeta && newMeta &&
+                                          (currentMeta->slug != newMeta->slug || currentMeta->projectId != newMeta->projectId ||
+                                           currentMeta->fileId != newMeta->fileId || currentMeta->hash != newMeta->hash ||
+                                           currentMeta->filename != newMeta->filename));
+
+            if (newResource->dateTimeChanged() == currentResource->dateTimeChanged() && !metadataChanged) {
                 // no significant change
                 bool hadIssues = currentResource->hasIssues();
                 currentResource->updateIssues(m_instance);

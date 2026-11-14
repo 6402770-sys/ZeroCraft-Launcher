@@ -59,6 +59,7 @@
 #include "minecraft/launch/AutoInstallJava.h"
 #include "minecraft/launch/ClaimAccount.h"
 #include "minecraft/launch/CreateGameFolders.h"
+#include "zero/auth/EnsureAuthlibInjector.h"  // ZERO
 #include "minecraft/launch/EnsureAvailableMemory.h"
 #include "minecraft/launch/EnsureOfflineLibraries.h"
 #include "minecraft/launch/ExtractNatives.h"
@@ -1219,6 +1220,11 @@ LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, Minecraf
         }
     } else {
         process->appendStep(makeShared<EnsureOfflineLibraries>(pptr, this));
+    }
+
+    // ZERO: Ely.by accounts play through the authlib-injector java agent. Microsoft/offline sessions never ask for it.
+    if (session->launchMode == LaunchMode::Normal && session->wantsAuthlibInjector) {
+        process->appendStep(makeShared<EnsureAuthlibInjector>(pptr, session));
     }
 
     // if there are any jar mods

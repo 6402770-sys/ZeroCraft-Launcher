@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QKeySequence>
 #include <QPixmap>
+#include <QPointer>
 #include <QWidget>
 
 class QStackedWidget;
@@ -14,6 +15,7 @@ namespace Zero {
 class ShellPage;
 class ZeroNavRail;
 class ZeroTopBar;
+class ZeroVideoBackground;
 
 class ZeroShell : public QWidget {
     Q_OBJECT
@@ -46,6 +48,12 @@ class ZeroShell : public QWidget {
 
     ZeroNavRail* rail() const { return m_rail; }
     ZeroTopBar* topBar() const { return m_topBar; }
+    /// The video background of a custom video theme (null until a theme with a video was applied); for tests.
+    ZeroVideoBackground* videoBackground() const { return m_video; }
+
+    /// A game is running: the video background pauses (resumes when the last one stops).
+    void setGameRunning(bool running);
+    bool gameRunning() const { return m_gameRunning; }
 
    signals:
     void pageChanged(const QString& id);
@@ -59,10 +67,17 @@ class ZeroShell : public QWidget {
    protected:
     void resizeEvent(QResizeEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
    private:
     void showPage(const QString& id);
     void updateCollapsed();
+    /// The custom-theme background image scaled to cover the window (cached: rescaled only when the path or the size changes).
+    const QPixmap& coverBackground(const QString& path);
+    /// Follows the theme's video (creates / retargets / releases the player) and feeds it the play / pause inputs.
+    void syncVideo();
+    void updateVideoConditions();
 
     ZeroNavRail* m_rail;
     ZeroTopBar* m_topBar;
@@ -73,6 +88,14 @@ class ZeroShell : public QWidget {
     bool m_railFinished = false;
     ShellPage* m_settingsPage = nullptr;
     bool m_hasStretch = false;
+    qint64 m_bgStamp = 0;  // modification time of m_bgPath when it was decoded
+    QString m_bgPath;      // image behind m_bgSource / m_bgScaled
+    QPixmap m_bgSource;    // decoded once per path
+    QPixmap m_bgScaled;    // cover-scaled to m_bgScaledSize (device pixels)
+    QSize m_bgScaledSize;
+    ZeroVideoBackground* m_video = nullptr;  // created with the first video theme
+    bool m_gameRunning = false;
+    QPointer<QWidget> m_watchedWindow;       // the top-level window whose minimized state the video follows
 };
 
 }  // namespace Zero

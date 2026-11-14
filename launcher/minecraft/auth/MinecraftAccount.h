@@ -85,6 +85,11 @@ class MinecraftAccount : public QObject, public Usable {
 
     static MinecraftAccountPtr createBlankMSA();
 
+    //! ZERO: a blank Ely.by account (signed in through the Ely.by device code flow)
+    static MinecraftAccountPtr createBlankEly();
+    //! ZERO: a blank Ely.by account that signs in with email/username + password (Ely's authserver; no client ID needed)
+    static MinecraftAccountPtr createBlankElyPassword();
+
     static MinecraftAccountPtr createOffline(const QString& username);
 
     static MinecraftAccountPtr loadFromJsonV3(const QJsonObject& json);
@@ -125,6 +130,9 @@ class MinecraftAccount : public QObject, public Usable {
         switch (data.type) {
             case AccountType::MSA: {
                 return "msa";
+            } break;
+            case AccountType::Ely: {
+                return "msa";  // ZERO: the same user type as ElyPrismLauncher sends (the game needs it for chat signing)
             } break;
             case AccountType::Offline: {
                 return "offline";

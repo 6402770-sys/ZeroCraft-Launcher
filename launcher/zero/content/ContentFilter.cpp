@@ -112,6 +112,8 @@ ModPlatform::ResourceType resourceTypeOf(Kind kind)
             return ModPlatform::ResourceType::ResourcePack;
         case Kind::Shader:
             return ModPlatform::ResourceType::ShaderPack;
+        case Kind::World:
+            return ModPlatform::ResourceType::World;
     }
     return ModPlatform::ResourceType::Unknown;
 }
@@ -283,6 +285,23 @@ QStringList cleaned(const QStringList& values)
     return out;
 }
 
+/// The selected values of `facetId` that the provider's facet offers (values picked under another provider, e.g. a Modrinth
+/// category after switching to CurseForge, are kept in the state but never sent). Empty when the facet is missing or disabled.
+QStringList offered(const FilterState& state, const QList<Facet>& facets, const QString& facetId)
+{
+    const auto it = std::ranges::find_if(facets, [&facetId](const Facet& f) { return f.id == facetId; });
+    if (it == facets.cend() || !it->isEnabled()) {
+        return {};
+    }
+    QStringList out;
+    for (const auto& v : cleaned(state.values(facetId))) {
+        if (std::ranges::any_of(it->options, [&v](const FacetOption& o) { return o.value == v; })) {
+            out.append(v);
+        }
+    }
+    return out;
+}
+
 QMap<QString, QStringList> normalized(const QMap<QString, QStringList>& selected)
 {
     QMap<QString, QStringList> out;
@@ -378,6 +397,11 @@ QList<Facet> facetsFor(Kind kind, const FacetContext& ctx)
                        categoryFacet(FacetId::feature, ctx),
                        categoryFacet(FacetId::category, ctx),
                        toggleFacet(FacetId::installed, tr("Installed in target")) };
+            break;
+        case Kind::World:
+            // CurseForge only (Modrinth hosts no worlds): no provider facet. Worlds carry no metadata in the instance, so there is
+            // no "Installed" facet either. The categories are CurseForge's own (classId 17), read from the provider.
+            facets = { versionFacet(ctx), categoryFacet(FacetId::category, ctx) };
             break;
     }
     for (auto& f : facets) {
@@ -600,7 +624,8 @@ ResourceAPI::SearchArgs toSearchArgs(const FilterState& state,
                                      Kind kind,
                                      Provider provider,
                                      int offset,
-                                     const QList<ResourceAPI::SortingMethod>& providerMethods)
+                                     const QList<ResourceAPI::SortingMethod>& providerMethods,
+                                     const QList<Facet>& facets)
 {
     ResourceAPI::SearchArgs args;
     args.type = resourceTypeOf(kind);
@@ -641,7 +666,7 @@ ResourceAPI::SearchArgs toSearchArgs(const FilterState& state,
         }
     }
 
-    const auto categories = cleaned(state.values(FacetId::category));
+    const auto categories = offered(state, facets, FacetId::category);
     if (provider == Provider::CurseForge) {
         if (!categories.isEmpty()) {
             args.categoryIds = categories;
@@ -658,21 +683,21 @@ ResourceAPI::SearchArgs toSearchArgs(const FilterState& state,
     };
     addGroup(categories);
     if (kind == Kind::ResourcePack || kind == Kind::Shader) {
-        addGroup(cleaned(state.values(FacetId::feature)));
+        addGroup(offered(state, facets, FacetId::feature));
     }
     if (kind == Kind::ResourcePack) {
-        addGroup(cleaned(state.values(FacetId::resolution)));
+        addGroup(offered(state, facets, FacetId::resolution));
     }
     if (kind == Kind::Shader) {
-        addGroup(cleaned(state.values(FacetId::platform)));
-        addGroup(cleaned(state.values(FacetId::performance)));
+        addGroup(offered(state, facets, FacetId::platform));
+        addGroup(offered(state, facets, FacetId::performance));
     }
     if (!groups.isEmpty()) {
         args.categoryGroups = groups;
     }
 
     if (kind == Kind::Mod) {
-        if (const auto env = state.values(FacetId::environment); !env.isEmpty()) {
+        if (const auto env = offered(state, facets, FacetId::environment); !env.isEmpty()) {
             if (const auto side = ModPlatform::SideType::fromString(env.constFirst()); side.isValid()) {
                 args.side = side;
             }
@@ -710,6 +735,11 @@ bool matchesClient(const FilterState& state, const QList<Facet>& facets, const I
         }
         // Server facets CurseForge cannot apply in full (one Minecraft version per search): "any of" on the item's data.
         if (item.provider == Provider::CurseForge) {
+            // A single value was sent to the server, which applied it: CurseForge's latestFilesIndexes is partial, so
+            // re-checking it here would hide valid hits. Only values the server did not apply are checked.
+            if (values.size() == 1) {
+                continue;
+            }
             if (f.id == FacetId::mcVersion && !item.gameVersions.isEmpty() && !anyOf(values, item.gameVersions)) {
                 return false;
             }

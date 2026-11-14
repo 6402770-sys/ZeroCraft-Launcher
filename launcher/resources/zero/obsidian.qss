@@ -4,8 +4,10 @@
  * Image placeholders have the form img:<lucide-name>:<colorToken> and expand to a url() of a tinted SVG. */
 
 /* ===== Windows and containers ===== */
-QMainWindow, QDialog, QWizard, QMessageBox {
-    background-color: @bg@;
+/* Every top-level window paints an OPAQUE background (the solid tokens): a custom theme's card opacity is alpha on `surface` only
+   for cards inside pages, never for a window of its own (it would show the app behind it). */
+QMainWindow, QDialog, QColorDialog, QFileDialog, QInputDialog, QMessageBox, QProgressDialog, QWizard {
+    background-color: @bgSolid@;
     color: @text@;
 }
 QMainWindow::separator {
@@ -171,6 +173,41 @@ QPushButton[zeroVariant="primary"]:disabled, QToolButton[zeroVariant="primary"]:
     color: @textTertiary@;
     border-color: @border@;
 }
+/* Primary split button (the instance window's Play): one piece, a 32 px arrow segment behind a subtle divider. */
+QToolButton[zeroVariant="primary"][popupMode="1"] {
+    padding-right: 40px;
+}
+QToolButton[zeroVariant="primary"]::menu-button {
+    width: 32px;
+    border: none;
+    border-left: 1px solid @accentPressed@;
+    border-top-right-radius: @radiusMd@;
+    border-bottom-right-radius: @radiusMd@;
+    background-color: transparent;
+}
+QToolButton[zeroVariant="primary"]::menu-button:hover {
+    background-color: @accentHover@;
+}
+QToolButton[zeroVariant="primary"]::menu-button:pressed {
+    background-color: @accentPressed@;
+}
+QToolButton[zeroVariant="primary"]::menu-arrow {
+    image: @img:chevron-down:onAccent@;
+    width: 16px;
+    height: 16px;
+}
+QToolButton[zeroVariant="primary"]::menu-button:disabled {
+    border-left-color: @border@;
+}
+QToolButton[zeroVariant="primary"]::menu-arrow:disabled {
+    image: @img:chevron-down:textTertiary@;
+}
+/* The details panel's "Installed" (a disabled primary that says the target already has the newest version). */
+QPushButton[zeroVariant="primary"][zeroInstalled="true"]:disabled {
+    background-color: @success12@;
+    color: @success@;
+    border-color: @success@;
+}
 
 QPushButton[zeroVariant="ghost"], QToolButton[zeroVariant="ghost"] {
     background-color: transparent;
@@ -223,6 +260,24 @@ QPushButton[zeroSize="lg"], QToolButton[zeroSize="lg"] {
     min-height: @controlInnerLg@;
     padding: 0 20px;
     font-weight: 600;
+}
+
+/* Small buttons (the dependency panel's Enable / Find): the height is fixed in code, the padding is tighter. */
+QPushButton[zeroSize="sm"], QToolButton[zeroSize="sm"] {
+    min-height: 0;
+    padding: 0 10px;
+}
+
+/* Icon-only tool buttons with a fixed size (the dependency panel's close button): no padding, so the icon is never squeezed out. */
+QToolButton[zeroSize="icon"] {
+    min-height: 0;
+    padding: 0;
+}
+
+/* Content kit: the toolbar's "Filters" button keeps room on the right for its painted count pill. */
+QPushButton#zeroFiltersButton[zeroHasBadge="true"] {
+    padding-left: 16px;
+    padding-right: 40px;
 }
 
 /* ===== Inputs ===== */
@@ -303,7 +358,7 @@ QComboBox::down-arrow:disabled {
     image: @img:chevron-down:textTertiary@;
 }
 QComboBox QAbstractItemView {
-    background-color: @surface@;
+    background-color: @surfaceSolid@;  /* popups stay opaque under a translucent card opacity */
     color: @text@;
     border: 1px solid @border@;
     border-radius: @radiusLg@;
@@ -596,7 +651,7 @@ QScrollBar::add-page, QScrollBar::sub-page {
 
 /* ===== Menus ===== */
 QMenu {
-    background-color: @surface@;
+    background-color: @surfaceSolid@;  /* popups stay opaque under a translucent card opacity */
     color: @text@;
     border: 1px solid @border@;
     border-radius: @radiusLg@;
@@ -656,7 +711,7 @@ QMenuBar::item:pressed {
 
 /* ===== Tooltip ===== */
 QToolTip {
-    background-color: @elevated@;
+    background-color: @elevatedSolid@;  /* a tooltip is a window of its own: always opaque */
     color: @text@;
     border: 1px solid @border@;
     border-radius: @radiusSm@;

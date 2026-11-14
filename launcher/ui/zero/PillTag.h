@@ -13,7 +13,8 @@ class PillTag : public QWidget {
    public:
     /// Plain / PlainDanger: the original badge look (`surface` fill, `border` outline, secondary or danger text).
     /// Success / Warning / Danger / Info: status tones, a 12% tint of the status color with a stronger outline and colored text.
-    enum class Tone { Plain, PlainDanger, Success, Warning, Danger, Info };
+    /// Accent: the same recipe in the accent color (an action that is available, e.g. "Update to 1.2").
+    enum class Tone { Plain, PlainDanger, Success, Warning, Danger, Info, Accent };
 
     PillTag(const QString& text, Tone tone, QWidget* parent = nullptr);
     /// Original two-state form: `danger` = PlainDanger, otherwise Plain.

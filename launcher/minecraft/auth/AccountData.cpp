@@ -291,6 +291,8 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
         type = AccountType::MSA;
     } else if (typeS == "Offline") {
         type = AccountType::Offline;
+    } else if (typeS == "Ely") {  // ZERO
+        type = AccountType::Ely;
     } else {
         qWarning() << "Failed to parse account data: type is not recognized.";
         return false;
@@ -304,6 +306,23 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
         msaToken = tokenFromJSONV3(data, "msa");
         userToken = tokenFromJSONV3(data, "utoken");
         mojangservicesToken = tokenFromJSONV3(data, "xrp-mc");
+    }
+
+    if (type == AccountType::Ely) {  // ZERO
+        // "ely-auth" is missing in files written before password sign-in existed: those are OAuth accounts
+        elyAuth = data.value("ely-auth").toString() == QLatin1String("password") ? ElyAuthKind::Password : ElyAuthKind::OAuth;
+        if (elyAuth == ElyAuthKind::Password) {
+            // authserver sign-in: the access token is the "ygg" token below; only the user name and the client token are kept
+            elyUsername = data.value("ely-username").toString();
+            elyClientToken = data.value("ely-client-token").toString();
+        } else {
+            // the Ely.by OAuth token (access + refresh) uses the same slot as the Microsoft one
+            auto clientIDV = data.value("msa-client-id");
+            if (clientIDV.isString()) {
+                msaClientID = clientIDV.toString();
+            }
+            msaToken = tokenFromJSONV3(data, "msa");
+        }
     }
 
     yggdrasilToken = tokenFromJSONV3(data, "ygg");
@@ -335,6 +354,17 @@ QJsonObject AccountData::saveState() const
         tokenToJSONV3(output, mojangservicesToken, "xrp-mc");
     } else if (type == AccountType::Offline) {
         output["type"] = "Offline";
+    } else if (type == AccountType::Ely) {  // ZERO
+        output["type"] = "Ely";
+        if (elyAuth == ElyAuthKind::Password) {
+            output["ely-auth"] = "password";
+            output["ely-username"] = elyUsername;
+            output["ely-client-token"] = elyClientToken;  // no password, ever
+        } else {
+            output["ely-auth"] = "oauth";
+            output["msa-client-id"] = msaClientID;
+            tokenToJSONV3(output, msaToken, "msa");
+        }
     }
 
     tokenToJSONV3(output, yggdrasilToken, "ygg");

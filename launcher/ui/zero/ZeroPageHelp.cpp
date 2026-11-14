@@ -74,8 +74,8 @@ const QHash<QString, Page>& pages()
         { "nilmods", { tr("NilLoader mods"), tr("Mods for NilLoader. Most players never need this page.") } },
         { "resourcepacks",
           { tr("Textures, sounds and models"),
-            tr("Resource packs change how the game looks and sounds. Add them here, then turn them on in the game's "
-               "Options > Resource Packs.") } },
+            tr("Resource packs change how the game looks and sounds. Turn them on here and drag them into order: the "
+               "pack at the top wins.") } },
         { "texturepacks", { tr("Texture packs for old versions"), tr("Texture packs for Minecraft before 1.6.") } },
         { "datapacks",
           { tr("Data packs for every new world"),

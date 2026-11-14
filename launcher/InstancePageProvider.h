@@ -16,6 +16,8 @@
 #include "ui/pages/instance/ShaderPackPage.h"
 #include "ui/pages/instance/TexturePackPage.h"
 #include "ui/pages/instance/VersionPage.h"
+#include "ui/zero/instance/ModsPage.h"  // ZERO
+#include "ui/zero/instance/ResourcePacksPage.h"  // ZERO
 #include "ui/pages/instance/WorldListPage.h"
 
 class InstancePageProvider : protected QObject, public BasePageProvider {
@@ -30,12 +32,10 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
         values.append(new LogPage(inst));
         values.append(new VersionPage(inst));
         values.append(ManagedPackPage::createPage(inst));
-        auto modsPage = new ModFolderPage(inst, inst->loaderModList());
-        modsPage->setFilter("%1 (*.zip *.jar *.litemod *.nilmod)");
-        values.append(modsPage);
+        values.append(new Zero::ModsUi::ModsPage(inst, inst->loaderModList()));  // ZERO: replaces ModFolderPage (same id "mods")
         values.append(new CoreModFolderPage(inst, inst->coreModList()));
         values.append(new NilModFolderPage(inst, inst->nilModList()));
-        values.append(new ResourcePackPage(inst, inst->resourcePackList()));
+        values.append(new Zero::PacksUi::ResourcePacksPage(inst, inst->resourcePackList()));  // ZERO: replaces ResourcePackPage (same id "resourcepacks")
         values.append(new GlobalDataPackPage(inst));
         values.append(new TexturePackPage(inst, inst->texturePackList()));
         values.append(new ShaderPackPage(inst, inst->shaderPackList()));

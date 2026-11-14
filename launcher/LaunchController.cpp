@@ -43,7 +43,7 @@
 #include "net/NetUtils.h"
 #include "ui/InstanceWindow.h"
 #include "ui/dialogs/CustomMessageBox.h"
-#include "ui/dialogs/MSALoginDialog.h"
+#include "ui/zero/accounts/AddAccountDialog.h"  // ZERO
 #include "ui/dialogs/ProfileSelectDialog.h"
 #include "ui/dialogs/ProfileSetupDialog.h"
 #include "ui/dialogs/ProgressDialog.h"
@@ -343,8 +343,15 @@ bool LaunchController::reauthenticateAccount(const MinecraftAccountPtr& account,
     if (button == QMessageBox::StandardButton::Yes) {
         auto* accounts = APPLICATION->accounts();
         const bool isDefault = accounts->defaultAccount() == account;
-        if (account->accountType() == AccountType::MSA) {
-            auto newAccount = MSALoginDialog::newAccount(m_parentWidget);
+        if (account->accountType() == AccountType::MSA || account->accountType() == AccountType::Ely) {  // ZERO: Ely.by too
+            // ZERO: the Add account dialog, opened at step 2 for this kind of account (no step 1: the kind is known)
+            // an Ely.by account that signs in with a password reopens that form with its user name filled in
+            Zero::Accounts::AddAccountDialog::SignInHint hint;
+            if (account->accountType() == AccountType::Ely && account->accountData()->elyAuth == ElyAuthKind::Password) {
+                hint.password = true;
+                hint.username = account->accountData()->elyUsername;
+            }
+            auto newAccount = Zero::Accounts::AddAccountDialog::run(m_parentWidget, account->accountType(), hint);
 
             if (newAccount != nullptr) {
                 accounts->removeAccount(accounts->index(accounts->findAccountByProfileId(account->profileId())));

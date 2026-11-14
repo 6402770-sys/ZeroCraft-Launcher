@@ -103,6 +103,8 @@ class InstanceList : public QAbstractListModel {
     int count() const { return static_cast<int>(m_instances.size()); }
 
     InstListError loadList();
+    /// ZERO: replaces the in-memory instance `id` by a freshly loaded one (its folder was replaced on disk). False when it cannot be loaded.
+    bool reloadInstance(const InstanceId& id);
     void saveNow();
 
     /* O(n) */

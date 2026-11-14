@@ -30,6 +30,7 @@
 #include "ui/zero/ZeroEmptyState.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
+#include "ui/zero/pages/LibraryImportButton.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
 #include "zero/profiles/InstanceProfile.h"
@@ -38,6 +39,10 @@
 namespace Zero {
 
 namespace {
+
+/// Below this page width the Import button shows its icon only. The owner wants the word "Import" visible, so it stays labelled
+/// at a 1100 px window (the top bar elides / drops the "N instances" subtitle first, which ChromeTitle already does).
+constexpr int kImportCompactBelow = 900;
 
 /// Fixed 36 px rows for the list mode.
 class RowDelegate : public QStyledItemDelegate {
@@ -110,11 +115,15 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     m_newButton = newButton;
     connect(newButton, &QPushButton::clicked, this, &LibraryPage::newInstanceRequested);
 
+    m_importButton = new LibraryImportButton(this);
+    connect(m_importButton, &QPushButton::clicked, this, &LibraryPage::importRequested);
+
     auto* actions = new QWidget(this);
     auto* actionsRow = new QHBoxLayout(actions);
     actionsRow->setContentsMargins(0, 0, 0, 0);
     actionsRow->setSpacing(Tokens::spaceSm);
     actionsRow->addWidget(toggles);
+    actionsRow->addWidget(m_importButton);
     actionsRow->addWidget(newButton);
     setTopBarActions(actions);
 
@@ -186,6 +195,9 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     connect(m_details, &InstanceDetailsPanel::favoriteToggleRequested, this, &LibraryPage::favoriteToggleRequested);
     connect(m_details, &InstanceDetailsPanel::setArtworkRequested, this, &LibraryPage::setArtworkRequested);
     connect(m_details, &InstanceDetailsPanel::checkModsRequested, this, &LibraryPage::checkModsRequested);
+    connect(m_details, &InstanceDetailsPanel::boostPerformanceRequested, this, &LibraryPage::boostPerformanceRequested);
+    connect(m_details, &InstanceDetailsPanel::exportRequested, this, &LibraryPage::exportRequested);
+    connect(m_details, &InstanceDetailsPanel::rollbackRequested, this, &LibraryPage::rollbackRequested);
     connect(m_details, &InstanceDetailsPanel::removeArtworkRequested, this, &LibraryPage::removeArtworkRequested);
 
     auto* collectionRow = new QWidget(this);
@@ -497,6 +509,12 @@ void LibraryPage::onListCurrentChanged(const QModelIndex& current)
     if (source.isValid() && m_grid->currentIndex() != source)
         m_grid->selectionModel()->setCurrentIndex(source, QItemSelectionModel::ClearAndSelect);
     m_syncing = false;
+}
+
+void LibraryPage::resizeEvent(QResizeEvent* event)
+{
+    ShellPage::resizeEvent(event);
+    m_importButton->setCompact(width() < kImportCompactBelow);
 }
 
 bool LibraryPage::eventFilter(QObject* watched, QEvent* event)

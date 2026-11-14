@@ -60,6 +60,15 @@ class ThemeManager {
 
     void refresh();
 
+    /// ZERO custom themes. (Re)loads the theme folder `folder` (one holding a zero-theme.json) and registers it under
+    /// "zero-custom-<folder name>", replacing an earlier load of the same folder; returns the id, or an empty string when the
+    /// folder holds no valid theme (logged, nothing registered). If that theme is the active one it is re-applied, so a saved
+    /// edit shows without a restart. The caller (Appearance page) refreshes its own theme cards.
+    QString loadCustomTheme(const QString& folder);
+    /// Unregisters a custom theme (other ids are ignored); the folder on disk is untouched (see Custom::trashTheme). When the
+    /// removed theme was the active one, the setting and the application fall back to the ZERO default theme.
+    void removeCustomTheme(const QString& id);
+
    private:
     std::map<QString, std::unique_ptr<ITheme>> m_themes;
     std::map<QString, IconTheme> m_icons;

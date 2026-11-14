@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "zero/mods/ModResolver.h"
 #include "zero/mods/Versions.h"
 
 namespace Zero {
@@ -63,27 +64,11 @@ QString formatName(LoaderFormat format)
     return tr("another mod loader");
 }
 
-bool isMaven(LoaderFormat f)
-{
-    return f == LoaderFormat::Forge || f == LoaderFormat::NeoForge || f == LoaderFormat::LegacyForge;
-}
-
-QList<LoaderFormat> preferredFormats(InstanceLoader loader)
-{
-    switch (loader) {
-        case InstanceLoader::Fabric:
-            return { LoaderFormat::Fabric };
-        case InstanceLoader::Quilt:
-            return { LoaderFormat::Quilt, LoaderFormat::Fabric };
-        case InstanceLoader::Forge:
-            return { LoaderFormat::Forge, LoaderFormat::LegacyForge };
-        case InstanceLoader::NeoForge:
-            return { LoaderFormat::NeoForge };
-        case InstanceLoader::None:
-            break;
-    }
-    return { LoaderFormat::Fabric, LoaderFormat::Quilt, LoaderFormat::NeoForge, LoaderFormat::Forge, LoaderFormat::LegacyForge };
-}
+using Resolve::environmentIds;
+using Resolve::isMaven;
+using Resolve::Located;
+using Resolve::Provider;
+using Resolve::WrongReason;
 
 QString joinNames(const QStringList& names)
 {
@@ -133,19 +118,6 @@ bool fileNameMentions(const QString& fileName, const QString& id)
     }
 }
 
-struct Located {
-    const ModEntry* entry = nullptr;
-    const ModMetadata* top = nullptr;
-};
-
-struct Provider {
-    const ModEntry* entry = nullptr;
-    QString version;
-    const ModMetadata* top = nullptr;
-};
-
-enum class WrongReason { Plain, Connector, NeoForgeCompat };
-
 struct MissingGroup {
     QString depId;
     Confidence confidence = Confidence::Confirmed;
@@ -155,17 +127,10 @@ struct MissingGroup {
     QStringList predicates;
 };
 
-const QStringList& environmentIds()
-{
-    static const QStringList ids = { "minecraft", "java",  "fabricloader", "quilt_loader", "forge",
-                                     "neoforge",  "fml",   "javafml",      "lowcodefml" };
-    return ids;
-}
-
 class Analyzer {
    public:
     Analyzer(const InstanceContext& ctx, const QStringList& disabledNames, const QList<ModMetadata>& disabledJars)
-        : m_ctx(ctx), m_disabledNames(disabledNames), m_disabledJars(disabledJars), m_preferred(preferredFormats(ctx.loader))
+        : m_ctx(ctx), m_disabledNames(disabledNames), m_disabledJars(disabledJars), m_res(ctx)
     {}
 
     Report run(const QList<ModMetadata>& enabled)
@@ -179,26 +144,12 @@ class Analyzer {
             return c != 0 ? c < 0 : a->path < b->path;
         });
 
-        // pass 1: which jars load
-        QList<const ModMetadata*> notLoaded;
-        for (const ModMetadata* jar : jars) {
-            if (select(*jar).isEmpty())
-                notLoaded.append(jar);
-            else
-                collectLoaded(*jar, jar);
-        }
-        for (const Located& l : m_loaded) {
-            if (l.entry->id == QLatin1String("connector"))
-                m_connector = true;  // Sinytra Connector: runs Fabric mods on Forge / NeoForge
-        }
+        // which jars load and what they provide (shared with the DependencyInspector), then the jars that do not load
+        m_res.load(jars);
+        for (const Resolve::NotLoaded& n : m_res.notLoaded())
+            classifyNotLoaded(n);
 
-        // pass 2: the jars that do not load
-        for (const ModMetadata* jar : notLoaded)
-            classifyNotLoaded(*jar);
-
-        buildIndex();
-
-        for (const Located& l : m_loaded)
+        for (const Located& l : m_res.loaded())
             checkEntry(l);
         emitMissing();
         checkDuplicates();
@@ -242,74 +193,12 @@ class Analyzer {
     }
 
    private:
-    // ---------------------------------------------------------------- selection
+    // ---------------------------------------------------------------- jars that do not load
 
-    QList<const ModEntry*> select(const ModMetadata& jar) const
+    void classifyNotLoaded(const Resolve::NotLoaded& notLoaded)
     {
-        for (LoaderFormat f : m_preferred) {
-            if (!jar.hasFormat(f))
-                continue;
-            QList<const ModEntry*> out;
-            for (const ModEntry& e : jar.mods)
-                if (e.format == f)
-                    out.append(&e);
-            return out;
-        }
-        return {};
-    }
-
-    void collectLoaded(const ModMetadata& jar, const ModMetadata* top)
-    {
-        for (const ModEntry* e : select(jar))
-            m_loaded.append({ e, top });
-        for (const ModMetadata& n : jar.nested) {
-            if (!select(n).isEmpty())
-                collectLoaded(n, top);
-            else if (!n.parseError.isEmpty())
-                m_opaque = true;  // a bundled jar we could not read might provide anything
-        }
-    }
-
-    /// Wrong-loader confidence of one foreign format in this instance.
-    std::pair<Confidence, WrongReason> wrongFor(LoaderFormat format) const
-    {
-        switch (m_ctx.loader) {
-            case InstanceLoader::Fabric:
-            case InstanceLoader::Quilt:
-                if (format == LoaderFormat::LegacyForge)
-                    return { Confidence::Likely, WrongReason::Plain };
-                return { Confidence::Confirmed, WrongReason::Plain };
-            case InstanceLoader::Forge:
-                if (format == LoaderFormat::Fabric && m_connector)
-                    return { Confidence::Possible, WrongReason::Connector };
-                return { Confidence::Confirmed, WrongReason::Plain };
-            case InstanceLoader::NeoForge:
-                if (format == LoaderFormat::Fabric && m_connector)
-                    return { Confidence::Possible, WrongReason::Connector };
-                if (format == LoaderFormat::Forge) {
-                    // NeoForge 1.20.1 is built on Forge; the first NeoForge versions kept reading mods.toml. Unknown version: do not claim.
-                    const auto lo = compareVersions(m_ctx.mcVersion, QStringLiteral("1.20.1"));
-                    const auto hi = compareVersions(m_ctx.mcVersion, QStringLiteral("1.20.4"));
-                    if (!lo || !hi || (*lo >= 0 && *hi <= 0))
-                        return { Confidence::Possible, WrongReason::NeoForgeCompat };
-                    return { Confidence::Confirmed, WrongReason::Plain };
-                }
-                if (format == LoaderFormat::LegacyForge)
-                    return { Confidence::Likely, WrongReason::Plain };
-                return { Confidence::Confirmed, WrongReason::Plain };
-            case InstanceLoader::None:
-                break;
-        }
-        return { Confidence::Unknown, WrongReason::Plain };
-    }
-
-    void classifyNotLoaded(const ModMetadata& jar)
-    {
-        bool unreadable = jar.mods.isEmpty();
-        for (LoaderFormat f : jar.unparsedFormats)
-            unreadable = unreadable || m_preferred.contains(f);
-        if (unreadable) {
-            m_opaque = true;
+        const ModMetadata& jar = *notLoaded.jar;
+        if (notLoaded.unreadable) {
             Finding f;
             f.kind = FindingKind::UnreadableMetadata;
             f.confidence = Confidence::Unknown;
@@ -324,16 +213,9 @@ class Analyzer {
             return;
         }
 
-        // the jar holds mods, but for another loader
-        Confidence conf = Confidence::Confirmed;
-        WrongReason reason = WrongReason::Plain;
-        for (LoaderFormat fmt : jar.formats()) {
-            const auto w = wrongFor(fmt);
-            if (int(w.first) >= int(conf)) {  // weakest alternative wins: the jar may load the best way it can
-                conf = w.first;
-                reason = w.second;
-            }
-        }
+        // the jar holds mods, but for another loader (the resolver picked the weakest claim: the jar may load the best way it can)
+        const Confidence conf = notLoaded.confidence;
+        const WrongReason reason = notLoaded.reason;
         const QString modName = jar.mods.first().displayName();
         const QString formatText = formatName(jar.formats().first());
         const QString loaderText = loaderName(m_ctx.loader);
@@ -370,68 +252,19 @@ class Analyzer {
                 break;
         }
         add(f);
-        if (conf == Confidence::Possible) {
-            // it may still load: whatever it provides must not be reported as missing
-            for (const ModEntry& e : jar.mods) {
-                m_uncertainIds.insert(e.id);
-                for (const ProvidedId& p : e.provides)
-                    m_uncertainIds.insert(p.id);
-            }
-        }
     }
 
     QString loaderId() const { return instanceLoaderId(m_ctx.loader); }
 
-    // ---------------------------------------------------------------- providers
+    // ---------------------------------------------------------------- providers (shared rules: ModResolver)
 
-    void buildIndex()
-    {
-        for (const Located& l : m_loaded) {
-            m_index[l.entry->id].append({ l.entry, l.entry->version, l.top });
-            for (const ProvidedId& p : l.entry->provides)
-                m_index[p.id].append({ l.entry, p.version.isEmpty() ? l.entry->version : p.version, l.top });
-        }
-    }
-
-    /// Version of an id the environment supplies; `provided` tells whether it is one at all.
-    QString environmentVersion(const QString& id, bool* provided) const
-    {
-        *provided = environmentIds().contains(id);
-        if (id == QLatin1String("minecraft"))
-            return m_ctx.mcVersion;
-        if (id == QLatin1String("java"))
-            return m_ctx.javaMajor > 0 ? QString::number(m_ctx.javaMajor) : QString();
-        if (id == QLatin1String("fabricloader") && m_ctx.loader == InstanceLoader::Fabric)
-            return m_ctx.loaderVersion;
-        if (id == QLatin1String("quilt_loader") && m_ctx.loader == InstanceLoader::Quilt)
-            return m_ctx.loaderVersion;
-        if (id == QLatin1String("forge") && m_ctx.loader == InstanceLoader::Forge)
-            return m_ctx.loaderVersion;
-        if (id == QLatin1String("neoforge") && m_ctx.loader == InstanceLoader::NeoForge)
-            return m_ctx.loaderVersion;
-        return {};
-    }
-
-    bool isPresent(const QString& id) const
-    {
-        bool env = false;
-        environmentVersion(id, &env);
-        return env || m_index.contains(id) || m_uncertainIds.contains(id);
-    }
-
+    QString environmentVersion(const QString& id, bool* provided) const { return m_res.environmentVersion(id, provided); }
+    bool isPresent(const QString& id) const { return m_res.isPresent(id); }
     static Tri eval(const ModEntry& declarer, const QString& version, const QString& predicate)
     {
-        return isMaven(declarer.format) ? matchesMavenRange(version, predicate) : matchesFabricPredicate(version, predicate);
+        return Resolve::evalPredicate(declarer.format, version, predicate);
     }
-
-    QList<Provider> providersFor(const QString& id, const ModEntry* exclude) const
-    {
-        QList<Provider> out;
-        for (const Provider& p : m_index.value(id))
-            if (p.entry != exclude)
-                out.append(p);
-        return out;
-    }
+    QList<Provider> providersFor(const QString& id, const ModEntry* exclude) const { return m_res.providersFor(id, exclude); }
 
     // ---------------------------------------------------------------- checks
 
@@ -470,9 +303,9 @@ class Analyzer {
 
         const QList<Provider> providers = providersFor(dep.id, l.entry);
         if (providers.isEmpty()) {
-            if (m_uncertainIds.contains(dep.id))
+            if (m_res.isUncertain(dep.id))
                 return;  // a jar that may load supplies it
-            const Confidence conf = m_opaque ? Confidence::Possible : Confidence::Confirmed;
+            const Confidence conf = m_res.opaque() ? Confidence::Possible : Confidence::Confirmed;
             const QString key = dep.id + QLatin1Char('|') + QString::number(int(conf));
             MissingGroup& g = m_missing[key];
             g.depId = dep.id;
@@ -699,7 +532,7 @@ class Analyzer {
                 bool provides = e.id == id;
                 for (const ProvidedId& p : e.provides)
                     provides = provides || p.id == id;
-                if (provides && m_preferred.contains(e.format)) {
+                if (provides && m_res.preferred().contains(e.format)) {
                     *certain = true;
                     return j.fileName;
                 }
@@ -715,7 +548,7 @@ class Analyzer {
     void checkDuplicates()
     {
         QMap<QString, QList<Located>> byId;
-        for (const Located& l : m_loaded) {
+        for (const Located& l : m_res.loaded()) {
             // only the top-level declarations: a copy bundled inside another jar is deduplicated by the loader
             for (const ModEntry& e : l.top->mods) {
                 if (&e == l.entry)
@@ -798,15 +631,10 @@ class Analyzer {
     InstanceContext m_ctx;
     QStringList m_disabledNames;
     QList<ModMetadata> m_disabledJars;
-    QList<LoaderFormat> m_preferred;
-    QList<Located> m_loaded;
-    QHash<QString, QList<Provider>> m_index;
-    QSet<QString> m_uncertainIds;
+    Resolve::Resolver m_res;
     QMap<QString, MissingGroup> m_missing;
     QList<Finding> m_findings;
     QSet<QString> m_seen;
-    bool m_opaque = false;
-    bool m_connector = false;
 };
 
 }  // namespace

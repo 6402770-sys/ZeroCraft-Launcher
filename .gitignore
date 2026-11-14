@@ -62,3 +62,9 @@ flatbuild
 
 # Snap
 *.snap
+
+# Release packaging output (scripts/zero/package.sh)
+/dist/
+
+# Claude Code local state (worker briefs, worktrees)
+/.claude/

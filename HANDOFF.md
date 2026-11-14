@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-14 (session 14: tester bug fixes for 1.0.1; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-14 (session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -600,7 +600,13 @@ remove them with `git worktree remove --force <path>` once the owner agrees.
        15 null frames with no picture yet → `fail()` with the pixel format in the log. Test `tenBitVideoShowsTheSamePictureAsEightBit`.
        30-clip matrix (codecs, containers, faststart, 4K60, rotation, VFR, audio, cover art) all OK otherwise. Totals **80/80 +
        FileSystem 25/25**; video test also passes with `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=none`. Not done: real-window check with
-       a 10-bit clip (owner QA), HDR clips look flat (no tone mapping), 12-bit formats go to the logged `fail()`. Nothing committed.
+       a 10-bit clip (owner QA), HDR clips look flat (no tone mapping), 12-bit formats go to the logged `fail()`. Commit `6146b1739`.
+       🚀 **1.0.1 PUBLISHED 2026-11-14 (owner: "publicalo directamente")**: `797f78320` version bump (CMakeLists patch 1, README file
+       name), `package.sh --release` (smoke OK), `zero-development` pushed as `develop` to `zero`, tag `1.0.1` (via `git mktag`: local
+       `1.0.1` is another inherited PolyMC tag), Release "ZERO Launcher 1.0.1" (Latest) with Setup, Portable, SHA256SUMS (GitHub digests
+       = local). Verified: new updater reports "1.0.1", no self-update; the INSTALLED 1.0.0 updater (`%LOCALAPPDATA%\Programs\ZEROLauncher`)
+       `--check-only` → exit 100, "ZERO Launcher 1.0.1". Untested: the actual in-app download + install step (first real use), 10-bit
+       video in a real window. Not done in 1.0.1: own MSA client ID (still Prism's).
        (was: owner QA of the earlier list (colour dialog, icon, sound,
        font, cart, mod roll back).)
      🔴 **Session 12 RESUME HERE** (session hit its limit while a worker ran; nothing committed — owner commits):

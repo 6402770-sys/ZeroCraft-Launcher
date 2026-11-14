@@ -94,6 +94,7 @@ CMAKE_ARGS=(
   "-DLauncher_UPDATER_GITHUB_REPO=$REPO_URL"
   "-DLauncher_BUILD_ARTIFACT=$ARTIFACT"
   -ULauncher_ELY_CLIENT_ID  # ZERO's Ely.by client ID (the CMakeLists.txt default), even in an older cache
+  -ULauncher_BUG_TRACKER_URL  # the CMakeLists.txt default (the repo's Issues page), even in an older cache
   "-DZERO_VERSION=$VERSION"
 )
 if [ "$MODE" = release ]; then

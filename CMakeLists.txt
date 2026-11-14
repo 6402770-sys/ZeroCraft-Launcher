@@ -192,8 +192,8 @@ set(Launcher_LOGIN_CALLBACK_URL "https://prismlauncher.org/successful-login" CAC
 set(Launcher_LEGACY_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" CACHE STRING "URL for legacy (<=1.5.2) FML Libraries.")
 
 ######## Set version numbers ########
-set(Launcher_VERSION_MAJOR 0)
-set(Launcher_VERSION_MINOR 1)
+set(Launcher_VERSION_MAJOR 1)
+set(Launcher_VERSION_MINOR 0)
 set(Launcher_VERSION_PATCH 0)
 
 # ZERO: scripts/zero/package.sh passes -DZERO_VERSION=X.Y.Z to build a release with another version than the one above.
@@ -229,7 +229,7 @@ set(Launcher_META_URL "https://meta.prismlauncher.org/v1/" CACHE STRING "URL to 
 set(Launcher_IMGUR_CLIENT_ID "" CACHE STRING "Client ID you can get from Imgur when you register an application. Empty disables Imgur uploads.")
 
 # Bug tracker URL
-set(Launcher_BUG_TRACKER_URL "" CACHE STRING "URL for the bug tracker. Empty hides the link.")
+set(Launcher_BUG_TRACKER_URL "https://github.com/6402770-sys/ZeroCraft-Launcher/issues" CACHE STRING "URL for the bug tracker. Empty hides the link.")
 
 # Translations Platform URL
 # ZERO: reuses Prism public infrastructure, see docs/zero/CREDENTIALS.md

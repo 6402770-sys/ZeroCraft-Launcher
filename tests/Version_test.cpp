@@ -16,6 +16,7 @@
 #include <QTest>
 
 #include <Version.h>
+#include "updater/prismupdater/GitHubRelease.h"
 
 class VersionTest : public QObject {
     Q_OBJECT
@@ -205,6 +206,21 @@ class VersionTest : public QObject {
         QCOMPARE(r(a, c), true);
         // transitive equivalence
         QCOMPARE(e(a, b) && e(b, c), e(a, c));
+    }
+
+    // ZERO: release tags are "v1.0.0"; the installed build reports "1.0.0" and must not see its own release as newer.
+    static void test_releaseTagVersion()
+    {
+        const Version installed("1.0.0");
+        QVERIFY(Version("v1.0.0") > installed);  // the raw tag is what offered 1.0.0 as an update to 1.0.0
+        QVERIFY(versionFromReleaseTag("v1.0.0") == installed);
+        QVERIFY(versionFromReleaseTag("V1.0.0") == installed);
+        QVERIFY(versionFromReleaseTag("1.0.0") == installed);
+        QVERIFY(versionFromReleaseTag("v1.0.1") > installed);
+        QVERIFY(versionFromReleaseTag("v0.9.9") < installed);
+        QVERIFY(versionFromReleaseTag("v1.0.10") > versionFromReleaseTag("v1.0.9"));
+        QCOMPARE(versionFromReleaseTag("vintage").toString(), QStringLiteral("vintage"));  // only a "v" before a digit goes
+        QCOMPARE(versionFromReleaseTag("v").toString(), QStringLiteral("v"));
     }
 };
 

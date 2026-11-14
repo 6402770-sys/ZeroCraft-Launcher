@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-13 (session 13: **1.0.0 PUBLISHED** on GitHub; see "Session 13" inside Mission 003 › item 9 Release) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-14 (session 14: tester bug fixes for 1.0.1; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -583,6 +583,24 @@ remove them with `git worktree remove --force <path>` once the owner agrees.
        (latest) with Setup.exe, Portable.zip, SHA256SUMS (GitHub digests = local). `origin` is still Prism upstream: push to `zero`.
        Follow-ups: own MSA client ID for 1.0.1 (RELEASE.md Paso 2); real click-through of intro/tour; repo description still "Currently
        Developing"; the in-app updater against this repo's releases is untested (first real check = 1.0.1).
+       🐞 **Session 14 (tester reports, for 1.0.1)**: (1) **1.0.0 offered "1.0.0" as an update to itself** — root cause: tag
+       `v1.0.0`; FlexVer (`launcher/Version.cpp`) compares the text "v" against the numeric "1" and ranks any v-tag newer. Fix:
+       `versionFromReleaseTag()` in `updater/prismupdater/GitHubRelease.h` drops a leading v/V before a digit (release parsing +
+       `--install-version`), test `Version_test::test_releaseTagVersion`; plus CMake: `ZERO_RELEASE_BUILD` forces refspec
+       `refs/heads/stable`, so release builds say "1.0.0", not "1.0.0-zero-development". Verified: rebuilt
+       `build-release/zerolauncher_updater.exe --check-only` against the live repo → version "1.0.0", latest "1.0.0", no update.
+       ✅ **Tag renamed (owner OK, 2026-11-14)**: tag `1.0.0` pushed to `zero` on the same commit `656e3a130` (via `git mktag`: the
+       local `1.0.0` tag is an unrelated upstream PolyMC tag from 2021, left alone), release moved to it (still Latest, 3 assets), `v1.0.0`
+       deleted on GitHub and locally. The SHIPPED updater (`dist/stage/ZEROLauncher/zerolauncher_updater.exe --check-only`) now reads
+       latest "1.0.0" and offers nothing → the prompt is gone for installed 1.0.0 copies. **Future tags: plain `X.Y.Z`, no "v"**.
+       (2) **Some background videos never showed** — not length (30 min / 2 h clips play fine): **10-bit video** (H.264 High 10 always;
+       HEVC Main10 / VP9 / AV1 10-bit whenever the PC has no hardware decoder for them) decodes to `Format_YUV420P10`, which
+       `QVideoFrame::toImage()` cannot convert; `onFrame()` dropped every null image silently. Fix (`savvy-medium`, reviewed):
+       own 10→8-bit converter in `ZeroVideoBackground.cpp` (BT.601/709/2020, limited/full range, 2x decimation above 2560 px) and
+       15 null frames with no picture yet → `fail()` with the pixel format in the log. Test `tenBitVideoShowsTheSamePictureAsEightBit`.
+       30-clip matrix (codecs, containers, faststart, 4K60, rotation, VFR, audio, cover art) all OK otherwise. Totals **80/80 +
+       FileSystem 25/25**; video test also passes with `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=none`. Not done: real-window check with
+       a 10-bit clip (owner QA), HDR clips look flat (no tone mapping), 12-bit formats go to the logged `fail()`. Nothing committed.
        (was: owner QA of the earlier list (colour dialog, icon, sound,
        font, cart, mod roll back).)
      🔴 **Session 12 RESUME HERE** (session hit its limit while a worker ran; nothing committed — owner commits):

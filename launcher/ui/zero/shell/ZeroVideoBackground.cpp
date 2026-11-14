@@ -7,10 +7,76 @@
 #include <QMediaPlayer>
 #include <QUrl>
 #include <QVideoFrame>
+#include <QVideoFrameFormat>
 #include <QVideoSink>
 #include <QtMath>
 
 namespace Zero {
+
+namespace {
+
+/// QVideoFrame::toImage() has no conversion for 10-bit planar YUV (Format_YUV420P10: what software decoding of H.264 High 10, HEVC
+/// Main 10, VP9 profile 2 and AV1 10-bit produces), so those videos decoded fine but never showed a picture. Converts such a frame
+/// ourselves (10 -> 8 bit, BT.601/709/2020, limited or full range). Frames wider than 2560 px are decimated 2x: this is a window background.
+QImage yuv420p10ToImage(QVideoFrame frame)
+{
+    const QVideoFrameFormat format = frame.surfaceFormat();
+    if (!frame.map(QVideoFrame::ReadOnly))
+        return {};
+    const int w = frame.width(), h = frame.height();
+    const int step = w > 2560 ? 2 : 1;
+    QImage image(w / step, h / step, QImage::Format_RGB32);
+    if (image.isNull() || frame.planeCount() < 3 || !frame.bits(0) || !frame.bits(1) || !frame.bits(2)) {
+        frame.unmap();
+        return {};
+    }
+
+    double kr = 0.2126, kb = 0.0722;  // BT.709 (also the guess for HD content with no color space)
+    bool full = format.colorRange() == QVideoFrameFormat::ColorRange_Full;
+    switch (format.colorSpace()) {
+        case QVideoFrameFormat::ColorSpace_BT601:
+            kr = 0.299, kb = 0.114;
+            break;
+        case QVideoFrameFormat::ColorSpace_BT2020:
+            kr = 0.2627, kb = 0.0593;
+            break;
+        case QVideoFrameFormat::ColorSpace_Undefined:
+            if (h < 720)
+                kr = 0.299, kb = 0.114;
+            break;
+        default:
+            break;
+    }
+    const double kg = 1.0 - kr - kb;
+    const double yScale = full ? 1.0 : 255.0 / 219.0, cScale = full ? 1.0 : 255.0 / 224.0;
+    constexpr int Q = 16;
+    const int yMul = int(yScale * (1 << Q)), rV = int(2 * (1 - kr) * cScale * (1 << Q)), bU = int(2 * (1 - kb) * cScale * (1 << Q)),
+              gU = int(2 * (1 - kb) * kb / kg * cScale * (1 << Q)), gV = int(2 * (1 - kr) * kr / kg * cScale * (1 << Q));
+    const int yOff = full ? 0 : 16;
+    const auto clamp8 = [](int v) { return uchar(v < 0 ? 0 : (v > 255 ? 255 : v)); };
+
+    const int strideY = frame.bytesPerLine(0), strideU = frame.bytesPerLine(1), strideV = frame.bytesPerLine(2);
+    for (int y = 0; y < image.height(); ++y) {
+        const uchar* rowY = frame.bits(0) + qsizetype(y) * step * strideY;
+        const uchar* rowU = frame.bits(1) + qsizetype(y) * step / 2 * strideU;
+        const uchar* rowV = frame.bits(2) + qsizetype(y) * step / 2 * strideV;
+        QRgb* out = reinterpret_cast<QRgb*>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            const int sx = x * step;
+            const int yy = ((int(rowY[sx * 2]) | (int(rowY[sx * 2 + 1]) << 8)) >> 2) - yOff;  // 10-bit little endian -> 8 bit
+            const int u = ((int(rowU[(sx / 2) * 2]) | (int(rowU[(sx / 2) * 2 + 1]) << 8)) >> 2) - 128;
+            const int v = ((int(rowV[(sx / 2) * 2]) | (int(rowV[(sx / 2) * 2 + 1]) << 8)) >> 2) - 128;
+            const int base = yy * yMul + (1 << (Q - 1));
+            out[x] = qRgb(clamp8((base + rV * v) >> Q), clamp8((base - gU * u - gV * v) >> Q), clamp8((base + bU * u) >> Q));
+        }
+    }
+    frame.unmap();
+    return image;
+}
+
+constexpr int kMaxNullFrames = 15;  // about half a second of frames that cannot be shown: the video is given up instead of staying blank
+
+}  // namespace
 
 bool ZeroVideoBackground::shouldPlay(const QString& pageId, bool minimized, bool gameRunning, bool motionOff)
 {
@@ -58,6 +124,7 @@ void ZeroVideoBackground::release()
     }
     m_playing = false;
     m_settleOnFirstFrame = false;
+    m_nullFrames = 0;
     m_frame = QImage();
 }
 
@@ -166,8 +233,15 @@ void ZeroVideoBackground::onFrame()
     if (!videoFrame.isValid())
         return;
     QImage image = videoFrame.toImage();  // the one image allocated per frame
-    if (image.isNull())
+    if (image.isNull() && videoFrame.pixelFormat() == QVideoFrameFormat::Format_YUV420P10)
+        image = yuv420p10ToImage(videoFrame);  // Qt cannot convert 10-bit planar YUV itself
+    if (image.isNull()) {
+        // Decoded but not showable (a pixel format neither Qt nor we convert): say so instead of staying blank without a trace.
+        if (++m_nullFrames >= kMaxNullFrames && m_frame.isNull())
+            fail(QStringLiteral("the video decodes to a pixel format that cannot be shown (%1)").arg(QVideoFrameFormat::pixelFormatToString(videoFrame.pixelFormat())));
         return;
+    }
+    m_nullFrames = 0;
     m_frame = std::move(image);
     if (m_settleOnFirstFrame && !m_wantPlay) {
         m_settleOnFirstFrame = false;

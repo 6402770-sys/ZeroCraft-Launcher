@@ -338,6 +338,11 @@ set(Launcher_COMPILER_TARGET_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR})
 include(GetGitRevisionDescription)
 git_get_exact_tag(Launcher_GIT_TAG)
 get_git_head_revision(Launcher_GIT_REFSPEC Launcher_GIT_COMMIT)
+# ZERO: releases are built from the `zero-development` branch, and BuildConfig turns the branch into a version suffix
+# ("1.0.0-zero-development"). A release build is the stable channel: plain "1.0.0" in the title, About and updater.
+if(ZERO_RELEASE_BUILD)
+    set(Launcher_GIT_REFSPEC "refs/heads/stable")
+endif()
 
 message(STATUS "Git commit: ${Launcher_GIT_COMMIT}")
 message(STATUS "Git tag: ${Launcher_GIT_TAG}")

@@ -372,6 +372,52 @@ class ZeroVideoBackgroundTest : public QObject {
         QVERIFY(QFile::remove(b));
     }
 
+
+    // ---- 10-bit video -----------------------------------------------------------------------------------------------------
+    // Software decoding of 10-bit video (H.264 High 10, HEVC Main 10, VP9 profile 2, AV1) hands over planar 10-bit YUV, which
+    // QVideoFrame::toImage() cannot convert: the video "played" but the window stayed flat. Static color bars, compared with the 8-bit clip.
+
+    void tenBitVideoShowsTheSamePictureAsEightBit()
+    {
+        if (!needClip())
+            return;
+        const QString ffmpeg = findFfmpeg();
+        const auto make = [&](const QString& name, const QString& pixFmt) {
+            const QString path = m_dir.filePath(name);
+            QProcess p;
+            p.start(ffmpeg, { QStringLiteral("-y"), QStringLiteral("-f"), QStringLiteral("lavfi"), QStringLiteral("-i"),
+                              QStringLiteral("smptebars=size=256x144:rate=20"), QStringLiteral("-t"), QStringLiteral("2"), QStringLiteral("-c:v"),
+                              QStringLiteral("libx264"), QStringLiteral("-pix_fmt"), pixFmt, path });
+            return p.waitForFinished(30000) && p.exitCode() == 0 && QFile::exists(path) ? path : QString();
+        };
+        const QString eight = make(QStringLiteral("bars8.mp4"), QStringLiteral("yuv420p"));
+        const QString ten = make(QStringLiteral("bars10.mp4"), QStringLiteral("yuv420p10le"));
+        if (eight.isEmpty() || ten.isEmpty())
+            QSKIP("this ffmpeg cannot encode 10-bit H.264 (libx264 with high bit depth)");
+
+        const auto firstFrame = [](const QString& path, ZeroVideoBackground& v) {
+            v.setConditions(QStringLiteral("library"), false, false, false);  // paused on the first frame
+            v.setSource(path);
+            QTRY_VERIFY_WITH_TIMEOUT(!v.frame().isNull() || v.failed(), 15000);
+        };
+        ZeroVideoBackground a, b;
+        firstFrame(eight, a);
+        firstFrame(ten, b);
+        QVERIFY(!a.failed());
+        QVERIFY2(!b.failed() && !b.frame().isNull(), "the 10-bit video produced no picture");
+        QCOMPARE(b.frame().size(), a.frame().size());
+        qint64 diff = 0;
+        int n = 0;
+        for (int y = 4; y < a.frame().height(); y += 8) {
+            for (int x = 4; x < a.frame().width(); x += 8) {
+                const QRgb p = a.frame().pixel(x, y), q = b.frame().pixel(x, y);
+                diff += qAbs(qRed(p) - qRed(q)) + qAbs(qGreen(p) - qGreen(q)) + qAbs(qBlue(p) - qBlue(q));
+                n += 3;
+            }
+        }
+        QVERIFY2(diff / n <= 6, qPrintable(QStringLiteral("mean channel difference %1").arg(double(diff) / n)));
+    }
+
     // ---- ZeroShell ----------------------------------------------------------------------------------------------------
 
     void shellPaintsTheFrameAndFollowsPagesAndTheme()

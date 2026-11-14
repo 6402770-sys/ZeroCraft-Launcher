@@ -57,5 +57,14 @@ struct GitHubRelease {
     bool isValid() const { return id > 0; }
 };
 
+// ZERO: release tags are "v1.0.0". FlexVer compares the leading "v" as text against the installed "1.0.0" and ranks every
+// tag as newer ("1" < "v"), which offered 1.0.0 as an update to 1.0.0. The version of a tag ignores a "v"/"V" before a digit.
+inline Version versionFromReleaseTag(const QString& tag)
+{
+    if (tag.size() > 1 && (tag.at(0) == QLatin1Char('v') || tag.at(0) == QLatin1Char('V')) && tag.at(1).isDigit())
+        return Version(tag.mid(1));
+    return Version(tag);
+}
+
 QDebug operator<<(QDebug debug, const GitHubReleaseAsset& rls);
 QDebug operator<<(QDebug debug, const GitHubRelease& rls);

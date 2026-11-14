@@ -89,6 +89,7 @@ class ZeroVideoBackground : public QObject {
     bool m_wantPlay = false;
     bool m_playing = false;
     bool m_settleOnFirstFrame = false;  // a paused start: play until the first frame arrives, then pause on it
+    int m_nullFrames = 0;  // consecutive decoded frames that could not be turned into an image (reset by every picture)
     bool m_warned = false;
     QString m_page;
     bool m_minimized = false;

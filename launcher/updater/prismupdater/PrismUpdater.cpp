@@ -322,7 +322,7 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
     m_printOnly = parser.isSet("list");
     auto userVersion = parser.value("install-version");
     if (!userVersion.isEmpty()) {
-        m_userSelectedVersion = Version(userVersion);
+        m_userSelectedVersion = versionFromReleaseTag(userVersion);  // ZERO: "v1.0.1" and "1.0.1" name the same release
     }
     m_selectUI = parser.isSet("select-ui");
     m_allowDowngrade = parser.isSet("allow-downgrade");
@@ -1260,7 +1260,7 @@ Result<int> PrismUpdaterApp::parseReleasePage(const QByteArray* response)
         TRY_INTO(release.draft, Json::requireBoolean(obj, "draft"))
         TRY_INTO(release.prerelease, Json::requireBoolean(obj, "prerelease"))
         release.body = obj["body"].toString();
-        release.version = Version(release.tag_name);
+        release.version = versionFromReleaseTag(release.tag_name);  // ZERO: tags carry a leading "v"
 
         TRY_INTO(const auto& releaseAssetsObj, Json::requireArray(obj, "assets"))
         for (auto assetJson : releaseAssetsObj) {

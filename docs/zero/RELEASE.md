@@ -23,7 +23,8 @@ Hecho: NSIS 3.13 quedó instalado en MSYS2 (sesión 11, con tu OK) y `scripts/ze
 
 ## Paso 2 — Tu propia clave de Microsoft (OPCIONAL, para más adelante)
 
-Decidiste publicar con la clave de Prism, como hace ElyPrismLauncher. Lo que eso implica: al iniciar sesión, la página de
+Decidiste publicar con la clave de Prism, como hace ElyPrismLauncher (confirmado otra vez el 2026-11-13 para la 1.0.0; la idea es
+pedir la propia y cambiarla en una 1.0.1). Lo que eso implica: al iniciar sesión, la página de
 Microsoft dice "Prism Launcher"; Prism o Microsoft podrían bloquear esa clave algún día; y si más adelante pasás a una clave
 propia, los usuarios tienen que volver a iniciar sesión una vez. Si algún día conseguís una cuenta de Azure, estos son los pasos:
 

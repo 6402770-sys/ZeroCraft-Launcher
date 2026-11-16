@@ -315,6 +315,326 @@ QList<RestoreLeftover> findRestoreLeftovers(const InstanceSource& source)
     return out;
 }
 
+// ---- Largest items ---------------------------------------------------------------------------------------------------------------
+
+QString itemKindId(ItemKind kind)
+{
+    switch (kind) {
+        case ItemKind::World: return QStringLiteral("world");
+        case ItemKind::Mod: return QStringLiteral("mod");
+        case ItemKind::Pack: return QStringLiteral("pack");
+        case ItemKind::Logs: return QStringLiteral("logs");
+        case ItemKind::CrashReports: return QStringLiteral("crash-reports");
+        case ItemKind::Screenshots: return QStringLiteral("screenshots");
+        case ItemKind::WorldBackups: return QStringLiteral("world-backups");
+        case ItemKind::Snapshots: return QStringLiteral("snapshots");
+        case ItemKind::ZeroData: return QStringLiteral("zero-data");
+        case ItemKind::Folder: return QStringLiteral("folder");
+        case ItemKind::BigFile: return QStringLiteral("big-file");
+    }
+    return {};
+}
+
+bool isTrashableKind(ItemKind kind)
+{
+    return kind != ItemKind::WorldBackups && kind != ItemKind::Snapshots && kind != ItemKind::ZeroData;
+}
+
+namespace {
+
+QString cleanAbs(const QString& path)
+{
+    return QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+}
+
+/// Entries directly inside `dir` (hidden included, links skipped).
+QList<QFileInfo> plainChildren(const QString& dir)
+{
+    QList<QFileInfo> out;
+    if (dir.isEmpty() || !QFileInfo(dir).isDir())
+        return out;
+    for (const auto& entry : QDirListing(dir, QDirListing::IteratorFlag::IncludeHidden)) {
+        const QFileInfo info = entry.fileInfo();
+        if (!isLink(info))
+            out.append(info);
+    }
+    return out;
+}
+
+void collectBigFiles(const QString& dir, const QSet<QString>& skipDirs, qint64 minBytes, QList<QPair<QString, qint64>>& out)
+{
+    for (const auto& entry : QDirListing(dir, QDirListing::IteratorFlag::IncludeHidden)) {
+        const QFileInfo info = entry.fileInfo();
+        if (isLink(info))
+            continue;
+        if (entry.isDir()) {
+            if (info.fileName().startsWith(QLatin1String(".zero-")) || skipDirs.contains(pathKey(entry.filePath())))
+                continue;
+            collectBigFiles(entry.filePath(), skipDirs, minBytes, out);
+        } else if (entry.isFile() && entry.size() > minBytes) {
+            out.append({ cleanAbs(entry.filePath()), entry.size() });
+        }
+    }
+}
+
+bool sameDir(const QString& a, const QString& b)
+{
+    return !a.isEmpty() && !b.isEmpty() && pathKey(a) == pathKey(b);
+}
+
+QStringList packDirsOf(const InstanceSource& s)
+{
+    QStringList out;
+    for (const QString& p : s.packDirs)
+        if (!p.isEmpty())
+            out << p;
+    return out;
+}
+
+/// Folders of the game root whose contents are listed entry by entry (or as one named item): never a "Folder" item themselves.
+QStringList handledDirs(const InstanceSource& s)
+{
+    QStringList out = packDirsOf(s);
+    for (const QString& p : { s.worldsDir, s.modsDir })
+        if (!p.isEmpty())
+            out << p;
+    if (!s.gameRoot.isEmpty())
+        out << s.gameRoot + QStringLiteral("/logs") << s.gameRoot + QStringLiteral("/crash-reports") << s.gameRoot + QStringLiteral("/screenshots");
+    return out;
+}
+
+}  // namespace
+
+QList<LargeItem> findLargeItems(const InstanceSource& source, int limit, qint64 bigFileBytes)
+{
+    QList<LargeItem> items;
+    QSet<QString> seen;
+    auto add = [&](ItemKind kind, const QString& path, qint64 size, bool isDir) {
+        const QString clean = cleanAbs(path);
+        const QString key = pathKey(clean);
+        if (size <= 0 || seen.contains(key))
+            return;
+        seen.insert(key);
+        LargeItem item;
+        item.kind = kind;
+        item.path = clean;
+        item.name = QFileInfo(clean).fileName();
+        item.instanceId = source.id;
+        item.instanceName = source.name;
+        item.sizeBytes = size;
+        item.isDir = isDir;
+        item.running = source.running;
+        items.append(item);
+    };
+    auto addChildren = [&](ItemKind kind, const QString& dir) {
+        for (const QFileInfo& info : plainChildren(dir)) {
+            if (info.isDir())
+                add(kind, info.absoluteFilePath(), Worlds::folderSize(info.absoluteFilePath()), true);
+            else if (info.isFile())
+                add(kind, info.absoluteFilePath(), info.size(), false);
+        }
+    };
+    auto addWhole = [&](ItemKind kind, const QString& dir) {
+        const QFileInfo info(dir);
+        if (!dir.isEmpty() && info.isDir() && !isLink(info))
+            add(kind, dir, Worlds::folderSize(dir), true);
+    };
+
+    if (!source.worldsDir.isEmpty() && !isLink(QFileInfo(source.worldsDir)))
+        for (const QFileInfo& info : plainChildren(source.worldsDir))
+            if (info.isDir() && !info.fileName().startsWith(QLatin1String(".zero-")))  // ".zero-*": an interrupted restore, see findRestoreLeftovers
+                add(ItemKind::World, info.absoluteFilePath(), Worlds::folderSize(info.absoluteFilePath()), true);
+    if (!source.modsDir.isEmpty() && !isLink(QFileInfo(source.modsDir)))
+        addChildren(ItemKind::Mod, source.modsDir);
+    for (const QString& pack : packDirsOf(source))
+        if (!isLink(QFileInfo(pack)))
+            addChildren(ItemKind::Pack, pack);
+    if (!source.gameRoot.isEmpty()) {
+        addWhole(ItemKind::Logs, source.gameRoot + QStringLiteral("/logs"));
+        addWhole(ItemKind::CrashReports, source.gameRoot + QStringLiteral("/crash-reports"));
+        addWhole(ItemKind::Screenshots, source.gameRoot + QStringLiteral("/screenshots"));
+
+        // The other top-level folders of the game root (a folder that holds worlds / mods / packs is already listed entry by entry).
+        QSet<QString> handledKeys;
+        for (const QString& h : handledDirs(source))
+            handledKeys.insert(pathKey(h));
+        for (const QFileInfo& info : plainChildren(source.gameRoot)) {
+            if (!info.isDir() || info.fileName().startsWith(QLatin1String(".zero-")))
+                continue;
+            const QString key = pathKey(info.absoluteFilePath());
+            bool covered = handledKeys.contains(key);
+            for (const QString& h : std::as_const(handledKeys))
+                covered = covered || keyInside(h, key);
+            if (!covered)
+                add(ItemKind::Folder, info.absoluteFilePath(), Worlds::folderSize(info.absoluteFilePath()), true);
+        }
+
+        // Single files over the threshold; folders listed as a whole or entry by entry (worlds, mods, packs, logs...) are not walked.
+        if (bigFileBytes > 0 && QFileInfo(source.gameRoot).isDir()) {
+            QList<QPair<QString, qint64>> big;
+            collectBigFiles(source.gameRoot, handledKeys, bigFileBytes, big);
+            for (const auto& f : std::as_const(big))
+                add(ItemKind::BigFile, f.first, f.second, false);
+        }
+    }
+    if (!source.instanceRoot.isEmpty()) {
+        const QString zero = source.instanceRoot + QStringLiteral("/.zero");
+        const QFileInfo info(zero);
+        if (info.isDir() && !isLink(info))
+            add(ItemKind::ZeroData, zero, Worlds::folderSize(zero), true);
+    }
+
+    std::sort(items.begin(), items.end(), [](const LargeItem& a, const LargeItem& b) {
+        return a.sizeBytes != b.sizeBytes ? a.sizeBytes > b.sizeBytes : a.path < b.path;
+    });
+    if (limit >= 0 && items.size() > limit)
+        items = items.mid(0, limit);
+    return items;
+}
+
+QList<LargeItem> findZeroBackupItems(const InstanceSource& source, const QString& dataRoot)
+{
+    QList<LargeItem> items;
+    if (dataRoot.isEmpty() || source.id.isEmpty())
+        return items;
+    auto make = [&](ItemKind kind, const QString& path, qint64 size) {
+        LargeItem item;
+        item.kind = kind;
+        item.path = cleanAbs(path);
+        item.name = QFileInfo(path).fileName();
+        item.instanceId = source.id;
+        item.instanceName = source.name;
+        item.sizeBytes = size;
+        item.isDir = true;
+        item.running = source.running;
+        return item;
+    };
+    for (const QFileInfo& info : plainChildren(dataRoot + QStringLiteral("/zero/backups/") + source.id)) {
+        if (!info.isDir())
+            continue;
+        const qint64 size = Worlds::folderSize(info.absoluteFilePath());
+        if (size > 0)
+            items.append(make(ItemKind::WorldBackups, info.absoluteFilePath(), size));
+    }
+    const QString snapshots = dataRoot + QStringLiteral("/zero/snapshots/") + source.id;
+    if (QFileInfo(snapshots).isDir() && !isLink(QFileInfo(snapshots))) {
+        const qint64 size = Worlds::folderSize(snapshots);
+        if (size > 0)
+            items.append(make(ItemKind::Snapshots, snapshots, size));
+    }
+    return items;
+}
+
+QList<LargeItem> aggregateLargest(const QList<LargeItem>& all, const QString& instanceId, int limit)
+{
+    QList<LargeItem> out;
+    for (const LargeItem& item : all)
+        if (instanceId.isEmpty() || item.instanceId == instanceId)
+            out.append(item);
+    std::sort(out.begin(), out.end(), [](const LargeItem& a, const LargeItem& b) {
+        return a.sizeBytes != b.sizeBytes ? a.sizeBytes > b.sizeBytes : a.path < b.path;
+    });
+    if (limit >= 0 && out.size() > limit)
+        out = out.mid(0, limit);
+    return out;
+}
+
+bool isTrashableItem(const LargeItem& item, const InstanceSource& source, QString* why)
+{
+    auto no = [why](const QString& reason) {
+        if (why)
+            *why = reason;
+        return false;
+    };
+    if (!isTrashableKind(item.kind))
+        return no(QStringLiteral("ZERO manages this item itself"));
+    if (item.path.isEmpty())
+        return no(QStringLiteral("Empty path"));
+    if (source.running)
+        return no(QStringLiteral("The instance is running"));
+    const QString clean = cleanAbs(item.path);
+    const QFileInfo info(clean);
+    if (!info.exists() || isLink(info))
+        return no(QStringLiteral("The item is gone or is a link"));
+    const QString parent = info.path();
+    const QString gameRoot = source.gameRoot;
+    bool placeOk = false;
+    switch (item.kind) {
+        case ItemKind::World:
+            placeOk = info.isDir() && sameDir(parent, source.worldsDir) && !info.fileName().startsWith(QLatin1String(".zero-"));
+            break;
+        case ItemKind::Mod:
+            placeOk = sameDir(parent, source.modsDir);
+            break;
+        case ItemKind::Pack:
+            for (const QString& p : packDirsOf(source))
+                placeOk = placeOk || sameDir(parent, p);
+            break;
+        case ItemKind::Logs:
+            placeOk = info.isDir() && !gameRoot.isEmpty() && sameDir(clean, gameRoot + QStringLiteral("/logs"));
+            break;
+        case ItemKind::CrashReports:
+            placeOk = info.isDir() && !gameRoot.isEmpty() && sameDir(clean, gameRoot + QStringLiteral("/crash-reports"));
+            break;
+        case ItemKind::Screenshots:
+            placeOk = info.isDir() && !gameRoot.isEmpty() && sameDir(clean, gameRoot + QStringLiteral("/screenshots"));
+            break;
+        case ItemKind::Folder: {
+            // A top-level folder of the game root that is not one of the managed folders (or the one that holds them).
+            placeOk = info.isDir() && sameDir(parent, gameRoot) && !info.fileName().startsWith(QLatin1String(".zero-"));
+            const QString key = pathKey(clean);
+            for (const QString& h : handledDirs(source))
+                placeOk = placeOk && pathKey(h) != key && !keyInside(pathKey(h), key);
+            break;
+        }
+        case ItemKind::BigFile: {
+            placeOk = info.isFile() && !gameRoot.isEmpty() && keyInside(pathKey(clean), pathKey(gameRoot));
+            for (const QString& h : handledDirs(source))
+                placeOk = placeOk && !keyInside(pathKey(clean), pathKey(h));
+            if (placeOk)
+                placeOk = reachableWithoutLinks(clean, gameRoot);
+            break;
+        }
+        default:
+            break;
+    }
+    if (!placeOk)
+        return no(QStringLiteral("Not where this kind of item lives in the instance"));
+    return true;
+}
+
+TrashResult trashLargeItems(const QList<LargeItem>& items, const QList<InstanceSource>& sources, const TrashHooks& hooks)
+{
+    TrashResult result;
+    const std::function<bool(const QString&)> trashPath = hooks.trashPath ? hooks.trashPath : [](const QString& p) { return FS::trash(p); };
+    for (const LargeItem& item : items) {
+        const InstanceSource* source = nullptr;
+        for (const InstanceSource& s : sources)
+            if (s.id == item.instanceId)
+                source = &s;
+        QString why;
+        if (!source) {
+            result.skippedCount++;
+            result.problems.append({ item.path, QStringLiteral("Unknown instance"), true });
+            continue;
+        }
+        if (!isTrashableItem(item, *source, &why)) {
+            result.skippedCount++;
+            result.problems.append({ item.path, why, true });
+            continue;
+        }
+        const qint64 size = pathSize(item.path);
+        if (trashPath(cleanAbs(item.path))) {
+            result.trashedCount++;
+            result.trashedBytes += size;
+        } else {
+            result.failedCount++;
+            result.problems.append({ item.path, QStringLiteral("Could not move the item to the Recycle Bin"), false });
+        }
+    }
+    return result;
+}
+
 InstanceRow measureInstance(const InstanceSource& source)
 {
     InstanceRow row;
@@ -372,14 +692,21 @@ CategoryBytes measureLauncher(const LauncherSource& launcher)
     return out;
 }
 
-StorageReport buildReport(const QList<InstanceSource>& instances, const LauncherSource& launcher, qint64 nowMs)
+StorageReport buildReport(const QList<InstanceSource>& instances, const LauncherSource& launcher, qint64 nowMs, const ProgressFn& progress)
 {
     StorageReport report;
     report.generatedMs = nowMs;
     report.dataRoot = launcher.dataRoot;
 
+    const int steps = int(instances.size()) + 1;  // every instance, then the launcher's own folders
+    int done = 0;
     for (const InstanceSource& source : instances) {
+        if (progress)
+            progress(done, steps, source.name);
+        ++done;
         InstanceRow row = measureInstance(source);
+        report.largest += findLargeItems(source);
+        report.largest += findZeroBackupItems(source, launcher.dataRoot);
         for (Category c : allCategories())
             report.totals.at(c) += row.bytes.of(c);
         report.instances.append(row);
@@ -391,6 +718,9 @@ StorageReport buildReport(const QList<InstanceSource>& instances, const Launcher
         return c != 0 ? c < 0 : a.id < b.id;
     });
 
+    report.largest = aggregateLargest(report.largest, QString(), -1);  // biggest first
+    if (progress)
+        progress(done, steps, QString());
     const CategoryBytes launcherBytes = measureLauncher(launcher);
     for (Category c : allCategories())
         report.totals.at(c) += launcherBytes.of(c);
@@ -502,10 +832,19 @@ void StorageScanner::rescan()
     // read on the GUI thread.
     QPointer<StorageScanner> self(this);
     QThreadPool::globalInstance()->start([self, sources, generation]() {
-        const StorageReport report = buildReport(sources.first, sources.second, QDateTime::currentMSecsSinceEpoch());
         auto* app = QCoreApplication::instance();
         if (!app)
             return;
+        const ProgressFn progress = [self, generation, app](int done, int total, const QString& current) {
+            QMetaObject::invokeMethod(
+                app,
+                [self, generation, done, total, current]() {
+                    if (self && self->generation() == generation && self->isScanning())
+                        emit self->scanProgress(done, total, current);
+                },
+                Qt::QueuedConnection);
+        };
+        const StorageReport report = buildReport(sources.first, sources.second, QDateTime::currentMSecsSinceEpoch(), progress);
         QMetaObject::invokeMethod(
             app,
             [self, generation, report]() {
@@ -528,6 +867,18 @@ void StorageScanner::onReport(quint64 generation, const StorageReport& report)
 
 void StorageScanner::trash(const QList<CleanupFile>& files)
 {
+    startTrash([files](const QList<InstanceSource>& sources, const TrashHooks& hooks) {
+        return trashCandidates(files, sources, QDateTime::currentMSecsSinceEpoch(), hooks);
+    });
+}
+
+void StorageScanner::trashItems(const QList<LargeItem>& items)
+{
+    startTrash([items](const QList<InstanceSource>& sources, const TrashHooks& hooks) { return trashLargeItems(items, sources, hooks); });
+}
+
+void StorageScanner::startTrash(std::function<TrashResult(const QList<InstanceSource>&, const TrashHooks&)> job)
+{
     if (m_trashing) {
         TrashResult refused;
         refused.error = QStringLiteral("Another cleanup is already running");
@@ -549,8 +900,8 @@ void StorageScanner::trash(const QList<CleanupFile>& files)
 
     QPointer<StorageScanner> self(this);
     const TrashHooks hooks = m_hooks;
-    QThreadPool::globalInstance()->start([self, files, sources, hooks]() {
-        const TrashResult result = trashCandidates(files, sources.first, QDateTime::currentMSecsSinceEpoch(), hooks);
+    QThreadPool::globalInstance()->start([self, job, sources, hooks]() {
+        const TrashResult result = job(sources.first, hooks);
         auto* app = QCoreApplication::instance();
         if (!app)
             return;

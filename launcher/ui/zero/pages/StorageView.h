@@ -6,6 +6,7 @@
 #include <QWidget>
 #include "zero/storage/StorageScanner.h"
 
+class QComboBox;
 class QLabel;
 class QPushButton;
 class QScrollArea;
@@ -13,6 +14,8 @@ class QStackedLayout;
 class QVBoxLayout;
 
 namespace Zero {
+
+class Track;
 
 class StorageView : public QWidget {
     Q_OBJECT
@@ -32,11 +35,16 @@ class StorageView : public QWidget {
 
    signals:
     void showInstanceRequested(const QString& instanceId);
+    /// "Manage" on a world-backup item: Smart Backup lives in the Worlds page.
+    void showWorldsRequested();
 
    private:
     void rebuild(const Storage::StorageReport& report);
     void updateBusy();
     void askTrash(const Storage::CleanupGroup& group);
+    void askTrashItem(const Storage::LargeItem& item);
+    void fillLargest();
+    void showProgress(int done, int total, const QString& current);
     void onTrashFinished(const Storage::TrashResult& result);
 
     Storage::StorageScanner* m_scanner;
@@ -48,6 +56,13 @@ class StorageView : public QWidget {
     QVBoxLayout* m_hostLayout = nullptr;
     QPointer<QLabel> m_updating;
     QList<QPushButton*> m_cleanupButtons;
+    QList<QWidget*> m_itemButtons;  ///< trash buttons of the largest items; the ones with property "zeroLocked" stay disabled
+    QLabel* m_loadingText = nullptr;
+    Track* m_loadingTrack = nullptr;
+    Storage::StorageReport m_report;
+    QString m_largestInstance;  ///< instance id the "Largest items" list is limited to, empty = all
+    QPointer<QWidget> m_largestHost;
+    QString m_pendingItemName;  ///< name of the item the running trash job is moving (empty = a quick clean job)
 };
 
 }  // namespace Zero

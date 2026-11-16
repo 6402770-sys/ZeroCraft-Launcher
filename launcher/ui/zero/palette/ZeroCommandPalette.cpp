@@ -45,6 +45,8 @@ QString sectionTitle(Palette::Kind kind)
             return QObject::tr("Settings");
         case Palette::Kind::Appearance:
             return QObject::tr("Appearance");
+        case Palette::Kind::Server:
+            return QObject::tr("Servers");
     }
     return {};
 }
@@ -60,7 +62,7 @@ class PaletteInputRow : public QWidget {
     {
         setFixedHeight(kInputHeight);
         m_edit->setFrame(false);
-        m_edit->setPlaceholderText(QObject::tr("Type a command, instance or setting…"));
+        m_edit->setPlaceholderText(QObject::tr("Type a command, instance, server or setting…"));
         m_edit->setStyleSheet(QStringLiteral("QLineEdit, QLineEdit:hover, QLineEdit:focus { background: transparent; border: none; padding: 0; }"));
         m_edit->setFont(Style::font(Role::Heading));
         m_edit->setAccessibleName(QObject::tr("Command palette"));
@@ -679,6 +681,15 @@ void ZeroCommandPalette::setCommands(const QList<PaletteCommand>& commands)
     relayout();
 }
 
+void ZeroCommandPalette::reloadCommands()
+{
+    if (!m_provider)
+        return;
+    m_commands = m_provider();
+    rebuild();
+    relayout();
+}
+
 void ZeroCommandPalette::aboutToOpen()
 {
     if (m_provider)
@@ -758,6 +769,7 @@ void ZeroCommandPalette::rebuild()
             cand.keywords = c.keywords;
             cand.kind = c.kind;
             cand.lastUsedMs = c.lastUsedMs;
+            cand.favorite = c.favorite;
             candidates.append(cand);
         }
         QList<Palette::Ranked> ranked = Palette::rank(q, candidates, QDateTime::currentMSecsSinceEpoch());

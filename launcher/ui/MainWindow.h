@@ -50,6 +50,7 @@
 
 #include "minecraft/auth/MinecraftAccount.h"
 #include "zero/content/CartInstall.h"
+#include "zero/servers/ServerVault.h"  // ZERO
 
 class EditableLabel;
 class LaunchController;
@@ -125,6 +126,8 @@ class MainWindow : public QMainWindow {
 
     /// Dev aid (`--zero-screenshot`): shows `page` ("home", "library" or "tools"), grabs the window to `path` and quits.
     void zeroScreenshot(const QString& path, const QString& page);
+    /// ZERO: Home page (the "See summary" action of the end-of-session toast).
+    void showHomePage();
     /// ZERO: opens the Discover page on `section` ("modpacks" | "mods" | "resourcepacks" | "shaders" | "worlds"; empty = the remembered one) with `provider` ("modrinth" | "curseforge" | "technic" | empty) preselected.
     void showDiscover(const QString& section, const QString& provider = {});
     /// Discover > Mods with this instance as the target (the instance window's "Add mods"); raises the main window.
@@ -398,6 +401,8 @@ class MainWindow : public QMainWindow {
     Zero::WorldsPage* m_worlds = nullptr;  // ZERO
     Zero::ScreenshotsPage* m_screenshots = nullptr;  // ZERO
     Zero::ServersPage* m_servers = nullptr;  // ZERO
+    Zero::Servers::ServerVaultScanner* m_paletteServers = nullptr;  // ZERO: palette server entries (no pings)
+    QList<Zero::Servers::VaultServer> m_paletteServersShown;
     Zero::ToolsPage* m_tools = nullptr;
     Zero::AppearancePage* m_appearance = nullptr;
     Zero::ZeroSettingsPage* m_settingsPage = nullptr;

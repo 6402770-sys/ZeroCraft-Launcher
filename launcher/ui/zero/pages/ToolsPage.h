@@ -51,6 +51,8 @@ class ToolsPage : public ShellPage {
    signals:
     void instanceSettingsRequested(const QString& instanceId);
     void showInstanceRequested(const QString& instanceId);
+    /// Storage: "Manage backups" on a world-backup item.
+    void showWorldsRequested();
     /// Java Doctor: open the launcher settings on the Java page.
     void javaSettingsRequested();
 

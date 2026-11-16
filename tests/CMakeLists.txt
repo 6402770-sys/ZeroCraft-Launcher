@@ -45,6 +45,10 @@ set(TEST_SOURCES
     ZeroCommandPalette_test.cpp
     InstanceProfile_test.cpp
     SessionHistory_test.cpp
+    PlayTracker_test.cpp
+    SessionSummary_test.cpp
+    WhilePlaying_test.cpp
+    HomeServers_test.cpp
     LibraryFilter_test.cpp
     ZeroLibrary_test.cpp
     ZeroExportChooser_test.cpp

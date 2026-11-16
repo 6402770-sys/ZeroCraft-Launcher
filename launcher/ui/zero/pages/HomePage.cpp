@@ -11,6 +11,8 @@
 #include <QPainterPath>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QPointer>
+#include <QSet>
 #include <QStackedLayout>
 #include <QTimer>
 #include <QToolButton>
@@ -33,6 +35,14 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "zero/history/SessionHistory.h"
+#include "zero/session/PlayTracker.h"
+#include "zero/session/ProcessMemory.h"
+#include "zero/session/SessionSummary.h"
+#include "HomeServersSection.h"
+#include "LastSessionCard.h"
+#include "NowPlayingCard.h"
+#include "minecraft/launch/MinecraftTarget.h"
+#include "ui/zero/ZeroMotion.h"
 #include "zero/profiles/InstanceProfile.h"
 
 namespace Zero {
@@ -316,6 +326,20 @@ HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTim
     col->setContentsMargins(0, 0, 0, 0);
     col->setSpacing(Tokens::spaceXxl);
 
+    // ----- now playing / last session (above the hero) -----
+    m_nowHolder = new QWidget(column);
+    m_nowLayout = new QVBoxLayout(m_nowHolder);
+    m_nowLayout->setContentsMargins(0, 0, 0, 0);
+    m_nowLayout->setSpacing(Tokens::spaceMd);
+    m_nowHolder->hide();
+    col->addWidget(m_nowHolder);
+    m_lastHolder = new QWidget(column);
+    m_lastLayout = new QVBoxLayout(m_lastHolder);
+    m_lastLayout->setContentsMargins(0, 0, 0, 0);
+    m_lastLayout->setSpacing(0);
+    m_lastHolder->hide();
+    col->addWidget(m_lastHolder);
+
     // ----- hero -----
     m_hero = new ZeroCard(column);
     m_hero->setHoverEnabled(false);
@@ -386,6 +410,18 @@ HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTim
     favCol->addLayout(m_favGrid);
     m_favSection->hide();
     col->addWidget(m_favSection);
+
+    // ----- favorite servers -----
+    m_servers = new HomeServersSection({}, nullptr, column);
+    connect(m_servers, &HomeServersSection::seeAllRequested, this, &HomePage::serversRequested);
+    connect(m_servers, &HomeServersSection::joinRequested, this, [](const QString& address, const QString& instanceId) {
+        auto* inst = byId(instanceId);
+        if (!inst || inst->isRunning() || APPLICATION->launchPhase(instanceId) != Application::LaunchPhase::Idle)
+            return;
+        // exactly what the Servers page does for "Join"
+        APPLICATION->launch(inst, LaunchMode::Normal, std::make_shared<MinecraftTarget>(MinecraftTarget::parse(address, false)));
+    });
+    col->addWidget(m_servers);
 
     // ----- recently played -----
     m_recentSection = new QWidget(column);
@@ -494,7 +530,13 @@ HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTim
     connect(Profile::Notifier::instance(), &Profile::Notifier::profileChanged, this, &HomePage::scheduleRefresh);
     if (auto* history = History::SessionHistory::global())
         connect(history, &History::SessionHistory::changed, this, &HomePage::scheduleRefresh);
+    if (auto* tracker = Session::PlayTracker::global())
+        connect(tracker, &Session::PlayTracker::runningChanged, this, &HomePage::syncNowPlaying);
+    if (auto* store = Session::LastSessionStore::global())
+        connect(store, &Session::LastSessionStore::changed, this, &HomePage::syncLastSession);
     connect(&Theme::instance(), &Theme::changed, this, [this]() {
+        m_lastSignature.clear();
+        syncLastSession();
         m_activitySignature.clear();
         m_recentSignature.clear();
         m_favSignature.clear();
@@ -510,6 +552,7 @@ void HomePage::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
     refresh();  // relative times ("2 hours ago") age while the page is hidden
+    m_servers->activate();  // pings when the page is shown, never on a timer
 }
 
 void HomePage::scheduleRefresh()
@@ -582,6 +625,13 @@ void HomePage::refresh()
         recent = recent.mid(0, kRecentColumns);
     rebuildCards(m_recentSection, m_recentGrid, m_recentSignature, recent);
     rebuildActivity();
+    syncSessionCards();
+}
+
+void HomePage::syncSessionCards()
+{
+    syncNowPlaying();
+    syncLastSession();
 }
 
 void HomePage::rebuildActivity()
@@ -683,6 +733,86 @@ void HomePage::rebuildActivity()
         }
         m_activityRows->addWidget(row);
     }
+}
+
+void HomePage::syncNowPlaying()
+{
+    auto* tracker = Session::PlayTracker::global();
+    QSet<QString> wanted;
+    if (tracker) {
+        for (const auto& s : tracker->running())
+            wanted.insert(s.instanceId);
+    }
+    // sessions that ended: the card fades out, then goes
+    for (auto it = m_nowCards.begin(); it != m_nowCards.end();) {
+        if (wanted.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        NowPlayingCard* card = it.value();
+        it = m_nowCards.erase(it);
+        card->setEnabled(false);
+        QPointer<HomePage> self(this);
+        Motion::fadeOut(card, Tokens::durBase, [self, card]() {
+            card->deleteLater();
+            if (self && self->m_nowCards.isEmpty())
+                self->m_nowHolder->hide();
+        });
+    }
+    // sessions that started: the card fades in
+    if (tracker) {
+        for (const auto& s : tracker->running()) {
+            if (auto* existing = m_nowCards.value(s.instanceId)) {
+                existing->setPid(s.pid);
+                continue;
+            }
+            auto* card = new NowPlayingCard(
+                s.instanceId, s.instanceName, s.startedMs, s.pid, [tracker]() { return tracker->nowMs(); },
+                [](qint64 pid) { return Session::processWorkingSetBytes(pid); }, m_nowHolder);
+            if (auto* inst = byId(s.instanceId))
+                card->setArtwork(Profile::artworkPath(inst), APPLICATION->icons()->getIcon(inst->iconKey()));
+            connect(card, &NowPlayingCard::screenshotsRequested, this, &HomePage::screenshotsRequested);
+            connect(card, &NowPlayingCard::folderRequested, this, &HomePage::folderRequested);
+            connect(card, &NowPlayingCard::stopRequested, this, &HomePage::stopRequested);
+            m_nowCards.insert(s.instanceId, card);
+            m_nowLayout->addWidget(card);
+            m_nowHolder->show();
+            Motion::fadeIn(card, Tokens::durBase);
+        }
+    }
+}
+
+void HomePage::syncLastSession()
+{
+    auto* store = Session::LastSessionStore::global();
+    const bool has = store && store->current() && byId(store->current()->instanceId);
+    QStringList signature;
+    if (has) {
+        const auto& s = *store->current();
+        signature << s.instanceId << QString::number(s.endedMs) << QString::number(s.worldsBackedUp) << s.screenshots.join(QLatin1Char('|'));
+    }
+    if (signature == m_lastSignature)
+        return;
+    const bool sameSession = has && !m_lastSignature.isEmpty() && m_lastSignature.mid(0, 2) == signature.mid(0, 2);
+    m_lastSignature = signature;
+    if (m_lastCard) {
+        m_lastCard->hide();
+        m_lastCard->deleteLater();
+        m_lastCard = nullptr;
+    }
+    m_lastHolder->setVisible(has);
+    if (!has)
+        return;
+    m_lastCard = new LastSessionCard(*store->current(), m_lastHolder);
+    connect(m_lastCard, &LastSessionCard::dismissed, this, []() {
+        if (auto* s = Session::LastSessionStore::global())
+            s->dismiss();
+    });
+    connect(m_lastCard, &LastSessionCard::screenshotRequested, this, &HomePage::screenshotRequested);
+    connect(m_lastCard, &LastSessionCard::moreRequested, this, &HomePage::screenshotsRequested);
+    m_lastLayout->addWidget(m_lastCard);
+    if (!sameSession)
+        Motion::fadeIn(m_lastCard, Tokens::durBase);
 }
 
 void HomePage::refreshHero(MinecraftInstance* hero)

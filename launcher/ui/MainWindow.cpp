@@ -118,6 +118,8 @@
 #include "ui/dialogs/skins/SkinManageDialog.h"
 #include "ui/instanceview/InstanceDelegate.h"
 #include "ui/zero/ZeroToast.h"
+#include "zero/session/PlayTracker.h"  // ZERO
+#include "zero/session/SessionSummary.h"  // ZERO
 #include "zero/ZeroLanguage.h"  // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/PackSnapshotTasks.h"  // ZERO
@@ -150,6 +152,9 @@
 #include "ui/zero/content/ModpacksSection.h"  // ZERO
 #include "ui/zero/pages/ScreenshotsPage.h"  // ZERO
 #include "ui/zero/pages/ServersPage.h"  // ZERO
+#include "ui/zero/palette/ServerCommands.h"  // ZERO
+#include "zero/favorites/FavoriteStore.h"  // ZERO
+#include "zero/servers/ServerVault.h"  // ZERO
 #include "ui/zero/pages/ScreenshotViewer.h"  // ZERO
 #include "zero/profiles/InstanceProfile.h"
 #include "ui/zero/pages/CrashDetectiveView.h"
@@ -3034,6 +3039,7 @@ void MainWindow::setupZeroShell()
     connect(m_servers, &Zero::ServersPage::showInstanceRequested, this, &MainWindow::showInLibrary);
     connect(m_shell, &Zero::ZeroShell::pageChanged, this, [this]() { m_screenshots->viewer()->closeViewer(); });  // never left open behind another page
     connect(m_tools, &Zero::ToolsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
+    connect(m_tools, &Zero::ToolsPage::showWorldsRequested, this, [this]() { m_shell->setCurrentPage(QStringLiteral("worlds")); });
     connect(m_tools, &Zero::ToolsPage::javaSettingsRequested, this,
             [this]() { QTimer::singleShot(0, this, [this]() { APPLICATION->OpenSettings(this, QStringLiteral("java-settings")); }); });
 
@@ -3069,6 +3075,15 @@ void MainWindow::setupZeroShell()
         m_tools->openCrashDetective(id, true, exitCode);
         m_shell->setCurrentPage(QStringLiteral("tools"));
     });
+    connect(m_home, &Zero::HomePage::screenshotsRequested, this, [this](const QString& id) {
+        m_screenshots->showInstance(id);
+        m_shell->setCurrentPage(QStringLiteral("screenshots"));
+    });
+    connect(m_home, &Zero::HomePage::screenshotRequested, this, [this](const QString& path) {
+        m_shell->setCurrentPage(QStringLiteral("screenshots"));
+        m_screenshots->openViewerByPath(path);
+    });
+    connect(m_home, &Zero::HomePage::serversRequested, this, [this]() { m_shell->setCurrentPage(QStringLiteral("servers")); });
     connect(m_home, &Zero::HomePage::viewLibraryRequested, this, [this]() { m_shell->setCurrentPage(QStringLiteral("library")); });
     connect(m_home, &Zero::HomePage::newInstanceRequested, this, &MainWindow::on_actionAddInstance_triggered);
     connect(m_home, &Zero::HomePage::importRequested, this, [this]() { addInstance(QString(), {}, QStringLiteral("import")); });
@@ -3289,6 +3304,26 @@ void MainWindow::setupCommandPalette()
     // here would be reset by retranslateUi()).
     m_palette = new Zero::ZeroCommandPalette(this);
     m_palette->setCommandProvider([this]() { return buildPaletteCommands(); });
+    // Server entries come from their own read-only vault scanner (servers.dat only, never a ping). It rescans every time the
+    // palette opens; the entries appear as soon as the scan lands, without disturbing a query the user already typed.
+    m_paletteServers = new Zero::Servers::ServerVaultScanner(
+        []() {
+            QList<Zero::Servers::InstanceSource> sources;
+            auto* instances = APPLICATION->instances();
+            for (int i = 0; i < instances->count(); ++i) {
+                MinecraftInstance* inst = instances->at(i);
+                sources.append({ inst->id(), inst->name(), QDir(inst->gameRoot()).filePath(QStringLiteral("servers.dat")) });
+            }
+            return sources;
+        },
+        this);
+    connect(m_paletteServers, &Zero::Servers::ServerVaultScanner::listChanged, this, [this]() {
+        if (m_paletteServers->servers() == m_paletteServersShown)
+            return;
+        m_paletteServersShown = m_paletteServers->servers();
+        if (m_palette->isOpen())
+            m_palette->reloadCommands();
+    });
     m_shortcutSheet = new Zero::ZeroShortcutSheet(this);
     m_shortcutSheet->setGroupsProvider([this]() { return buildShortcutGroups(); });
 
@@ -3312,8 +3347,10 @@ void MainWindow::togglePalette()
     m_shortcutSheet->closeOverlay();
     if (m_palette->isOpen())
         m_palette->closeOverlay();
-    else
+    else {
+        m_paletteServers->rescan();
         m_palette->open();
+    }
 }
 
 void MainWindow::toggleShortcutSheet()
@@ -3370,6 +3407,12 @@ void MainWindow::showDiscoverWorlds(const QString& instanceId, const QString& qu
     setWindowState(windowState() & ~Qt::WindowMinimized);
     raise();
     activateWindow();
+}
+
+void MainWindow::showHomePage()
+{
+    if (m_shell)
+        m_shell->setCurrentPage(QStringLiteral("home"));
 }
 
 void MainWindow::showInLibrary(const QString& instanceId)
@@ -3441,6 +3484,16 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
             boost.run = [this, id]() { QTimer::singleShot(0, this, [this, id]() { boostPerformance(id); }); };
             out.append(boost);
         }
+    }
+
+    // Servers (Server Vault): one entry per server and instance; Enter = the Servers page's "Play on server".
+    {
+        QSet<QString> favoriteServers;
+        if (auto* store = Zero::Favorites::FavoriteStore::instance())
+            favoriteServers = store->keys(Zero::Favorites::Kind::Server);
+        out.append(Zero::Palette::serverCommands(m_paletteServers->servers(), favoriteServers, [this](const QString& address, const QString& instanceId) {
+            m_servers->playOn(address, instanceId);
+        }));
     }
 
     // Navigation.
@@ -4123,6 +4176,33 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
     if (!runningId.isEmpty()) {
         if (auto* inst = APPLICATION->instances()->getInstanceById(runningId))
             inst->setRunning(true);
+    }
+
+    // Dev aid: ZERO_SCREENSHOT_NOW_PLAYING=<instance id> starts a fake play session through the tracker (the Now playing card of Home,
+    // with this launcher's own working set as the memory line; nothing is launched). ZERO_SCREENSHOT_LAST_SESSION=<instance id> stores a
+    // Last session summary for that instance (1 h 20 min, the files of its screenshots folder as the session's screenshots, one world
+    // backed up) in the data dir of the run.
+    if (const QString id = qEnvironmentVariable("ZERO_SCREENSHOT_NOW_PLAYING"); !id.isEmpty()) {
+        if (auto* tracker = Zero::Session::PlayTracker::global()) {
+            tracker->onPhaseChanged(id, Zero::History::Phase::Running);
+            tracker->notePid(id, QCoreApplication::applicationPid());
+        }
+    }
+    if (const QString id = qEnvironmentVariable("ZERO_SCREENSHOT_LAST_SESSION"); !id.isEmpty()) {
+        auto* inst = APPLICATION->instances()->getInstanceById(id);
+        auto* store = Zero::Session::LastSessionStore::global();
+        if (inst && store) {
+            Zero::Session::LastSession s;
+            s.instanceId = id;
+            s.instanceName = inst->name();
+            s.endedMs = QDateTime::currentMSecsSinceEpoch();
+            s.startedMs = s.endedMs - 80 * 60 * 1000;
+            const QDir dir(QDir(inst->gameRoot()).filePath(QStringLiteral("screenshots")));
+            for (const QFileInfo& f : dir.entryInfoList({ QStringLiteral("*.png"), QStringLiteral("*.jpg") }, QDir::Files, QDir::Name))
+                s.screenshots << f.absoluteFilePath();
+            s.worldsBackedUp = 1;
+            store->set(s);
+        }
     }
 
     // Dev aid: ZERO_SCREENSHOT_TOAST=1 shows one toast of each kind (info, success, warning, error).

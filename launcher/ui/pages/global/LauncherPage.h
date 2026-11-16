@@ -36,6 +36,7 @@
 #pragma once
 
 #include <QDialog>
+class QRadioButton;
 #include <memory>
 
 #include <translations/TranslationsModel.h>
@@ -82,4 +83,8 @@ class LauncherPage : public QWidget, public BasePage {
 
    private:
     Ui::LauncherPage* ui;
+    // ZERO: "While playing" (ZeroWhilePlaying)
+    QRadioButton* m_whileTray = nullptr;
+    QRadioButton* m_whileOpen = nullptr;
+    QRadioButton* m_whileClose = nullptr;
 };

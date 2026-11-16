@@ -26,6 +26,8 @@ class ZeroCommandPalette : public PaletteOverlay {
     using Provider = std::function<QList<PaletteCommand>()>;
     /// Called every time the palette opens, so the commands reflect the current enabled state of the real actions.
     void setCommandProvider(Provider provider) { m_provider = std::move(provider); }
+    /// Re-runs the provider and rebuilds the list keeping the query (for data that arrives while the palette is open).
+    void reloadCommands();
     /// Replaces the commands directly (tests, static lists).
     void setCommands(const QList<PaletteCommand>& commands);
 

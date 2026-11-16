@@ -156,6 +156,8 @@ double kindWeight(Kind kind)
         case Kind::Setting:
         case Kind::Appearance:
             return 1.0;
+        case Kind::Server:
+            return 1.5;
     }
     return 0.0;
 }
@@ -187,7 +189,8 @@ QList<Ranked> rank(const QString& query, const QList<Candidate>& candidates, qin
                 r.viaKeyword = true;
             }
         }
-        r.score = matchScore + (c.kind == Kind::Instance ? recencyBoost(c.lastUsedMs, nowMs) : 0.0) + kindWeight(c.kind);
+        r.score = matchScore + (c.kind == Kind::Instance ? recencyBoost(c.lastUsedMs, nowMs) : 0.0) +
+                  (c.kind == Kind::Server && c.favorite ? kFavoriteBoost : 0.0) + kindWeight(c.kind);
         out.append(r);
     }
     std::stable_sort(out.begin(), out.end(), [&candidates](const Ranked& a, const Ranked& b) {

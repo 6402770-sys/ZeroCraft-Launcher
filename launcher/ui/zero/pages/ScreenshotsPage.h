@@ -50,6 +50,10 @@ class ScreenshotsPage : public ShellPage {
     void callWhenIdle(const std::function<void()>& done, int maxMs);
     /// Opens the viewer on the first screenshot with this file name (any instance); false when there is none.
     bool openViewerByFileName(const QString& fileName);
+    /// Shows only the screenshots of this instance (clears the search).
+    void showInstance(const QString& instanceId);
+    /// Opens the viewer on the screenshot at `path` as soon as it is listed (rescans when needed).
+    void openViewerByPath(const QString& path);
     /// Runs `done` once the viewer shows its full-size image, or after `maxMs` at the latest.
     void callWhenViewerReady(const std::function<void()>& done, int maxMs);
 
@@ -103,6 +107,7 @@ class ScreenshotsPage : public ShellPage {
     QElapsedTimer m_sinceScan;
     bool m_scanRequested = false;
     bool m_stale = false;
+    QString m_pendingOpen;     // a path to open in the viewer once the scan lists it
     QString m_instanceFilter;  // instance id, empty = all (kept even while that instance has no screenshots)
     Gallery::SortMode m_sort = Gallery::SortMode::Newest;
     Motion::ItemReveal* m_reveal = nullptr;

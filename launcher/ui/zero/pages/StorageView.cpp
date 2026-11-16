@@ -11,6 +11,8 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QComboBox>
+#include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -22,6 +24,7 @@
 #include <QVariantAnimation>
 #include <QTimer>
 #include <algorithm>
+#include <utility>
 #include "Application.h"
 #include "ElidedLabel.h"
 #include "IconTile.h"
@@ -126,9 +129,18 @@ QToolButton* makeIconButton(const QString& icon, const QString& tip, QWidget* pa
     return button;
 }
 
+}  // namespace
+
 /// Thin usage bar: `border` track, `accent` fill covering `ratio` of the width.
 class Track : public QWidget {
    public:
+    void setRatio(double ratio)
+    {
+        m_ratio = std::clamp(ratio, 0.0, 1.0);
+        m_grow = 1.0;
+        m_grown = true;
+        update();
+    }
     Track(double ratio, QWidget* parent) : QWidget(parent), m_ratio(std::clamp(ratio, 0.0, 1.0))
     {
         setFixedHeight(Tokens::progressHeight);
@@ -179,6 +191,8 @@ class Track : public QWidget {
     double m_grow = 1.0;
     bool m_grown = false;
 };
+
+namespace {
 
 /// Row with hover highlight and keyboard focus; emits `activated` on click or Enter/Space (not when a child button took the click).
 class HoverRow : public QWidget {
@@ -301,6 +315,62 @@ void openFolder(const QString& path)
     QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
+/// Explorer with `path` selected (a missing path opens its parent folder).
+void revealInExplorer(const QString& path)
+{
+    const QFileInfo info(path);
+    if (!info.exists()) {
+        openFolder(info.absolutePath());
+        return;
+    }
+    QProcess process;
+    process.setProgram(QStringLiteral("explorer.exe"));
+    process.setNativeArguments(QStringLiteral("/select,\"%1\"").arg(QDir::toNativeSeparators(info.absoluteFilePath())));
+    process.startDetached();
+}
+
+bool instanceBusy(const QString& instanceId)
+{
+    auto* inst = APPLICATION->instances()->getInstanceById(instanceId);
+    return inst && (inst->isRunning() || APPLICATION->launchPhase(instanceId) != Application::LaunchPhase::Idle);
+}
+
+QString itemKindName(ItemKind kind)
+{
+    switch (kind) {
+        case ItemKind::World: return QObject::tr("World");
+        case ItemKind::Mod: return QObject::tr("Mod");
+        case ItemKind::Pack: return QObject::tr("Resource or shader pack");
+        case ItemKind::Logs: return QObject::tr("Logs folder");
+        case ItemKind::CrashReports: return QObject::tr("Crash reports folder");
+        case ItemKind::Screenshots: return QObject::tr("Screenshots folder");
+        case ItemKind::WorldBackups: return QObject::tr("World backups (ZERO)");
+        case ItemKind::Snapshots: return QObject::tr("Modpack snapshots (ZERO)");
+        case ItemKind::ZeroData: return QObject::tr("ZERO data");
+        case ItemKind::Folder: return QObject::tr("Folder");
+        case ItemKind::BigFile: return QObject::tr("Large file");
+    }
+    return {};
+}
+
+QString itemIconName(ItemKind kind)
+{
+    switch (kind) {
+        case ItemKind::World: return QStringLiteral("earth");
+        case ItemKind::Mod: return QStringLiteral("puzzle");
+        case ItemKind::Pack: return QStringLiteral("package");
+        case ItemKind::Logs: return QStringLiteral("scroll-text");
+        case ItemKind::CrashReports: return QStringLiteral("triangle-alert");
+        case ItemKind::Screenshots: return QStringLiteral("image");
+        case ItemKind::WorldBackups: return QStringLiteral("archive");
+        case ItemKind::Snapshots: return QStringLiteral("file-archive");
+        case ItemKind::ZeroData: return QStringLiteral("layers");
+        case ItemKind::Folder: return QStringLiteral("folder-open");
+        case ItemKind::BigFile: return QStringLiteral("file-text");
+    }
+    return QStringLiteral("file-text");
+}
+
 /// A section card with a Heading title; returns the card and its vertical layout.
 ZeroCard* makeSection(const QString& title, QWidget* parent, QVBoxLayout** layoutOut, const QString& subtitle = {})
 {
@@ -341,7 +411,17 @@ StorageView::StorageView(QWidget* parent)
     m_stack = new QStackedLayout;
     outer->addLayout(m_stack, 1);
 
-    m_stack->addWidget(new ZeroSkeleton(ZeroSkeleton::Shape::Report, tr("Measuring disk usage… Large worlds can take a moment."), this));
+    auto* loading = new QWidget(this);
+    auto* loadingLayout = new QVBoxLayout(loading);
+    loadingLayout->setContentsMargins(0, 0, Tokens::spaceSm, 0);
+    loadingLayout->setSpacing(Tokens::spaceSm);
+    m_loadingText = makeLabel(tr("Measuring disk usage…"), Role::Label, loading);
+    m_loadingTrack = new Track(0.0, loading);
+    loadingLayout->addWidget(m_loadingText);
+    loadingLayout->addWidget(m_loadingTrack);
+    loadingLayout->addSpacing(Tokens::spaceMd);
+    loadingLayout->addWidget(new ZeroSkeleton(ZeroSkeleton::Shape::Report, tr("Measuring disk usage… Large worlds can take a moment."), loading), 1);
+    m_stack->addWidget(loading);
 
     m_scroll = new QScrollArea(this);
     m_scroll->setWidgetResizable(true);
@@ -356,11 +436,15 @@ StorageView::StorageView(QWidget* parent)
                 m_updating->show();
             }
         } else {
+            m_loadingText->setText(tr("Measuring disk usage…"));
+            m_loadingTrack->setRatio(0.0);
             m_stack->setCurrentIndex(0);
         }
         updateBusy();
     });
+    connect(m_scanner, &StorageScanner::scanProgress, this, &StorageView::showProgress);
     connect(m_scanner, &StorageScanner::reportReady, this, [this](const StorageReport& report) {
+        m_report = report;
         rebuild(report);
         m_stack->setCurrentIndex(1);
         updateBusy();
@@ -392,13 +476,38 @@ void StorageView::updateBusy()
     m_rescan->setEnabled(!busy);
     for (auto* b : m_cleanupButtons)
         b->setEnabled(!busy);
+    for (QWidget* b : std::as_const(m_itemButtons))
+        b->setEnabled(!busy && !b->property("zeroLocked").toBool());
+}
+
+void StorageView::showProgress(int done, int total, const QString& current)
+{
+    if (total <= 0)
+        return;
+    const int step = std::min(done + 1, total);
+    const QString text = current.isEmpty() ? tr("Measuring launcher data… (%1 of %2)").arg(step).arg(total)
+                                           : tr("Measuring %1 (%2 of %3)").arg(current).arg(step).arg(total);
+    m_loadingText->setText(text);
+    m_loadingTrack->setRatio(double(done) / double(total));
+    if (m_updating) {
+        m_updating->setText(tr("Updating… %1 of %2").arg(step).arg(total));
+        m_updating->show();
+    }
 }
 
 void StorageView::onTrashFinished(const TrashResult& result)
 {
     QWidget* host = window();
+    const QString itemName = std::exchange(m_pendingItemName, QString());
     if (!result.error.isEmpty()) {
         ZeroToast::show(host, result.error, ZeroToast::Kind::Error);
+    } else if (!itemName.isEmpty()) {
+        if (result.trashedCount > 0)
+            ZeroToast::show(host, tr("Moved %1 to the Recycle Bin. Freed %2.").arg(itemName, Format::bytes(result.trashedBytes)), ZeroToast::Kind::Success);
+        else if (!result.problems.isEmpty() && result.problems.first().error.contains(QLatin1String("running")))
+            ZeroToast::show(host, tr("Close the game first"), ZeroToast::Kind::Warning);
+        else
+            ZeroToast::show(host, tr("%1 could not be moved to the Recycle Bin").arg(itemName), ZeroToast::Kind::Warning);
     } else {
         if (result.trashedCount > 0)
             ZeroToast::show(host, (result.trashedCount == 1 ? tr("Moved 1 file (%1) to the Recycle Bin").arg(Format::bytes(result.trashedBytes))
@@ -437,9 +546,98 @@ void StorageView::askTrash(const CleanupGroup& group)
     }
 }
 
+void StorageView::askTrashItem(const LargeItem& item)
+{
+    if (instanceBusy(item.instanceId)) {
+        ZeroToast::show(window(), tr("Close the game first"), ZeroToast::Kind::Warning);
+        return;
+    }
+    QMessageBox box(QMessageBox::Question, tr("Move to Recycle Bin?"),
+                    tr("Move \"%1\" (%2) from %3 to the Recycle Bin?").arg(item.name, Format::bytes(item.sizeBytes), item.instanceName), QMessageBox::NoButton, window());
+    box.setTextFormat(Qt::PlainText);
+    box.setInformativeText(item.kind == ItemKind::World
+                               ? tr("This world will be gone from the game (you can get it back from the Recycle Bin).")
+                               : tr("You can restore it from the Recycle Bin."));
+    QPushButton* confirm = box.addButton(tr("Move to Recycle Bin"), QMessageBox::AcceptRole);
+    QPushButton* cancel = box.addButton(tr("Cancel"), QMessageBox::RejectRole);
+    box.setDefaultButton(cancel);
+    box.exec();
+    if (box.clickedButton() == confirm) {
+        m_pendingItemName = item.name;
+        m_scanner->trashItems({ item });
+        updateBusy();
+    }
+}
+
+void StorageView::fillLargest()
+{
+    if (!m_largestHost)
+        return;
+    auto* lay = qobject_cast<QVBoxLayout*>(m_largestHost->layout());
+    m_itemButtons.erase(std::remove_if(m_itemButtons.begin(), m_itemButtons.end(), [this](QWidget* w) { return m_largestHost->isAncestorOf(w); }),
+                        m_itemButtons.end());
+    while (QLayoutItem* old = lay->takeAt(0)) {
+        if (QWidget* w = old->widget())
+            w->deleteLater();
+        delete old;
+    }
+    const QList<LargeItem> items = aggregateLargest(m_report.largest, m_largestInstance, kLargestLimit);
+    if (items.isEmpty()) {
+        lay->addWidget(makeLabel(tr("Nothing big found."), Role::Caption, m_largestHost));
+        return;
+    }
+    const qint64 biggest = items.first().sizeBytes;
+    for (const LargeItem& item : items) {
+        auto* row = new QWidget(m_largestHost);
+        auto* col = new QVBoxLayout(row);
+        col->setContentsMargins(0, Tokens::spaceXs, 0, Tokens::spaceXs);
+        col->setSpacing(Tokens::spaceXs);
+        auto* h = new QHBoxLayout;
+        h->setContentsMargins(0, 0, 0, 0);
+        h->setSpacing(Tokens::spaceMd);
+        h->addWidget(makeIconLabel(itemIconName(item.kind), 20, row, &ThemeSpec::textSecondary));
+        auto* texts = new QVBoxLayout;
+        texts->setContentsMargins(0, 0, 0, 0);
+        texts->setSpacing(0);
+        texts->addWidget(makeElided(item.name, Role::Label, row));
+        texts->addWidget(makeElided(QStringLiteral("%1 · %2").arg(item.instanceName, itemKindName(item.kind)), Role::Caption, row));
+        h->addLayout(texts, 1);
+        auto* size = makeLabel(Format::bytes(item.sizeBytes), Role::Label, row);
+        size->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        h->addWidget(size);
+
+        const QString path = item.path;
+        auto* show = makeIconButton(QStringLiteral("folder-open"), tr("Show in folder"), row);
+        connect(show, &QToolButton::clicked, this, [path]() { revealInExplorer(path); });
+        h->addWidget(show);
+        if (item.kind == ItemKind::WorldBackups) {
+            auto* manage = makeButton(tr("Manage backups"), QString(), "ghost", row);
+            connect(manage, &QPushButton::clicked, this, &StorageView::showWorldsRequested);
+            h->addWidget(manage);
+        }
+        if (isTrashableKind(item.kind)) {
+            auto* trash = makeButton(tr("Move to Recycle Bin"), QStringLiteral("trash-2"), "secondary", row);
+            const bool locked = item.running || instanceBusy(item.instanceId);
+            trash->setProperty("zeroLocked", locked);
+            trash->setEnabled(!locked && !m_scanner->isScanning() && !m_scanner->isTrashing());
+            if (locked)
+                trash->setToolTip(tr("Close the game first"));
+            connect(trash, &QPushButton::clicked, this, [this, item]() { askTrashItem(item); });
+            m_itemButtons.append(trash);
+            h->addWidget(trash);
+        } else {
+            h->addWidget(makeLabel(tr("Managed by ZERO"), Role::Caption, row));
+        }
+        col->addLayout(h);
+        col->addWidget(new Track(biggest > 0 ? double(item.sizeBytes) / double(biggest) : 0, row));
+        lay->addWidget(row);
+    }
+}
+
 void StorageView::rebuild(const StorageReport& report)
 {
     m_cleanupButtons.clear();
+    m_itemButtons.clear();
     m_host = new QWidget;
     m_hostLayout = new QVBoxLayout(m_host);
     m_hostLayout->setContentsMargins(0, 0, Tokens::spaceSm, Tokens::spaceXl);
@@ -585,6 +783,37 @@ void StorageView::rebuild(const StorageReport& report)
             connect(row, &HoverRow::activated, this, [this, id]() { emit showInstanceRequested(id); });
             lay->addWidget(row);
         }
+        page->addWidget(card);
+    }
+
+    // ----- largest items -----
+    {
+        QVBoxLayout* lay = nullptr;
+        auto* card = makeSection(tr("Largest items"), host, &lay,
+                                 tr("The biggest worlds, packs, folders and files across your instances. Moving one to the Recycle Bin asks first."));
+        auto* combo = new QComboBox(card);
+        combo->addItem(tr("All instances"), QString());
+        int selected = 0;
+        for (const InstanceRow& inst : report.instances) {
+            combo->addItem(inst.name, inst.id);
+            if (inst.id == m_largestInstance)
+                selected = int(combo->count()) - 1;
+        }
+        combo->setCurrentIndex(selected);
+        if (selected == 0)
+            m_largestInstance.clear();
+        combo->setAccessibleName(tr("Show the largest items of"));
+        lay->addWidget(combo, 0, Qt::AlignLeft);
+        m_largestHost = new QWidget(card);
+        auto* items = new QVBoxLayout(m_largestHost);
+        items->setContentsMargins(0, 0, 0, 0);
+        items->setSpacing(Tokens::spaceXs);
+        lay->addWidget(m_largestHost);
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo]() {
+            m_largestInstance = combo->currentData().toString();
+            fillLargest();
+        });
+        fillLargest();
         page->addWidget(card);
     }
 

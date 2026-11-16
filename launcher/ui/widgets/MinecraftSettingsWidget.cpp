@@ -178,6 +178,7 @@ void MinecraftSettingsWidget::loadSettings()
     m_ui->windowWidthSpinBox->setValue(settings->get("MinecraftWinWidth").toInt());
     m_ui->windowHeightSpinBox->setValue(settings->get("MinecraftWinHeight").toInt());
     m_ui->closeAfterLaunchCheck->setChecked(settings->get("CloseAfterLaunch").toBool());
+    m_ui->closeAfterLaunchCheck->setVisible(m_instance != nullptr);  // ZERO: globally it is the "While playing" choice of General
     m_ui->quitAfterGameStopCheck->setChecked(settings->get("QuitAfterGameStop").toBool());
 
     // Game Time
@@ -369,7 +370,9 @@ void MinecraftSettingsWidget::saveSettings()
         settings->set("LaunchMaximized", m_ui->maximizedCheckBox->isChecked());
         settings->set("MinecraftWinWidth", m_ui->windowWidthSpinBox->value());
         settings->set("MinecraftWinHeight", m_ui->windowHeightSpinBox->value());
-        settings->set("CloseAfterLaunch", m_ui->closeAfterLaunchCheck->isChecked());
+        // ZERO: the global choice lives in Settings > General > While playing (it drives this setting)
+        if (m_instance != nullptr)
+            settings->set("CloseAfterLaunch", m_ui->closeAfterLaunchCheck->isChecked());
         settings->set("QuitAfterGameStop", m_ui->quitAfterGameStopCheck->isChecked());
     } else {
         settings->reset("LaunchMaximized");

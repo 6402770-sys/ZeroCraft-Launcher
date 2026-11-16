@@ -57,6 +57,15 @@
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
+#include "zero/session/PlayTracker.h"  // ZERO
+#include "zero/session/SessionSummary.h"  // ZERO
+#include "zero/session/WhilePlaying.h"  // ZERO
+#include "zero/profiles/InstanceProfile.h"  // ZERO
+#include "ui/zero/ZeroFormat.h"  // ZERO
+#include "ui/zero/ZeroTray.h"  // ZERO
+#include "ui/zero/ZeroToast.h"  // ZERO
+#include "ui/zero/ZeroThemeState.h"  // ZERO
+#include "launch/LaunchTask.h"
 #include "ui/zero/instance/PackRollbackPrompt.h"  // ZERO: "Minecraft turned off your resource packs"
 #include "zero/ZeroLanguage.h"  // ZERO
 #include "ui/zero/ZeroSmoothScroll.h"
@@ -948,6 +957,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("CloseAfterLaunch", false);
         m_settings->registerSetting("QuitAfterGameStop", false);
+        // ZERO: what the launcher does while a game runs: "tray" (hide to the tray), "open" (keep it open) or "close" (Prism's
+        // CloseAfterLaunch). The choice drives CloseAfterLaunch, see the "play sessions" block below.
+        m_settings->registerSetting("ZeroWhilePlaying", "tray");
 
         m_settings->registerSetting("Env", "{}");
 
@@ -1130,6 +1142,171 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                     autoBackup->onGameRunning(id);
             });
             connect(this, &Application::launchEnded, autoBackup, &Zero::Backup::AutoBackup::onLaunchEnded);
+        }
+
+        // ZERO: play sessions. The tracker knows which instances run (Home's Now playing cards, the tray tooltip); "While playing"
+        // hides the launcher to the tray and brings it back; the end-of-session summary is built from real files only.
+        {
+            using namespace Zero::Session;
+            auto* tracker = new PlayTracker(
+                {},
+                [this](const QString& id) {
+                    auto* inst = m_instances->getInstanceById(id);
+                    return inst ? inst->name() : QString();
+                },
+                [this](const QString& id) -> qint64 {
+                    auto* inst = m_instances->getInstanceById(id);
+                    auto* task = inst ? inst->getLaunchTask() : nullptr;
+                    return task ? task->pid() : 0;
+                },
+                this);
+            connect(this, &Application::launchPhaseChanged, tracker, [tracker](const QString& id, Application::LaunchPhase phase) {
+                tracker->onPhaseChanged(id, phase == Application::LaunchPhase::Running     ? Zero::History::Phase::Running
+                                            : phase == Application::LaunchPhase::Preparing ? Zero::History::Phase::Preparing
+                                                                                           : Zero::History::Phase::Idle);
+            });
+            connect(this, &Application::gameStoppedUnexpectedly, tracker, &PlayTracker::onStoppedUnexpectedly);
+            connect(this, &Application::launchEnded, tracker, &PlayTracker::onLaunchEnded);
+
+            // "While playing": the ZERO choice drives Prism's CloseAfterLaunch ("close"); the classic checkbox drives the choice back
+            {
+                auto syncing = std::make_shared<bool>(false);
+                auto applyClose = [this, syncing]() {
+                    if (*syncing)
+                        return;
+                    *syncing = true;
+                    const bool close = whilePlayingFromString(m_settings->get("ZeroWhilePlaying").toString()) == WhilePlayingMode::Close;
+                    if (m_settings->get("CloseAfterLaunch").toBool() != close)
+                        m_settings->set("CloseAfterLaunch", close);
+                    *syncing = false;
+                };
+                applyClose();  // the ZERO choice supersedes whatever the classic setting held
+                connect(m_settings->getSetting("ZeroWhilePlaying").get(), &Setting::SettingChanged, this, applyClose);
+                connect(m_settings->getSetting("CloseAfterLaunch").get(), &Setting::SettingChanged, this, [this, syncing]() {
+                    if (*syncing)
+                        return;
+                    *syncing = true;
+                    const bool classic = m_settings->get("CloseAfterLaunch").toBool();
+                    const auto mode = whilePlayingFromString(m_settings->get("ZeroWhilePlaying").toString());
+                    if (classic && mode != WhilePlayingMode::Close)
+                        m_settings->set("ZeroWhilePlaying", whilePlayingToString(WhilePlayingMode::Close));
+                    else if (!classic && mode == WhilePlayingMode::Close)
+                        m_settings->set("ZeroWhilePlaying", whilePlayingToString(WhilePlayingMode::Tray));
+                    *syncing = false;
+                });
+            }
+
+            WindowHooks hooks;
+            hooks.mode = [this]() { return whilePlayingFromString(m_settings->get("ZeroWhilePlaying").toString()); };
+            hooks.mainWindowVisible = [this]() { return m_mainWindow && m_mainWindow->isVisible(); };
+            hooks.hideMainWindow = [this]() {
+                if (m_mainWindow)
+                    m_mainWindow->hide();
+            };
+            hooks.showMainWindow = [this]() { showMainWindow(); };
+            hooks.setInstanceWindowsVisible = [this](const QString& id, bool visible) {
+                auto* inst = m_instances->getInstanceById(id);
+                if (inst && inst->window())
+                    inst->window()->setVisible(visible);
+            };
+            auto* whilePlaying = new WhilePlaying(hooks, this);
+            connect(this, &Application::launchPhaseChanged, whilePlaying, [whilePlaying, tracker](const QString& id, Application::LaunchPhase phase) {
+                if (phase == Application::LaunchPhase::Running && tracker->isRunning(id))
+                    whilePlaying->onGameStarted(id);
+            });
+
+            auto* lastSession = new LastSessionStore(FS::PathCombine(m_dataPath, "zero", "last-session.json"), this);
+            connect(tracker, &PlayTracker::sessionEnded, this, [this, whilePlaying, lastSession](const EndedSession& ended) {
+                // the launcher comes back first, so the toast below is seen
+                whilePlaying->onGameEnded(ended.instanceId, ended.crashed);
+                auto* inst = m_instances->getInstanceById(ended.instanceId);
+                if (!inst)
+                    return;
+                const auto summary = buildSummary(ended, QDir(inst->gameRoot()).filePath(QStringLiteral("screenshots")));
+                if (!summary)
+                    return;
+                lastSession->set(*summary);
+                if (m_mainWindow) {
+                    Zero::ZeroToast::show(m_mainWindow, tr("You played %1").arg(Zero::Format::playtime(summary->durationSeconds())),
+                                          Zero::ZeroToast::Kind::Success, tr("See summary"), [this]() {
+                                              if (auto* w = showMainWindow())
+                                                  w->showHomePage();
+                                          });
+                }
+            });
+            if (auto* autoBackup = Zero::Backup::AutoBackup::global()) {
+                connect(autoBackup, &Zero::Backup::AutoBackup::finished, lastSession,
+                        [lastSession](const QString& id, const QString&, int backedUp, const QStringList&, int, const QString&) {
+                            lastSession->addBackups(id, backedUp);
+                        });
+            }
+
+            // tray icon (only when the system has a notification area)
+            if (Zero::ZeroTray::available()) {
+                Zero::TraySource source;
+                auto sorted = [this](bool favoritesOnly) {
+                    QList<MinecraftInstance*> all;
+                    for (int i = 0; i < m_instances->count(); ++i) {
+                        auto* inst = m_instances->at(i);
+                        if (!favoritesOnly || Zero::Profile::isFavorite(inst))
+                            all.append(inst);
+                    }
+                    std::sort(all.begin(), all.end(), [](MinecraftInstance* a, MinecraftInstance* b) {
+                        return a->lastLaunch() != b->lastLaunch() ? a->lastLaunch() > b->lastLaunch() : a->name().localeAwareCompare(b->name()) < 0;
+                    });
+                    QStringList ids;
+                    for (auto* inst : all)
+                        ids << inst->id();
+                    return ids;
+                };
+                source.favoriteIds = [sorted]() { return sorted(true); };
+                source.recentIds = [this, sorted]() {
+                    QStringList ids;
+                    for (const QString& id : sorted(false)) {
+                        if (auto* inst = m_instances->getInstanceById(id); inst && inst->lastLaunch() > 0)
+                            ids << id;
+                    }
+                    return ids;
+                };
+                source.nameOf = [this](const QString& id) {
+                    auto* inst = m_instances->getInstanceById(id);
+                    return inst ? inst->name() : QString();
+                };
+                source.running = [tracker]() {
+                    QSet<QString> ids;
+                    for (const auto& s : tracker->running())
+                        ids.insert(s.instanceId);
+                    return ids;
+                };
+                source.playingNames = [tracker]() {
+                    QStringList names;
+                    for (const auto& s : tracker->running())
+                        names << s.instanceName;
+                    return names;
+                };
+                source.icon = [this]() { return logo(); };
+                source.canPlay = [this](const QString& id) {
+                    auto* inst = m_instances->getInstanceById(id);
+                    return inst && inst->canLaunch() && launchPhase(id) == LaunchPhase::Idle;
+                };
+                auto* tray = new Zero::ZeroTray(source, this);
+                connect(tray, &Zero::ZeroTray::openRequested, this, [this]() { showMainWindow(); });
+                connect(tray, &Zero::ZeroTray::playRequested, this, [this](const QString& id) {
+                    auto* inst = m_instances->getInstanceById(id);
+                    if (inst && !inst->isRunning() && launchPhase(id) == LaunchPhase::Idle)
+                        launch(inst);
+                });
+                connect(tray, &Zero::ZeroTray::quitRequested, this, [this]() {
+                    if (m_runningInstances > 0 &&
+                        QMessageBox::question(nullptr, tr("Quit ZERO Launcher"), tr("A game is still running. Quit anyway?")) != QMessageBox::Yes)
+                        return;
+                    closeAllWindows();
+                    quit();
+                });
+                connect(tracker, &PlayTracker::runningChanged, tray, &Zero::ZeroTray::refresh);
+                connect(&Zero::Theme::instance(), &Zero::Theme::changed, tray, &Zero::ZeroTray::refresh);
+                tray->show();
+            }
         }
 
         // ZERO: pack rollback. When the game stops, latest.log tells whether Minecraft turned every resource pack off (a pack whose
@@ -1928,6 +2105,8 @@ void Application::OpenSettings(QWidget* parent, QString openPage)
 MainWindow* Application::showMainWindow(bool minimized)
 {
     if (m_mainWindow) {
+        if (m_mainWindow->isHidden())
+            m_mainWindow->show();  // hidden to the tray while a game runs
         m_mainWindow->setWindowState(m_mainWindow->windowState() & ~Qt::WindowMinimized);
         m_mainWindow->raise();
         m_mainWindow->activateWindow();

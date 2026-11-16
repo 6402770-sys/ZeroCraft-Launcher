@@ -6,7 +6,9 @@
 //    file stays where it is (there is no permanent-delete fallback);
 //  - nothing is offered or trashed unless it is a regular, non-link file directly inside `logs` / `crash-reports` of a known instance
 //    that is not running, has the expected name and is older than 30 days; the same predicates re-validate every file at trash time;
-//  - user content (worlds, mods, screenshots, packs, backups) is only measured, never offered for deletion;
+//  - the quick clean-up above never touches user content; "Largest items" (worlds, mods, packs, screenshots, big files...) may be
+//    moved to the Recycle Bin one by one, only on an explicit request (`trashLargeItems`: same rules, never a running instance, never
+//    ZERO's own backups / snapshots / data);
 //  - every byte is counted once: a configured directory that is nested in another one is subtracted from its parent.
 #pragma once
 
@@ -94,6 +96,30 @@ struct RestoreLeftover {
     qint64 sizeBytes = 0;
 };
 
+// ---- Largest items -------------------------------------------------------------------------------------------------------------
+
+/// Files bigger than this are listed on their own wherever they lie in the game root.
+inline constexpr qint64 kBigFileBytes = qint64(100) * 1024 * 1024;
+/// "Largest items" shows this many rows.
+inline constexpr int kLargestLimit = 20;
+
+/// What a "largest item" is. WorldBackups / Snapshots / ZeroData are owned by ZERO: they are listed but never trashed from here.
+enum class ItemKind { World, Mod, Pack, Logs, CrashReports, Screenshots, WorldBackups, Snapshots, ZeroData, Folder, BigFile };
+QString itemKindId(ItemKind kind);
+/// World, Mod, Pack, Logs, CrashReports, Screenshots, Folder and BigFile can be moved to the Recycle Bin; the ZERO-owned kinds cannot.
+bool isTrashableKind(ItemKind kind);
+
+struct LargeItem {
+    ItemKind kind = ItemKind::Folder;
+    QString path;  ///< absolute, '/' separators
+    QString name;  ///< file / folder name
+    QString instanceId;
+    QString instanceName;
+    qint64 sizeBytes = 0;
+    bool isDir = false;
+    bool running = false;  ///< the instance was running when the report was built
+};
+
 struct StorageReport {
     qint64 generatedMs = 0;   ///< the `nowMs` the report was built with
     QString dataRoot;
@@ -102,6 +128,7 @@ struct StorageReport {
     QList<InstanceRow> instances;     ///< biggest first
     QList<CleanupGroup> cleanupGroups;  ///< always both kinds, in CleanupKind order (a group can be empty)
     QList<RestoreLeftover> leftovers;
+    QList<LargeItem> largest;  ///< the biggest items of every instance (kLargestLimit each), biggest first; see aggregateLargest()
     qint64 volumeFreeBytes = -1;   ///< volume of dataRoot; -1 = unknown
     qint64 volumeTotalBytes = -1;  ///< -1 = unknown
 
@@ -134,14 +161,34 @@ QList<CleanupFile> findCleanupFiles(const InstanceSource& source, CleanupKind ki
 /// `.zero-restore-*` / `.zero-replaced-*` folders directly in the worlds folder (links skipped), sizes included.
 QList<RestoreLeftover> findRestoreLeftovers(const InstanceSource& source);
 
+/// Candidates for "Largest items" of one instance, biggest first, at most `limit`: each world folder, each mod / pack entry, `logs`,
+/// `crash-reports`, `screenshots`, the other top-level folders of the game root, the instance's `.zero` folder and single files
+/// over `bigFileBytes` anywhere in the game root (worlds, mods and packs excluded: they are listed as a whole). Links are skipped,
+/// every path appears once. Read-only.
+QList<LargeItem> findLargeItems(const InstanceSource& source, int limit = kLargestLimit, qint64 bigFileBytes = kBigFileBytes);
+
+/// ZERO's own copies for one instance: every `<dataRoot>/zero/backups/<id>/<world>` and `<dataRoot>/zero/snapshots/<id>`.
+QList<LargeItem> findZeroBackupItems(const InstanceSource& source, const QString& dataRoot);
+
+/// The `limit` biggest of `all` (ties: path), restricted to `instanceId` unless it is empty.
+QList<LargeItem> aggregateLargest(const QList<LargeItem>& all, const QString& instanceId, int limit = kLargestLimit);
+
+/// The one predicate for "may this item go to the Recycle Bin now": a trashable kind, a known instance that is not running, the
+/// path where that kind lives (a child of the worlds / mods / pack folder, the logs / crash-reports / screenshots folder itself, a
+/// child of the game root, or a big file inside the game root outside worlds / mods / packs), not a link, and it exists.
+bool isTrashableItem(const LargeItem& item, const InstanceSource& source, QString* why = nullptr);
+
 /// Instance breakdown. Every byte once; dirs that do not exist count 0; the same path configured twice counts once.
 InstanceRow measureInstance(const InstanceSource& source);
 
 /// Launcher-side categories (Worlds..OtherInstance stay 0).
 CategoryBytes measureLauncher(const LauncherSource& launcher);
 
+/// Called before each instance (and the launcher) is measured: `done` of `total` steps finished, `current` = the name about to be measured.
+using ProgressFn = std::function<void(int done, int total, const QString& current)>;
+
 /// Does all the disk work synchronously (call it from a pool thread).
-StorageReport buildReport(const QList<InstanceSource>& instances, const LauncherSource& launcher, qint64 nowMs);
+StorageReport buildReport(const QList<InstanceSource>& instances, const LauncherSource& launcher, qint64 nowMs, const ProgressFn& progress = {});
 
 // ---- Trash ---------------------------------------------------------------------------------------------------------------
 
@@ -170,6 +217,10 @@ struct TrashResult {
 /// Recycle Bin; a failed move leaves the file in place and is reported. Never deletes permanently.
 TrashResult trashCandidates(const QList<CleanupFile>& files, const QList<InstanceSource>& sources, qint64 nowMs, const TrashHooks& hooks = {});
 
+/// Moves large items to the Recycle Bin one by one. Re-validates EVERY item now with isTrashableItem(); a failed move leaves the item
+/// in place and is reported. Never deletes permanently.
+TrashResult trashLargeItems(const QList<LargeItem>& items, const QList<InstanceSource>& sources, const TrashHooks& hooks = {});
+
 // ---- Async wrapper -------------------------------------------------------------------------------------------------------
 
 /// rescan() reads the sources on the GUI thread, builds the report on QThreadPool::globalInstance() and delivers it back here;
@@ -185,6 +236,8 @@ class StorageScanner : public QObject {
     void rescan();
     /// Starts a trash job. While another one runs the request is refused: trashFinished() carries a result with `error` set.
     void trash(const QList<CleanupFile>& files);
+    /// Same for "Largest items" (trashLargeItems); shares the one-job-at-a-time rule and trashFinished().
+    void trashItems(const QList<LargeItem>& items);
 
     const StorageReport& report() const { return m_report; }
     bool hasReport() const { return m_hasReport; }
@@ -194,12 +247,15 @@ class StorageScanner : public QObject {
 
    signals:
     void scanStarted();
+    /// While scanning: `done` of `total` steps (instances + the launcher) finished, `current` = what is measured now. GUI thread.
+    void scanProgress(int done, int total, const QString& current);
     void reportReady(const Zero::Storage::StorageReport& report);
     void trashFinished(const Zero::Storage::TrashResult& result);
 
    private:
     void onReport(quint64 generation, const StorageReport& report);
     void onTrashed(const TrashResult& result);
+    void startTrash(std::function<TrashResult(const QList<InstanceSource>&, const TrashHooks&)> job);
 
     SourceProvider m_provider;
     TrashHooks m_hooks;

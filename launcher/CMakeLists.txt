@@ -945,6 +945,24 @@ SET(LAUNCHER_SOURCES
     zero/diagnostics/DiagnosticsTypes.h
     zero/history/SessionHistory.cpp
     zero/history/SessionHistory.h
+    zero/session/PlayTracker.cpp
+    zero/session/PlayTracker.h
+    zero/session/SessionSummary.cpp
+    zero/session/SessionSummary.h
+    zero/session/WhilePlaying.cpp
+    zero/session/WhilePlaying.h
+    zero/session/ProcessMemory.cpp
+    zero/session/ProcessMemory.h
+    zero/servers/HomeServers.cpp
+    zero/servers/HomeServers.h
+    ui/zero/ZeroTray.cpp
+    ui/zero/ZeroTray.h
+    ui/zero/pages/NowPlayingCard.cpp
+    ui/zero/pages/NowPlayingCard.h
+    ui/zero/pages/LastSessionCard.cpp
+    ui/zero/pages/LastSessionCard.h
+    ui/zero/pages/HomeServersSection.cpp
+    ui/zero/pages/HomeServersSection.h
     zero/java/JavaDoctor.cpp
     zero/java/JavaDoctor.h
     zero/perf/PerformanceCatalog.cpp
@@ -1239,6 +1257,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/palette/PaletteOverlay.cpp
     ui/zero/palette/PaletteOverlay.h
     ui/zero/palette/PaletteTypes.h
+    ui/zero/palette/ServerCommands.cpp
+    ui/zero/palette/ServerCommands.h
     ui/zero/palette/ZeroCommandPalette.cpp
     ui/zero/palette/ZeroCommandPalette.h
     ui/zero/palette/ZeroShortcutSheet.cpp

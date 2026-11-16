@@ -8,6 +8,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <tuple>
 
 #include "zero/storage/StorageScanner.h"
 
@@ -731,6 +732,202 @@ class StorageScannerTest : public QObject {
         scanner->rescan();
         delete scanner;  // the pool job only holds a QPointer: nothing may touch the dead object
         QTest::qWait(300);
+    }
+
+    // ---- Largest items -------------------------------------------------------------------------------------------------------
+
+    void largestItemsAggregateTheInstanceTree()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const InstanceSource a = makeInstanceA(tmp.path());
+        writeBytes(a.gameRoot + "/saves/w2/level.dat", 300);    // a second, smaller world
+        writeBytes(a.gameRoot + "/config/deep/huge.bin", 9000);  // a big file inside a top-level folder, above the threshold below
+        writeBytes(a.instanceRoot + "/.zero/pack-order.json", 120);
+        const QList<LargeItem> items = findLargeItems(a, 100, 8000);
+
+        auto find = [&items](ItemKind kind, const QString& name) -> const LargeItem* {
+            for (const LargeItem& i : items)
+                if (i.kind == kind && i.name == name)
+                    return &i;
+            return nullptr;
+        };
+        const LargeItem* world = find(ItemKind::World, "w1");
+        QVERIFY(world);
+        QCOMPARE(world->sizeBytes, qint64(5000));
+        QCOMPARE(world->instanceId, QStringLiteral("a"));
+        QVERIFY(world->isDir);
+        QVERIFY(find(ItemKind::World, "w2"));
+        QCOMPARE(find(ItemKind::Mod, "m1.jar")->sizeBytes, qint64(2000));
+        QVERIFY(find(ItemKind::Mod, "m2.jar"));
+        QVERIFY(find(ItemKind::Pack, "rp.zip"));
+        QVERIFY(find(ItemKind::Pack, "sp.zip"));
+        QCOMPARE(find(ItemKind::Screenshots, "screenshots")->sizeBytes, qint64(700));
+        QCOMPARE(find(ItemKind::Logs, "logs")->sizeBytes, qint64(30));
+        QCOMPARE(find(ItemKind::CrashReports, "crash-reports")->sizeBytes, qint64(40));
+        QCOMPARE(find(ItemKind::Folder, "config")->sizeBytes, qint64(9090));
+        QCOMPARE(find(ItemKind::BigFile, "huge.bin")->sizeBytes, qint64(9000));
+        QCOMPARE(find(ItemKind::ZeroData, ".zero")->sizeBytes, qint64(120));
+        // saves / mods / resourcepacks / shaderpacks are listed entry by entry, never as one folder.
+        QVERIFY(!find(ItemKind::Folder, "saves"));
+        QVERIFY(!find(ItemKind::Folder, "mods"));
+        QVERIFY(!find(ItemKind::Folder, "resourcepacks"));
+        // The big file inside a world folder is part of the world, not an item of its own.
+        QVERIFY(!find(ItemKind::BigFile, "r.0.0.mca"));
+        // No path twice, biggest first.
+        QSet<QString> paths;
+        for (int i = 0; i < items.size(); ++i) {
+            QVERIFY(!paths.contains(items.at(i).path));
+            paths.insert(items.at(i).path);
+            if (i > 0)
+                QVERIFY(items.at(i - 1).sizeBytes >= items.at(i).sizeBytes);
+        }
+        QCOMPARE(items.first().sizeBytes, qint64(9090));  // config (folder)
+        // The limit cuts the list.
+        QCOMPARE(findLargeItems(a, 3, 8000).size(), 3);
+        // A threshold of 0 lists no single files.
+        for (const LargeItem& i : findLargeItems(a, 100, 0))
+            QVERIFY(i.kind != ItemKind::BigFile);
+    }
+
+    void largestItemsAcrossInstancesAndPerInstance()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const InstanceSource a = makeInstanceA(tmp.path());
+        const InstanceSource b = makeInstanceB(tmp.path());
+        const LauncherSource l = makeLauncher(tmp.path());
+        const StorageReport report = buildReport({ a, b }, l, QDateTime::currentMSecsSinceEpoch());
+        QVERIFY(!report.largest.isEmpty());
+        for (int i = 1; i < report.largest.size(); ++i)
+            QVERIFY(report.largest.at(i - 1).sizeBytes >= report.largest.at(i).sizeBytes);
+
+        const QList<LargeItem> all = aggregateLargest(report.largest, QString(), 20);
+        QVERIFY(all.size() <= 20);
+        QCOMPARE(all.first().sizeBytes, report.largest.first().sizeBytes);
+        const QList<LargeItem> onlyB = aggregateLargest(report.largest, "b", 20);
+        QVERIFY(!onlyB.isEmpty());
+        for (const LargeItem& i : onlyB)
+            QCOMPARE(i.instanceId, QStringLiteral("b"));
+        QCOMPARE(aggregateLargest(report.largest, QString(), 2).size(), 2);
+        QCOMPARE(aggregateLargest(report.largest, "nope", 20).size(), 0);
+
+        // ZERO's own copies are listed (world backups per world, snapshots per instance) but are not trashable.
+        bool sawBackup = false;
+        for (const LargeItem& i : report.largest) {
+            if (i.kind == ItemKind::WorldBackups) {
+                sawBackup = true;
+                QVERIFY(!isTrashableKind(i.kind));
+            }
+        }
+        QVERIFY(sawBackup);
+    }
+
+    void runningInstanceItemsCannotBeTrashed()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        InstanceSource a = makeInstanceA(tmp.path());
+        const LargeItem world = [&]() {
+            for (const LargeItem& i : findLargeItems(a))
+                if (i.kind == ItemKind::World)
+                    return i;
+            return LargeItem();
+        }();
+        QVERIFY(!world.path.isEmpty());
+        QStringList moved;
+        TrashHooks hooks;
+        hooks.trashPath = [&moved](const QString& path) {
+            moved << path;
+            return true;
+        };
+        // Running: refused, nothing moved.
+        a.running = true;
+        TrashResult refused = trashLargeItems({ world }, { a }, hooks);
+        QCOMPARE(refused.trashedCount, 0);
+        QCOMPARE(refused.skippedCount, 1);
+        QVERIFY(refused.problems.first().error.contains("running"));
+        QVERIFY(moved.isEmpty());
+        // Not running: it goes through the Recycle Bin hook with the right size.
+        a.running = false;
+        const TrashResult ok = trashLargeItems({ world }, { a }, hooks);
+        QCOMPARE(ok.trashedCount, 1);
+        QCOMPARE(ok.trashedBytes, qint64(5000));
+        QCOMPARE(moved.size(), 1);
+        QVERIFY(QFileInfo::exists(world.path));  // the hook is a fake: only the Recycle Bin call was made
+        // Unknown instance.
+        LargeItem stray = world;
+        stray.instanceId = "zzz";
+        QCOMPARE(trashLargeItems({ stray }, { a }, hooks).skippedCount, 1);
+    }
+
+    void trashValidationRefusesWrongPlacesAndZeroOwnedKinds()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const InstanceSource a = makeInstanceA(tmp.path());
+        const LauncherSource l = makeLauncher(tmp.path());
+        QString why;
+        auto item = [&a](ItemKind kind, const QString& path) {
+            LargeItem i;
+            i.kind = kind;
+            i.path = path;
+            i.name = QFileInfo(path).fileName();
+            i.instanceId = a.id;
+            return i;
+        };
+        // Right places.
+        QVERIFY(isTrashableItem(item(ItemKind::World, a.gameRoot + "/saves/w1"), a, &why));
+        QVERIFY(isTrashableItem(item(ItemKind::Mod, a.gameRoot + "/mods/m1.jar"), a, &why));
+        QVERIFY(isTrashableItem(item(ItemKind::Pack, a.gameRoot + "/shaderpacks/sp.zip"), a, &why));
+        QVERIFY(isTrashableItem(item(ItemKind::Logs, a.gameRoot + "/logs"), a, &why));
+        QVERIFY(isTrashableItem(item(ItemKind::Folder, a.gameRoot + "/config"), a, &why));
+        // Wrong places: a world kind pointing at the saves folder, a folder item for the mods folder, a file inside a world, the game root.
+        QVERIFY(!isTrashableItem(item(ItemKind::World, a.gameRoot + "/saves"), a, &why));
+        QVERIFY(!isTrashableItem(item(ItemKind::Folder, a.gameRoot + "/mods"), a, &why));
+        QVERIFY(!isTrashableItem(item(ItemKind::Folder, a.gameRoot + "/saves"), a, &why));
+        QVERIFY(!isTrashableItem(item(ItemKind::BigFile, a.gameRoot + "/saves/w1/region/r.0.0.mca"), a, &why));
+        QVERIFY(!isTrashableItem(item(ItemKind::Folder, a.gameRoot), a, &why));
+        QVERIFY(!isTrashableItem(item(ItemKind::Mod, a.gameRoot + "/config/x.cfg"), a, &why));
+        QVERIFY(!isTrashableItem(item(ItemKind::Mod, a.gameRoot + "/mods/missing.jar"), a, &why));
+        // ZERO-owned kinds are never trashed from here.
+        QVERIFY(!isTrashableItem(item(ItemKind::WorldBackups, l.dataRoot + "/zero/backups/a/w1"), a, &why));
+        QVERIFY(why.contains("ZERO"));
+        QVERIFY(!isTrashableItem(item(ItemKind::ZeroData, a.instanceRoot + "/.zero"), a, &why));
+        // A single big file elsewhere in the game root is fine.
+        writeBytes(a.gameRoot + "/misc/dump.hprof", 50);
+        QVERIFY(isTrashableItem(item(ItemKind::BigFile, a.gameRoot + "/misc/dump.hprof"), a, &why));
+    }
+
+    void scanReportsProgressPerInstance()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const InstanceSource a = makeInstanceA(tmp.path());
+        const InstanceSource b = makeInstanceB(tmp.path());
+        const LauncherSource l = makeLauncher(tmp.path());
+        QList<std::tuple<int, int, QString>> steps;
+        buildReport({ a, b }, l, QDateTime::currentMSecsSinceEpoch(),
+                    [&steps](int done, int total, const QString& current) { steps.append({ done, total, current }); });
+        QCOMPARE(steps.size(), 3);  // Alpha, Bravo, launcher data
+        QCOMPARE(std::get<0>(steps.at(0)), 0);
+        QCOMPARE(std::get<1>(steps.at(0)), 3);
+        QCOMPARE(std::get<2>(steps.at(0)), QStringLiteral("Alpha"));
+        QCOMPARE(std::get<2>(steps.at(1)), QStringLiteral("Bravo"));
+        QCOMPARE(std::get<0>(steps.at(2)), 2);
+        QVERIFY(std::get<2>(steps.at(2)).isEmpty());
+
+        // The async scanner relays it on the GUI thread, determinate and never past `total`.
+        auto* scanner = new StorageScanner([&]() { return QPair<QList<InstanceSource>, LauncherSource>({ a, b }, l); });
+        QSignalSpy progress(scanner, &StorageScanner::scanProgress);
+        QSignalSpy ready(scanner, &StorageScanner::reportReady);
+        scanner->rescan();
+        QTRY_COMPARE(ready.count(), 1);
+        for (const QList<QVariant>& args : progress) {
+            QCOMPARE(args.at(1).toInt(), 3);
+            QVERIFY(args.at(0).toInt() <= 3);
+        }
+        delete scanner;
     }
 };
 

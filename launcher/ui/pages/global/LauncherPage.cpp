@@ -42,7 +42,10 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QMenuBar>
+#include <QGroupBox>
 #include <QMessageBox>
+#include <QRadioButton>
+#include <QVBoxLayout>
 #include <QTextCharFormat>
 
 #include <FileSystem.h>
@@ -54,6 +57,7 @@
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
 #include "updater/ExternalUpdater.h"
+#include "zero/session/WhilePlaying.h"
 
 #include <QApplication>
 #include <QProcess>
@@ -75,6 +79,22 @@ LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::Launch
     ui->sortingModeGroup->setId(ui->sortByNameBtn, Sort_Name);
     ui->sortingModeGroup->setId(ui->sortLastLaunchedBtn, Sort_LastLaunch);
     ui->sortingModeGroup->setId(ui->sortByPlaytimeBtn, Sort_Playtime);
+
+    // ZERO: what the launcher does while a game runs
+    {
+        auto* box = new QGroupBox(tr("While playing"), ui->scrollAreaWidgetContents);
+        auto* lay = new QVBoxLayout(box);
+        m_whileTray = new QRadioButton(tr("Hide to the tray"), box);
+        m_whileTray->setToolTip(tr("The launcher waits in the tray and comes back when you close the game."));
+        m_whileOpen = new QRadioButton(tr("Keep it open"), box);
+        m_whileOpen->setToolTip(tr("The launcher stays on screen while you play."));
+        m_whileClose = new QRadioButton(tr("Close the launcher"), box);
+        m_whileClose->setToolTip(tr("The launcher closes when the game window opens and comes back when the game ends."));
+        lay->addWidget(m_whileTray);
+        lay->addWidget(m_whileOpen);
+        lay->addWidget(m_whileClose);
+        ui->verticalLayout_8->insertWidget(1, box);
+    }
 
     loadSettings();
 
@@ -241,6 +261,10 @@ void LauncherPage::applySettings()
     }
 
     s->set("MenuBarInsteadOfToolBar", ui->preferMenuBarCheckBox->isChecked());
+    s->set("ZeroWhilePlaying",
+           Zero::Session::whilePlayingToString(m_whileClose->isChecked()  ? Zero::Session::WhilePlayingMode::Close
+                                               : m_whileOpen->isChecked() ? Zero::Session::WhilePlayingMode::Open
+                                                                          : Zero::Session::WhilePlayingMode::Tray));
 
     s->set("NumberOfConcurrentTasks", ui->numberOfConcurrentTasksSpinBox->value());
     s->set("NumberOfConcurrentDownloads", ui->numberOfConcurrentDownloadsSpinBox->value());
@@ -325,6 +349,17 @@ void LauncherPage::loadSettings()
     }
 
     ui->preferMenuBarCheckBox->setChecked(s->get("MenuBarInsteadOfToolBar").toBool());
+    switch (Zero::Session::whilePlayingFromString(s->get("ZeroWhilePlaying").toString())) {
+        case Zero::Session::WhilePlayingMode::Open:
+            m_whileOpen->setChecked(true);
+            break;
+        case Zero::Session::WhilePlayingMode::Close:
+            m_whileClose->setChecked(true);
+            break;
+        case Zero::Session::WhilePlayingMode::Tray:
+            m_whileTray->setChecked(true);
+            break;
+    }
 
     ui->numberOfConcurrentTasksSpinBox->setValue(s->get("NumberOfConcurrentTasks").toInt());
     ui->numberOfConcurrentDownloadsSpinBox->setValue(s->get("NumberOfConcurrentDownloads").toInt());

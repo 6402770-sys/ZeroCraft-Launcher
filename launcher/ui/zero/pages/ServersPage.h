@@ -52,6 +52,8 @@ class ServersPage : public ShellPage {
     void refresh();
     /// Runs `done` once the first scan and every ping have finished, or after `maxMs` at the latest.
     void callWhenIdle(const std::function<void()>& done, int maxMs);
+    /// "Play on server": launches `instanceId` with a quick join to `address` (toast instead when it is busy or gone). Also used by the palette.
+    void playOn(const QString& address, const QString& instanceId);
 
     Servers::ServerVaultScanner* scanner() const { return m_scanner; }
     Servers::ServerPinger* pinger() const { return m_pinger; }
@@ -80,7 +82,6 @@ class ServersPage : public ShellPage {
     void refreshIcons();
     void scheduleRescan();
     QStringList allAddresses() const;
-    void playOn(const QString& address, const QString& instanceId);
 
     Servers::ServerVaultScanner* m_scanner;
     Servers::ServerPinger* m_pinger;

@@ -11,7 +11,7 @@ namespace Zero {
 namespace Palette {
 
 /// What a command is. The enum order is the tie-break order (and the default section order).
-enum class Kind { Instance, Navigation, Action, Setting, Appearance };
+enum class Kind { Instance, Navigation, Action, Setting, Appearance, Server };
 
 /// Result of matching a query against one string.
 struct TextMatch {
@@ -32,6 +32,7 @@ struct Candidate {
     QStringList keywords;  ///< aliases ("ram", "memory" for the Java settings); scored slightly below title matches
     Kind kind = Kind::Action;
     qint64 lastUsedMs = 0;  ///< instances: last launch (ms since epoch), 0 = never
+    bool favorite = false;  ///< servers: a starred server ranks ahead of comparable matches (kFavoriteBoost)
 };
 
 struct Ranked {
@@ -43,6 +44,8 @@ struct Ranked {
 
 /// Factor applied to a keyword match's score (keywords rank slightly below an equal title match).
 constexpr double kKeywordFactor = 0.8;
+/// Extra score for a favorite server: enough to lead comparable matches, not enough to beat a clearly better one.
+constexpr double kFavoriteBoost = 40.0;
 
 /// Extra score for an instance launched recently: 20 at "now", halved after 3 days, 0 for never launched.
 double recencyBoost(qint64 lastUsedMs, qint64 nowMs);

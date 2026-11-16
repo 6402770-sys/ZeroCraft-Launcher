@@ -694,6 +694,28 @@ remove them with `git worktree remove --force <path>` once the owner agrees.
   Owner QA still needed (real app, by ear/eye): sounds in both themes, smooth scroll feel, modpack dialog with a real update, Shader Packs page,
   rollback notice + Play question on an instance that rolled back. Owner declined "choose active shader from the launcher".
 
+## Mission 004 — 18 owner-approved ideas (2026-11-16, session 15; owner: "hacé todas")
+Checkpoint before it: `54c532039` (session 15 work). Decisions: Spanish = **neutral Spanish** ("tú"); Discord = build it hidden until the
+owner sends the Application ID (public); own MSA client ID = **won't do** (owner limitation, keep Prism's). Batches (one/two workers at a time):
+- **B1 quick wins**: (9) tray icon + "While playing: keep open / hide to tray (default) / close", tray menu with favorites; (15) "Now playing"
+  card on Home (elapsed, game RAM when the PID is known, Screenshots/Folder/Stop); (16) end-of-session summary (duration, screenshots taken,
+  backups made); (12) quick join servers from the palette + favorite servers strip on Home; (13) Storage "Largest items" + scan progress.
+- **B2 play safety**: (5) pre-launch check (duplicate mods, wrong loader/version, missing deps, pack that broke the last launch) with fix
+  buttons; (6) Java arguments in Boost performance (known-safe flags by RAM + Java version, explained); (18) malware scanner for mods
+  (known signatures, e.g. fractureiser) before launch.
+- **B3 updates & downloads**: (2) "Updates for everything" on Home across instances, update all with snapshots; (3) Downloads center
+  panel (progress, speed, cancel, history); (4) smart drag & drop of any content file onto the window → detect type → choose instance.
+- **B4 history & extras**: (14) playtime stats; (10) scheduled world backups + cloud folder (OneDrive/Google Drive) destination;
+  (7) "Try it in a copy" (sandbox duplicate, bring changes back); (11) per-instance change timeline with undo; (17) per-instance video background.
+- **B5**: (8) Discord Rich Presence (hidden until ID); (1) full Spanish translation + language picker (lifts English-only mode).
+Status per batch is logged below as it lands.
+- ✅ **B1 done** (89/89 + FileSystem 25/25): tray `ui/zero/ZeroTray` + setting `ZeroWhilePlaying` (tray default; supersedes/syncs Prism
+  `CloseAfterLaunch`; LauncherPage radios), logic in `zero/session/` (PlayTracker, SessionSummary + `<data>/zero/last-session.json`,
+  WhilePlaying, ProcessMemory); Home `NowPlayingCard`, `LastSessionCard`, `HomeServersSection` (`zero/servers/HomeServers`); palette server
+  entries (`ui/zero/palette/ServerCommands`, async `ServerVaultScanner`, join = ServersPage::playOn); Storage scan progress + "Largest items"
+  (StorageScanner `findLargeItems`/`aggregateLargest`). Not runtime-tested: tray with a real game launch/quit, Home Servers with real favorites.
+  Old-logs clean keeps its existing 30-day rule. Now-playing Stop = same kill as the hero (no confirm, as before).
+
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
 - Result at end of session 4: **45/45 ctest pass** + `FileSystem (without symlink cases): 25 passed, 0 failed`.

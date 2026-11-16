@@ -342,6 +342,41 @@ void ScreenshotsPage::onListChanged()
 {
     rebuildInstanceCombo();
     applyFilters();
+    if (!m_pendingOpen.isEmpty()) {
+        const QString path = m_pendingOpen;
+        m_pendingOpen.clear();
+        for (const auto& e : m_model->entries()) {
+            if (QDir::cleanPath(e.path) == QDir::cleanPath(path)) {
+                m_viewer->setEntries(m_model->entries());
+                m_viewer->openPath(e.path);
+                break;
+            }
+        }
+    }
+}
+
+void ScreenshotsPage::showInstance(const QString& instanceId)
+{
+    {
+        const QSignalBlocker blocker(m_search);
+        m_search->clear();
+    }
+    m_instanceFilter = instanceId;
+    APPLICATION->settings()->set("ZeroScreenshotsInstance", m_instanceFilter);
+    {
+        const QSignalBlocker blocker(m_instanceCombo);
+        m_instanceCombo->setCurrentIndex(qMax(0, m_instanceCombo->findData(m_instanceFilter)));
+    }
+    applyFilters();
+    rescan();  // the session just ended: new files
+}
+
+void ScreenshotsPage::openViewerByPath(const QString& path)
+{
+    m_pendingOpen = path;
+    if (m_scanner->isScanning())
+        return;  // the running scan may have missed the file: rescan after it
+    rescan();
 }
 
 void ScreenshotsPage::rebuildInstanceCombo()

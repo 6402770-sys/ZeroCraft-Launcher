@@ -109,6 +109,7 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     // ----- Storage -----
     m_storage = new StorageView(this);
     connect(m_storage, &StorageView::showInstanceRequested, this, &ToolsPage::showInstanceRequested);
+    connect(m_storage, &StorageView::showWorldsRequested, this, &ToolsPage::showWorldsRequested);
     m_stack->addWidget(centered(m_storage, this));
 
     // ----- Java Doctor -----

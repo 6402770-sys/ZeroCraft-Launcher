@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/palette/ServerCommands.h"
 #include "ui/zero/palette/ZeroCommandPalette.h"
 #include "ui/zero/palette/ZeroShortcutSheet.h"
 
@@ -339,6 +340,72 @@ class ZeroCommandPaletteTest : public QObject {
         QTest::keyClick(&sheet, Qt::Key_Escape);
         QVERIFY(!sheet.isOpen());
         QVERIFY(focused(f.other));
+    }
+
+    // --- Server Vault entries ---------------------------------------------------------------------------------------------
+    void serverEntriesMatchNameAndAddressOnePerInstance()
+    {
+        Fixture f;
+        Servers::VaultServer hypixel;
+        hypixel.address = "mc.hypixel.net";
+        hypixel.valid = true;
+        hypixel.names = { "Hypixel" };
+        hypixel.instances = { { "a", "Alpha" }, { "b", "Beta" } };
+        Servers::VaultServer pals;
+        pals.address = "play.pals.example:25570";
+        pals.valid = true;
+        pals.names = { "Our Realm" };
+        pals.instances = { { "a", "Alpha" } };
+        QStringList joined;
+        auto servers = Palette::serverCommands({ hypixel, pals }, {}, [&joined](const QString& address, const QString& id) { joined << address + "@" + id; });
+        QCOMPARE(servers.size(), 3);  // one per (server, instance)
+        QCOMPARE(servers.at(0).title, QStringLiteral("Hypixel"));
+        QCOMPARE(servers.at(0).subtitle, QStringLiteral("mc.hypixel.net · Alpha"));
+        QCOMPARE(servers.at(0).iconName, QStringLiteral("compass"));  // no icon in servers.dat
+
+        f.palette->setCommandProvider([servers]() { return servers; });
+        f.palette->open();
+        f.palette->setQuery("hyp");  // by name
+        QCOMPARE(f.palette->resultIds(), (QStringList{ "server:mc.hypixel.net|a", "server:mc.hypixel.net|b" }));
+        QCOMPARE(f.palette->sectionTitles(), (QStringList{ "Servers" }));
+        f.palette->setQuery("pals.example");  // by address
+        QCOMPARE(f.palette->resultIds(), (QStringList{ "server:play.pals.example:25570|a" }));
+        f.palette->setQuery("hyp");
+        f.palette->moveSelection(1);
+        f.palette->runSelected(false);  // Enter: the join seam, with the selected instance
+        QCOMPARE(joined, (QStringList{ "mc.hypixel.net@b" }));
+        QVERIFY(!f.palette->isOpen());
+    }
+
+    void serversAreNotListedForAnEmptyQuery()
+    {
+        Fixture f;
+        Servers::VaultServer s;
+        s.address = "a.example";
+        s.valid = true;
+        s.names = { "A" };
+        s.instances = { { "a", "Alpha" } };
+        f.palette->setCommandProvider([s]() { return Palette::serverCommands({ s }, { "a.example" }, {}); });
+        f.palette->open();
+        QVERIFY(f.palette->resultIds().isEmpty());
+    }
+
+    void favoriteServersRankFirst()
+    {
+        Fixture f;
+        Servers::VaultServer plain, star;
+        plain.address = "alpha.example";
+        plain.valid = true;
+        plain.names = { "Craft Alpha" };
+        plain.instances = { { "a", "Alpha" } };
+        star.address = "zeta.example";
+        star.valid = true;
+        star.names = { "Craft Zeta" };
+        star.instances = { { "a", "Alpha" } };
+        f.palette->setCommandProvider([plain, star]() { return Palette::serverCommands({ plain, star }, { "zeta.example" }, {}); });
+        f.palette->open();
+        f.palette->setQuery("craft");
+        QCOMPARE(f.palette->resultIds(), (QStringList{ "server:zeta.example|a", "server:alpha.example|a" }));
     }
 
     void keyCapsSplitSequences()

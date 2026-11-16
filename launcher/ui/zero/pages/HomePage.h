@@ -2,6 +2,7 @@
 // ZERO Launcher - Home page: continue-playing hero, favorites, recently played cards, shortcuts. See docs/zero/SHELL.md.
 #pragma once
 
+#include <QHash>
 #include <QList>
 #include <QWidget>
 #include <optional>
@@ -22,6 +23,9 @@ class ElidedLabel;
 class IconTile;
 class ZeroPlayButton;
 class ZeroCard;
+class NowPlayingCard;
+class LastSessionCard;
+class HomeServersSection;
 
 class HomePage : public ShellPage {
     Q_OBJECT
@@ -44,6 +48,20 @@ class HomePage : public ShellPage {
     void importRequested();
     void accountsRequested();
     void instancesFolderRequested();
+    /// "Screenshots" of a Now playing card, or the "+N" tile of the Last session card: show that instance's screenshots.
+    void screenshotsRequested(const QString& instanceId);
+    /// A thumbnail of the Last session card: open this screenshot in the viewer.
+    void screenshotRequested(const QString& path);
+    void serversRequested();
+
+   public:
+    // for tests
+    NowPlayingCard* nowPlayingCard(const QString& instanceId) const { return m_nowCards.value(instanceId); }
+    int nowPlayingCount() const { return int(m_nowCards.size()); }
+    LastSessionCard* lastSessionCard() const { return m_lastCard; }
+    HomeServersSection* serversSection() const { return m_servers; }
+    /// Re-reads the running sessions and the last session now (normally done by their signals).
+    void syncSessionCards();
 
    protected:
     void showEvent(QShowEvent* event) override;
@@ -55,6 +73,8 @@ class HomePage : public ShellPage {
     void rebuildCards(QWidget* section, QGridLayout* grid, QStringList& signature, const QList<MinecraftInstance*>& instances);
     void refreshIcons();
     void rebuildActivity();
+    void syncNowPlaying();
+    void syncLastSession();
 
     QStackedLayout* m_stack;  // 0 = empty library, 1 = content
 
@@ -73,6 +93,18 @@ class HomePage : public ShellPage {
     QWidget* m_favSection;
     QGridLayout* m_favGrid;
     QStringList m_favSignature;
+
+    // now playing / last session (above the hero)
+    QWidget* m_nowHolder;
+    QVBoxLayout* m_nowLayout;
+    QHash<QString, NowPlayingCard*> m_nowCards;
+    QWidget* m_lastHolder;
+    QVBoxLayout* m_lastLayout;
+    LastSessionCard* m_lastCard = nullptr;
+    QStringList m_lastSignature;
+
+    // favorite servers (after favorites; hides itself when there are none)
+    HomeServersSection* m_servers;
 
     // recent
     QWidget* m_recentSection;

@@ -56,31 +56,56 @@ void detectRollbackAfterLaunch(MinecraftInstance* instance, const QDateTime& lau
     Rollback::detectAfterLaunch(input);
 }
 
-bool askBeforeLaunch(const RollbackEnv& env, QWidget* parent, const ModsUi::AskFunction& askOverride)
+std::optional<RollbackOffer> rollbackOffer(const RollbackEnv& env)
 {
     const QString markerPath = Rollback::markerPathFor(env.instanceRoot);
     const Rollback::Marker marker = Rollback::readMarker(markerPath);
     if (!marker.valid || marker.asked) {
-        return true;
+        return std::nullopt;
     }
     const PackList options = readOptions(optionsPathFor(env.gameRoot));
     if (options.state == PackList::State::Unreadable || !Rollback::shouldAskBeforeLaunch(marker, activeFiles(options.entries))) {
-        return true;
+        return std::nullopt;
     }
     // only what is still in the folder can come back; nothing left = nothing to ask
-    const QSet<QString> existing = packFilesIn(QDir(env.gameRoot).filePath(QStringLiteral("resourcepacks")));
+    RollbackOffer offer;
+    offer.markerPath = markerPath;
+    offer.existing = packFilesIn(QDir(env.gameRoot).filePath(QStringLiteral("resourcepacks")));
     const QStringList suspects = Rollback::suspectFiles(marker.suspects);
-    QStringList presentSuspects;
     for (const QString& name : suspects) {
-        if (existing.contains(name)) {
-            presentSuspects.append(name);
+        if (offer.existing.contains(name)) {
+            offer.presentSuspects.append(name);
         }
     }
-    const bool without = !presentSuspects.isEmpty();
-    const QStringList order = Rollback::restoreOrder(marker, without, {}, existing);
-    if (order.isEmpty()) {
+    offer.order = Rollback::restoreOrder(marker, !offer.presentSuspects.isEmpty(), {}, offer.existing);
+    if (offer.order.isEmpty()) {
+        return std::nullopt;
+    }
+    return offer;
+}
+
+Outcome restoreRollback(const RollbackEnv& env, const RollbackOffer& offer)
+{
+    const Outcome outcome = writeOrder(optionsPathFor(env.gameRoot), historyPathFor(env.instanceRoot), offer.order, offer.existing, env.isRunning);
+    if (outcome.ok()) {
+        Rollback::clearMarker(offer.markerPath);  // (writeOrder clears it on a change; a "no change" leaves nothing to restore either)
+    }
+    return outcome;
+}
+
+void dismissRollback(const RollbackOffer& offer)
+{
+    Rollback::markAsked(offer.markerPath);
+}
+
+bool askBeforeLaunch(const RollbackEnv& env, QWidget* parent, const ModsUi::AskFunction& askOverride)
+{
+    const std::optional<RollbackOffer> found = rollbackOffer(env);
+    if (!found) {
         return true;
     }
+    const RollbackOffer& offer = *found;
+    const QStringList& presentSuspects = offer.presentSuspects;
 
     ModsUi::ChoicePrompt prompt;
     prompt.title = Rollback::promptTitle();
@@ -91,15 +116,14 @@ bool askBeforeLaunch(const RollbackEnv& env, QWidget* parent, const ModsUi::AskF
     prompt.defaultButton = 0;
     const int answer = (askOverride ? askOverride : ModsUi::AskFunction(ModsUi::askWithDialog))(parent, prompt);
     if (answer == 1) {
-        Rollback::markAsked(markerPath);  // the user chose to play without them: not asked again for this marker
+        dismissRollback(offer);  // the user chose to play without them: not asked again for this marker
         return true;
     }
     if (answer != 0) {
         return false;  // Cancel / closed: nothing changed, the question comes back with the next Play
     }
-    const Outcome outcome = writeOrder(optionsPathFor(env.gameRoot), historyPathFor(env.instanceRoot), order, existing, env.isRunning);
+    const Outcome outcome = restoreRollback(env, offer);
     if (outcome.ok()) {
-        Rollback::clearMarker(markerPath);  // (writeOrder clears it on a change; a "no change" leaves nothing to restore either)
         return true;
     }
     ModsUi::ChoicePrompt failed;

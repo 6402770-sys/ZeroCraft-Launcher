@@ -42,7 +42,11 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QMenuBar>
+#include <QCheckBox>
+#include <QHBoxLayout>
 #include <QGroupBox>
+#include <QLabel>
+#include <QPushButton>
 #include <QMessageBox>
 #include <QRadioButton>
 #include <QVBoxLayout>
@@ -57,6 +61,9 @@
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
 #include "updater/ExternalUpdater.h"
+#include "InstanceList.h"
+#include "minecraft/MinecraftInstance.h"
+#include "ui/zero/ZeroStyle.h"
 #include "zero/session/WhilePlaying.h"
 
 #include <QApplication>
@@ -94,6 +101,38 @@ LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::Launch
         lay->addWidget(m_whileOpen);
         lay->addWidget(m_whileClose);
         ui->verticalLayout_8->insertWidget(1, box);
+    }
+
+    // ZERO: "Before you play" (zero/prelaunch): the mod and malware check when Play is pressed
+    {
+        auto* box = new QGroupBox(tr("Before you play"), ui->scrollAreaWidgetContents);
+        auto* lay = new QVBoxLayout(box);
+        m_checkMods = new QCheckBox(tr("Check mods before playing"), box);
+        m_checkMods->setToolTip(tr("When you press Play, ZERO looks for known malware, duplicate or wrong mods, missing dependencies and packs the "
+                                   "game turned off. Only the first check of new mods takes a moment."));
+        lay->addWidget(m_checkMods);
+        m_skipRow = new QWidget(box);
+        auto* skipLay = new QHBoxLayout(m_skipRow);
+        skipLay->setContentsMargins(0, 0, 0, 0);
+        m_skipLabel = new QLabel(m_skipRow);
+        Zero::Style::applyRole(m_skipLabel, Zero::Role::Caption);
+        Zero::Style::setProperty(m_skipLabel, "zeroTone", "secondary");
+        skipLay->addWidget(m_skipLabel);
+        skipLay->addStretch(1);
+        auto* again = new QPushButton(tr("Check them again"), m_skipRow);
+        Zero::Style::setProperty(again, "zeroVariant", "secondary");
+        Zero::Style::setProperty(again, "zeroSize", "sm");
+        again->setAutoDefault(false);
+        skipLay->addWidget(again);
+        lay->addWidget(m_skipRow);
+        connect(again, &QPushButton::clicked, this, [this]() {
+            auto* list = APPLICATION->instances();
+            for (int i = 0; i < list->count(); ++i) {
+                list->at(i)->settings()->set("ZeroSkipPreLaunchCheck", false);
+            }
+            refreshSkippedInstances();
+        });
+        ui->verticalLayout_8->insertWidget(2, box);
     }
 
     loadSettings();
@@ -266,6 +305,8 @@ void LauncherPage::applySettings()
                                                : m_whileOpen->isChecked() ? Zero::Session::WhilePlayingMode::Open
                                                                           : Zero::Session::WhilePlayingMode::Tray));
 
+    s->set("ZeroPreLaunchCheck", m_checkMods->isChecked());
+
     s->set("NumberOfConcurrentTasks", ui->numberOfConcurrentTasksSpinBox->value());
     s->set("NumberOfConcurrentDownloads", ui->numberOfConcurrentDownloadsSpinBox->value());
     s->set("NetworkRetryLimit", ui->networkRetryLimitSpinBox->value());
@@ -339,6 +380,18 @@ void LauncherPage::applySettings()
             break;
     }
 }
+void LauncherPage::refreshSkippedInstances()
+{
+    int skipped = 0;
+    auto* list = APPLICATION->instances();
+    for (int i = 0; list && i < list->count(); ++i) {
+        skipped += list->at(i)->settings()->get("ZeroSkipPreLaunchCheck").toBool() ? 1 : 0;
+    }
+    m_skipRow->setVisible(skipped > 0);
+    m_skipLabel->setText(skipped == 1 ? tr("1 instance skips the mod and pack checks.")
+                                      : tr("%1 instances skip the mod and pack checks.").arg(skipped));
+}
+
 void LauncherPage::loadSettings()
 {
     auto* s = APPLICATION->settings();
@@ -360,6 +413,9 @@ void LauncherPage::loadSettings()
             m_whileTray->setChecked(true);
             break;
     }
+
+    m_checkMods->setChecked(s->get("ZeroPreLaunchCheck").toBool());
+    refreshSkippedInstances();
 
     ui->numberOfConcurrentTasksSpinBox->setValue(s->get("NumberOfConcurrentTasks").toInt());
     ui->numberOfConcurrentDownloadsSpinBox->setValue(s->get("NumberOfConcurrentDownloads").toInt());

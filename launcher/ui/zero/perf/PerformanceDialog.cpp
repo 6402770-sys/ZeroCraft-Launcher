@@ -2,6 +2,7 @@
 #include "PerformanceDialog.h"
 
 #include <QCheckBox>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
@@ -10,7 +11,9 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSet>
+#include <QRegularExpression>
 #include <QShowEvent>
+#include <QThread>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -233,6 +236,35 @@ PerformanceEnvironment PerformanceEnvironment::fromApplication(const QString& in
         }
         QObject::connect(task.get(), &Task::finished, context, evaluate, Qt::SingleShotConnection);
     };
+    env.javaMajor = [instanceId]() {
+        auto* instance = APPLICATION->instances()->getInstanceById(instanceId);
+        if (!instance) {
+            return 0;
+        }
+        const Java::InstanceJava java = JavaGather::instanceJava(instance);
+        const Java::Diagnosis diagnosis = Java::diagnose(java, JavaGather::runtimes(), JavaGather::global());
+        if (diagnosis.effective && diagnosis.effective->major > 0) {
+            return diagnosis.effective->major;
+        }
+        if (diagnosis.downloadMajor > 0) {
+            return diagnosis.downloadMajor;
+        }
+        // The version the last launch stored ("17.0.8", "1.8.0_392").
+        QString stored = java.storedVersion.trimmed();
+        if (stored.startsWith(QStringLiteral("1."))) {
+            stored.remove(0, 2);
+        }
+        return stored.section(QRegularExpression(QStringLiteral("[^0-9]")), 0, 0).toInt();
+    };
+    env.cpuCores = []() { return QThread::idealThreadCount(); };
+    env.currentJvmArgs = [instanceId]() {
+        auto* instance = APPLICATION->instances()->getInstanceById(instanceId);
+        return instance ? instance->settings()->get(QStringLiteral("JvmArgs")).toString() : QString();
+    };
+    env.writeJvmArgs = [instanceId](const QString& args) {
+        auto* instance = APPLICATION->instances()->getInstanceById(instanceId);
+        return instance ? applyJvmArgs(instance->settings(), args) : JvmArgsPrevious{};
+    };
     env.isRunning = [instanceId]() {
         auto* instance = APPLICATION->instances()->getInstanceById(instanceId);
         return instance && instance->isRunning();
@@ -283,6 +315,17 @@ PerformanceDialog::PerformanceDialog(PerformanceEnvironment env, QWidget* parent
         refreshSummary();
     });
     connect(m_memoryBox, &QCheckBox::toggled, this, &PerformanceDialog::refreshSummary);
+    // Only `clicked` (mouse and keyboard): `toggled` fires before it, and a refresh then would put the box back to its default before
+    // `m_jvmTouched` is set. Programmatic changes in refreshJvmArgs are signal-blocked anyway.
+    connect(m_jvmBox, &QCheckBox::clicked, this, [this]() {
+        m_jvmTouched = true;
+        refreshSummary();
+    });
+    connect(m_jvmDetailsButton, &QPushButton::toggled, this, [this](bool shown) {
+        m_jvmDetails->setVisible(shown);
+        m_jvmDetailsButton->setText(shown ? tr("Hide details") : tr("What they do"));
+        fitBody();
+    });
     connect(m_javaFix, &QPushButton::clicked, this, [this]() {
         m_javaFixRequested = true;
         reject();
@@ -473,6 +516,47 @@ void PerformanceDialog::buildUi()
     javaColumn->addLayout(javaRow);
     m_javaSection->hide();
     sections->addWidget(m_javaSection);
+
+    // ---- JAVA ARGUMENTS ----
+    m_jvmSection = new QWidget(m_content);
+    auto* jvmColumn = new QVBoxLayout(m_jvmSection);
+    jvmColumn->setContentsMargins(0, 0, 0, 0);
+    jvmColumn->setSpacing(Tokens::spaceXs);
+    jvmColumn->addWidget(overline(tr("Java arguments"), m_jvmSection));
+    m_jvmRow = new QWidget(m_jvmSection);
+    auto* jvmRowLayout = new QVBoxLayout(m_jvmRow);
+    jvmRowLayout->setContentsMargins(0, Tokens::spaceXs, 0, 0);
+    jvmRowLayout->setSpacing(Tokens::spaceXs);
+    m_jvmBox = new QCheckBox(m_jvmRow);
+    m_jvmBox->setObjectName(QStringLiteral("zeroPerfJvmBox"));
+    jvmRowLayout->addWidget(m_jvmBox);
+    m_jvmCurrent = makeLabel(QString(), Role::Caption, "secondary", m_jvmRow);
+    m_jvmCurrent->setObjectName(QStringLiteral("zeroPerfJvmCurrent"));
+    m_jvmCurrent->setContentsMargins(Tokens::spaceXl, 0, 0, 0);
+    jvmRowLayout->addWidget(m_jvmCurrent);
+    m_jvmDetailsButton = new QPushButton(tr("What they do"), m_jvmRow);
+    m_jvmDetailsButton->setObjectName(QStringLiteral("zeroPerfJvmDetailsButton"));
+    m_jvmDetailsButton->setCheckable(true);
+    Style::setProperty(m_jvmDetailsButton, "zeroVariant", "ghost");
+    m_jvmDetailsButton->setAutoDefault(false);
+    m_jvmDetailsButton->setAccessibleName(tr("What the recommended Java arguments do"));
+    auto* detailsButtonRow = new QHBoxLayout;
+    detailsButtonRow->setContentsMargins(Tokens::spaceXl, 0, 0, 0);
+    detailsButtonRow->addWidget(m_jvmDetailsButton);
+    detailsButtonRow->addStretch(1);
+    jvmRowLayout->addLayout(detailsButtonRow);
+    m_jvmDetails = new QWidget(m_jvmRow);
+    m_jvmDetailsLayout = new QVBoxLayout(m_jvmDetails);
+    m_jvmDetailsLayout->setContentsMargins(Tokens::spaceXl, 0, 0, 0);
+    m_jvmDetailsLayout->setSpacing(Tokens::spaceXs);
+    m_jvmDetails->hide();
+    jvmRowLayout->addWidget(m_jvmDetails);
+    jvmColumn->addWidget(m_jvmRow);
+    m_jvmFine = makeLabel(tr("Java arguments are already tuned."), Role::Body, nullptr, m_jvmSection);
+    m_jvmFine->setObjectName(QStringLiteral("zeroPerfJvmFine"));
+    jvmColumn->addWidget(m_jvmFine);
+    m_jvmSection->hide();
+    sections->addWidget(m_jvmSection);
     sections->addStretch(1);
 
     column->addWidget(m_scroll, 1);
@@ -573,6 +657,7 @@ void PerformanceDialog::startJava()
         m_javaLabel->setText(problem.value_or(QString()));
         m_javaSection->setVisible(problem.has_value());
         fitBody();
+        refreshSummary();  // the Java arguments need to know the Java
     });
 }
 
@@ -854,6 +939,7 @@ Summary PerformanceDialog::currentSummary() const
         summary.memoryFromMb = memory->currentMaxMb;
         summary.memoryToMb = memory->recommendedMaxMb;
     }
+    summary.javaArgs = jvmArgsToWrite().has_value();
     return summary;
 }
 
@@ -863,6 +949,76 @@ std::optional<MemoryAdvice> PerformanceDialog::memoryToWrite() const
         return m_advice;
     }
     return std::nullopt;
+}
+
+std::optional<JvmArgsAdvice> PerformanceDialog::jvmArgsToWrite() const
+{
+    if (m_jvmSection->isVisibleTo(this) && m_jvm.offered() && m_jvmBox->isChecked()) {
+        return m_jvm;
+    }
+    return std::nullopt;
+}
+
+void PerformanceDialog::refreshJvmArgs()
+{
+    if (!m_jvmSection) {
+        return;
+    }
+    JvmArgsAdvice advice;  // NotSupported until Java Doctor answered
+    if (m_javaChecked) {
+        const int major = m_env.javaMajor ? m_env.javaMajor() : 0;
+        const int cores = m_env.cpuCores ? m_env.cpuCores() : QThread::idealThreadCount();
+        const QString current = m_env.currentJvmArgs ? m_env.currentJvmArgs() : QString();
+        const auto memory = memoryToWrite();
+        const int heapMb = memory ? memory->recommendedMaxMb : (m_env.maxMemoryMb ? m_env.maxMemoryMb() : 0);
+        advice = adviseJvmArgs(major, heapMb, cores, current);
+    }
+    const bool stateChanged = advice.state != m_jvm.state;
+    const bool flagsChanged = advice.args() != m_jvm.args();
+    const bool currentChanged = advice.current != m_jvm.current;
+    m_jvm = advice;
+
+    const bool offered = advice.offered();
+    const bool shown = advice.state != JvmArgsState::NotSupported;
+    m_jvmRow->setVisible(offered);
+    m_jvmFine->setVisible(advice.state == JvmArgsState::AlreadyRecommended);
+    if (offered) {
+        const QString text = advice.state == JvmArgsState::HasCustomArgs ? tr("Replace your Java arguments with the recommended ones")
+                                                                          : tr("Use recommended Java arguments");
+        m_jvmBox->setText(text);
+        m_jvmBox->setAccessibleName(text);
+        if (stateChanged) {
+            m_jvmTouched = false;
+        }
+        if (stateChanged || !m_jvmTouched) {
+            const QSignalBlocker blocker(m_jvmBox);
+            m_jvmBox->setChecked(advice.state == JvmArgsState::NoCustomArgs);
+        }
+        const bool custom = advice.state == JvmArgsState::HasCustomArgs;
+        m_jvmCurrent->setVisible(custom);
+        if (custom && (currentChanged || stateChanged)) {
+            const QString line = tr("Currently: %1");
+            const QFontMetrics metrics(m_jvmCurrent->font());
+            const int room = kWidth - 3 * Tokens::spaceXl;
+            const QString elided = metrics.elidedText(advice.current, Qt::ElideRight, room - metrics.horizontalAdvance(line.arg(QString())));
+            m_jvmCurrent->setText(line.arg(elided));
+            m_jvmCurrent->setToolTip(advice.current);
+        }
+        if (flagsChanged || stateChanged) {
+            clearLayout(m_jvmDetailsLayout);
+            for (const JvmFlag& flag : advice.flags) {
+                auto* line = makeLabel(QStringLiteral("%1 \u2014 %2").arg(flag.flag, flag.why), Role::Caption, "secondary", m_jvmDetails);
+                line->setWordWrap(true);
+                line->setTextInteractionFlags(Qt::TextSelectableByMouse);
+                m_jvmDetailsLayout->addWidget(line);
+            }
+        }
+    }
+    const bool changed = shown != m_jvmSection->isVisibleTo(this) || stateChanged || flagsChanged;
+    m_jvmSection->setVisible(shown);
+    if (changed) {
+        fitBody();
+    }
 }
 
 bool PerformanceDialog::instanceRunning() const
@@ -875,6 +1031,7 @@ void PerformanceDialog::refreshSummary()
     if (!m_summary) {
         return;
     }
+    refreshJvmArgs();
     const bool checking = m_modsState == ModsState::Loading || m_depState == DepState::Checking;
     m_summary->setText(checking ? cartCheckingText() : Perf::summaryText(currentSummary()));
     m_apply->setEnabled(canApply());
@@ -940,7 +1097,11 @@ void PerformanceDialog::accept()
         m_env.writeMemory(memory->recommendedMaxMb, memory->recommendedMinMb);
         m_outcome.memoryWritten = true;
     }
-    m_outcome.applied = m_outcome.modsAdded > 0 || m_outcome.memoryWritten;
+    if (const auto jvm = jvmArgsToWrite(); jvm && m_env.writeJvmArgs) {
+        m_outcome.previousJvmArgs = m_env.writeJvmArgs(jvm->argsString());
+        m_outcome.javaArgsWritten = true;
+    }
+    m_outcome.applied = m_outcome.modsAdded > 0 || m_outcome.memoryWritten || m_outcome.javaArgsWritten;
     QDialog::accept();
 }
 
@@ -1115,6 +1276,47 @@ bool PerformanceDialog::javaSectionVisible() const
 QString PerformanceDialog::javaText() const
 {
     return m_javaLabel->text();
+}
+
+bool PerformanceDialog::jvmArgsSectionVisible() const
+{
+    return m_jvmSection->isVisibleTo(this);
+}
+
+QString PerformanceDialog::jvmArgsBoxText() const
+{
+    return m_jvmRow->isVisibleTo(m_jvmSection) ? m_jvmBox->text() : QString();
+}
+
+QString PerformanceDialog::jvmArgsCurrentText() const
+{
+    return m_jvmCurrent->isVisibleTo(m_jvmRow) ? m_jvmCurrent->text() : QString();
+}
+
+QString PerformanceDialog::jvmArgsCurrentToolTip() const
+{
+    return m_jvmCurrent->toolTip();
+}
+
+QString PerformanceDialog::jvmArgsFineText() const
+{
+    return m_jvmFine->isVisibleTo(m_jvmSection) ? m_jvmFine->text() : QString();
+}
+
+bool PerformanceDialog::jvmArgsDetailsVisible() const
+{
+    return m_jvmDetails->isVisibleTo(m_jvmRow);
+}
+
+QStringList PerformanceDialog::jvmArgsExplanations() const
+{
+    QStringList lines;
+    for (int i = 0; i < m_jvmDetailsLayout->count(); ++i) {
+        if (auto* label = qobject_cast<QLabel*>(m_jvmDetailsLayout->itemAt(i)->widget()); label && !label->isHidden()) {
+            lines << label->text();
+        }
+    }
+    return lines;
 }
 
 QString PerformanceDialog::summaryText() const

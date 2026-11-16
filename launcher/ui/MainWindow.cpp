@@ -1810,6 +1810,13 @@ void MainWindow::boostPerformance(const QString& instanceId)
             if (auto* shown = APPLICATION->instances()->getInstanceById(instanceId))
                 APPLICATION->showInstanceWindow(shown, QStringLiteral("mods"));
         });
+    } else if (outcome.javaArgsWritten) {
+        // Undo puts the exact previous Java-arguments override back (the global arguments were never touched).
+        const JvmArgsPrevious previous = outcome.previousJvmArgs;
+        Zero::ZeroToast::show(this, javaArgsTunedText(), Zero::ZeroToast::Kind::Success, tr("Undo"), [instanceId, previous]() {
+            if (auto* shown = APPLICATION->instances()->getInstanceById(instanceId))
+                restoreJvmArgs(shown->settings(), previous);
+        });
     } else {
         Zero::ZeroToast::show(this, boostedToastText(name), Zero::ZeroToast::Kind::Success);
     }

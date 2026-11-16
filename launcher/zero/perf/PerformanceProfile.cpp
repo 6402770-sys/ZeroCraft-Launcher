@@ -7,6 +7,7 @@
 
 #include "zero/content/ModInstall.h"
 #include "zero/content/ModpackSource.h"
+#include "zero/perf/JvmArgsAdvisor.h"
 
 namespace Zero::Perf {
 
@@ -411,6 +412,9 @@ QString summaryText(const Summary& summary)
     }
     if (summary.memory) {
         parts << QObject::tr("Memory %1 → %2").arg(gbNumber(summary.memoryFromMb), gbText(summary.memoryToMb));
+    }
+    if (summary.javaArgs) {
+        parts << javaArgsTunedText();
     }
     return parts.isEmpty() ? QObject::tr("Nothing to change") : parts.join(QStringLiteral(" · "));
 }

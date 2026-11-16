@@ -67,6 +67,7 @@
 #include "ui/zero/ZeroThemeState.h"  // ZERO
 #include "launch/LaunchTask.h"
 #include "ui/zero/instance/PackRollbackPrompt.h"  // ZERO: "Minecraft turned off your resource packs"
+#include "ui/zero/prelaunch/PreLaunchDialog.h"  // ZERO: "Before you play"
 #include "zero/ZeroLanguage.h"  // ZERO
 #include "ui/zero/ZeroSmoothScroll.h"
 #include "ui/zero/ZeroSound.h"  // ZERO: smooth wheel scrolling
@@ -960,6 +961,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // ZERO: what the launcher does while a game runs: "tray" (hide to the tray), "open" (keep it open) or "close" (Prism's
         // CloseAfterLaunch). The choice drives CloseAfterLaunch, see the "play sessions" block below.
         m_settings->registerSetting("ZeroWhilePlaying", "tray");
+        // ZERO: "Before you play" (zero/prelaunch): the mod and malware check when Play is pressed; false switches it all off
+        m_settings->registerSetting("ZeroPreLaunchCheck", true);
 
         m_settings->registerSetting("Env", "{}");
 
@@ -1945,10 +1948,11 @@ bool Application::launch(MinecraftInstance* instance,
                 return false;
             }
         }
-        // ZERO: the game turned the packs off last time: ask once whether to put them back (not for launches without a window)
+        // ZERO: "Before you play": the quick look at the mods (malware, wrong or duplicate mods, packs the game turned off). Instant when
+        // there is nothing to show; not for launches without a window.
         if ((m_mainWindow != nullptr || instance->window() != nullptr) &&
-            !Zero::PacksUi::askBeforeLaunch(instance, instance->window() != nullptr ? static_cast<QWidget*>(instance->window())
-                                                                                    : static_cast<QWidget*>(m_mainWindow))) {
+            !Zero::PreLaunchUi::checkBeforeLaunch(instance, instance->window() != nullptr ? static_cast<QWidget*>(instance->window())
+                                                                                          : static_cast<QWidget*>(m_mainWindow))) {
             return false;
         }
         instance->setLaunchController(std::make_unique<LaunchController>());

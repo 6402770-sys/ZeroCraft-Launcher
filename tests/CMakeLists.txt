@@ -87,9 +87,12 @@ set(TEST_SOURCES
     PackRollback_test.cpp
     ZeroResourcePacksPage_test.cpp
     ZeroShaderPacksPage_test.cpp
+    JvmArgsAdvisor_test.cpp
+    PreLaunchCheck_test.cpp
     PerformanceProfile_test.cpp
     ZeroElyAuth_test.cpp
     ZeroPerformanceDialog_test.cpp
+    ZeroPreLaunchDialog_test.cpp
     ZeroAddAccount_test.cpp
     ZeroIntro_test.cpp
     ZeroTour_test.cpp

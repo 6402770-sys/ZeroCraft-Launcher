@@ -169,6 +169,11 @@ struct Rig {
     QList<Content::CartInstallPlan> installs;
     InstallResult installResult{ false, 1 };
     QList<QPair<int, int>> memoryWrites;
+    int javaMajor = 0;  // 0 = unknown: no Java arguments section
+    int cores = 8;
+    QString jvmArgs;
+    QStringList jvmWrites;
+    JvmArgsPrevious jvmPrevious;
 
     PerformanceEnvironment environment()
     {
@@ -201,6 +206,13 @@ struct Rig {
             return installResult;
         };
         env.writeMemory = [this](int maxMb, int minMb) { memoryWrites.append({ maxMb, minMb }); };
+        env.javaMajor = [this]() { return javaMajor; };
+        env.cpuCores = [this]() { return cores; };
+        env.currentJvmArgs = [this]() { return jvmArgs; };
+        env.writeJvmArgs = [this](const QString& args) {
+            jvmWrites.append(args);
+            return jvmPrevious;
+        };
         env.dependencyDelayMs = delayMs;
         return env;
     }
@@ -783,6 +795,175 @@ class ZeroPerformanceDialogTest : public QObject {
         QVERIFY(dialog->dependencyCheckPending());
         dialog->accept();  // Enter while "Checking…"
         QVERIFY(rig.installs.isEmpty());
+        QVERIFY(dialog->result() != int(QDialog::Accepted));
+    }
+
+    // ---- Java arguments ----
+
+    void javaArgumentsAreHiddenWhenTheJavaIsUnknownOrNotSupported()
+    {
+        Rig unknown;
+        auto a = unknown.openReady();
+        QVERIFY(!a->jvmArgsSectionVisible());
+        QCOMPARE(a->jvmArgsState(), JvmArgsState::NotSupported);
+        QVERIFY(!a->summaryText().contains(S("Java arguments")));
+
+        Rig single;
+        single.javaMajor = 21;
+        single.cores = 1;
+        auto b = single.openReady();
+        QVERIFY(!b->jvmArgsSectionVisible());
+    }
+
+    void noCustomArgumentsOffersATickedRowWithTheExplanations()
+    {
+        Rig rig;
+        rig.javaMajor = 21;
+        auto dialog = rig.openReady();
+        QVERIFY(dialog->jvmArgsSectionVisible());
+        QCOMPARE(dialog->jvmArgsState(), JvmArgsState::NoCustomArgs);
+        QCOMPARE(dialog->jvmArgsBoxText(), S("Use recommended Java arguments"));
+        QVERIFY(dialog->jvmArgsBox()->isChecked());
+        QVERIFY(dialog->jvmArgsCurrentText().isEmpty());
+        QVERIFY(dialog->jvmArgsFineText().isEmpty());
+        QVERIFY(!dialog->jvmArgsDetailsVisible());
+        dialog->jvmArgsDetailsButton()->click();
+        QVERIFY(dialog->jvmArgsDetailsVisible());
+        QCOMPARE(dialog->jvmArgsDetailsButton()->text(), S("Hide details"));
+        const QStringList lines = dialog->jvmArgsExplanations();
+        QCOMPARE(lines.size(), 17);
+        QVERIFY(lines.first().startsWith(S("-XX:+UseG1GC ")));
+        QTRY_COMPARE(rig.resolver->requests.size(), 1);
+        rig.resolver->answer({});  // the summary says "Checking…" until the dependencies are in
+        QVERIFY(dialog->summaryText().endsWith(kDot + S("Java arguments tuned")));
+        QVERIFY(dialog->applyButton()->isEnabled());
+    }
+
+    void javaArgumentsAloneEnableApplyAndUnticking()
+    {
+        Rig rig;
+        rig.target = vanillaTarget();
+        rig.ramMb = 16 * kGb;
+        rig.currentMax = 8 * kGb;  // memory is fine
+        rig.javaMajor = 17;
+        auto dialog = rig.open();
+        QCOMPARE(dialog->summaryText(), S("Java arguments tuned"));
+        QVERIFY(dialog->applyButton()->isEnabled());
+        dialog->jvmArgsBox()->click();
+        QVERIFY(!dialog->jvmArgsBox()->isChecked());
+        QCOMPARE(dialog->summaryText(), S("Nothing to change"));
+        QVERIFY(!dialog->applyButton()->isEnabled());
+        QVERIFY(!dialog->jvmArgsToWrite().has_value());
+    }
+
+    void customArgumentsAreAnUntickedReplaceRowWithTheCurrentOnesElided()
+    {
+        Rig rig;
+        rig.javaMajor = 21;
+        rig.jvmArgs = S("-XX:+UseZGC -Dfoo=bar");
+        auto dialog = rig.openReady();
+        QCOMPARE(dialog->jvmArgsState(), JvmArgsState::HasCustomArgs);
+        QCOMPARE(dialog->jvmArgsBoxText(), S("Replace your Java arguments with the recommended ones"));
+        QVERIFY(!dialog->jvmArgsBox()->isChecked());
+        QCOMPARE(dialog->jvmArgsCurrentText(), S("Currently: -XX:+UseZGC -Dfoo=bar"));
+        QCOMPARE(dialog->jvmArgsCurrentToolTip(), S("-XX:+UseZGC -Dfoo=bar"));
+        QVERIFY(!dialog->summaryText().contains(S("Java arguments")));
+        QVERIFY(!dialog->jvmArgsToWrite().has_value());
+
+        // A very long own set is elided, the whole is in the tooltip.
+        Rig longRig;
+        longRig.javaMajor = 21;
+        longRig.jvmArgs = QString(S("-Dsome.very.long.property.name=value ")).repeated(30).trimmed();
+        auto longDialog = longRig.openReady();
+        QVERIFY(longDialog->jvmArgsCurrentText().endsWith(QChar(0x2026)));
+        QCOMPARE(longDialog->jvmArgsCurrentToolTip(), longRig.jvmArgs);
+    }
+
+    void alreadyTunedShowsACalmLineAndNothingToApply()
+    {
+        Rig rig;
+        rig.target = vanillaTarget();
+        rig.currentMax = 8 * kGb;
+        rig.javaMajor = 21;
+        rig.jvmArgs = adviseJvmArgs(21, 8 * kGb, 8, QString()).args().join(S("   "));
+        auto dialog = rig.open();
+        QCOMPARE(dialog->jvmArgsState(), JvmArgsState::AlreadyRecommended);
+        QVERIFY(dialog->jvmArgsSectionVisible());
+        QCOMPARE(dialog->jvmArgsFineText(), S("Java arguments are already tuned."));
+        QVERIFY(dialog->jvmArgsBoxText().isEmpty());
+        QCOMPARE(dialog->summaryText(), S("Nothing to change"));
+        QVERIFY(!dialog->applyButton()->isEnabled());
+    }
+
+    void theMemoryChangeDecidesTheTier()
+    {
+        Rig rig;
+        rig.ramMb = 32 * kGb;
+        rig.currentMax = 2 * kGb;
+        rig.javaMajor = 21;
+        auto dialog = rig.openReady();
+        // Fabric with five mods on 32 GB: the memory section proposes 5 GB -> the small tier.
+        QVERIFY(dialog->jvmArgsExplanations().join(QLatin1Char(' ')).contains(S("G1HeapRegionSize=8M")));
+        // The heap is already 16 GB: the roomier tier.
+        Rig big;
+        big.ramMb = 32 * kGb;
+        big.currentMax = 16 * kGb;
+        big.javaMajor = 21;
+        auto bigDialog = big.openReady();
+        QVERIFY(bigDialog->jvmArgsExplanations().join(QLatin1Char(' ')).contains(S("G1HeapRegionSize=16M")));
+    }
+
+    void applyWritesTheArgumentsAndHandsBackThePreviousState()
+    {
+        Rig rig;
+        rig.javaMajor = 21;
+        rig.jvmArgs = S("-Dold=1");
+        rig.jvmPrevious = { true, S("-Dold=1") };
+        auto dialog = rig.openReady();
+        QTRY_COMPARE(rig.resolver->requests.size(), 1);
+        rig.resolver->answer({});  // the summary says "Checking…" until the dependencies are in
+        dialog->jvmArgsBox()->click();  // replace
+        QVERIFY(dialog->jvmArgsBox()->isChecked());
+        QVERIFY(dialog->summaryText().contains(S("Java arguments tuned")));
+        for (const QString& slug : dialog->rowSlugs())
+            if (dialog->rowCheck(slug)->isChecked())
+                dialog->rowCheck(slug)->click();
+        QVERIFY(dialog->tickedSlugs().isEmpty());
+
+        dialog->applyButton()->click();
+
+        QCOMPARE(dialog->result(), int(QDialog::Accepted));
+        QCOMPARE(rig.jvmWrites.size(), 1);
+        QCOMPARE(rig.jvmWrites.first(), adviseJvmArgs(21, 5 * kGb, 8, QString()).argsString());
+        QVERIFY(!rig.jvmWrites.first().contains(S("-Xmx")));
+        QVERIFY(dialog->outcome().javaArgsWritten);
+        QVERIFY(dialog->outcome().applied);
+        QVERIFY(dialog->outcome().previousJvmArgs.overridden);
+        QCOMPARE(dialog->outcome().previousJvmArgs.args, S("-Dold=1"));
+    }
+
+    void anUntickedJavaRowWritesNothing()
+    {
+        Rig rig;
+        rig.javaMajor = 21;
+        rig.jvmArgs = S("-Dold=1");
+        auto dialog = rig.openReady();
+        QVERIFY(!dialog->jvmArgsBox()->isChecked());
+        dialog->applyButton()->click();
+        QVERIFY(rig.jvmWrites.isEmpty());
+        QVERIFY(!dialog->outcome().javaArgsWritten);
+    }
+
+    void aFailedDownloadWritesNoJavaArguments()
+    {
+        Rig rig;
+        rig.javaMajor = 21;
+        auto dialog = rig.openReady();
+        QTRY_COMPARE(rig.resolver->requests.size(), 1);
+        rig.resolver->answer({});
+        rig.installResult = { true, 0 };
+        dialog->applyButton()->click();
+        QVERIFY(rig.jvmWrites.isEmpty());
         QVERIFY(dialog->result() != int(QDialog::Accepted));
     }
 

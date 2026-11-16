@@ -965,6 +965,16 @@ SET(LAUNCHER_SOURCES
     ui/zero/pages/HomeServersSection.h
     zero/java/JavaDoctor.cpp
     zero/java/JavaDoctor.h
+    zero/prelaunch/PreLaunchCheck.cpp
+    zero/prelaunch/PreLaunchCheck.h
+    zero/security/JarScanner.cpp
+    zero/security/JarScanner.h
+    zero/security/MalwareSignatures.cpp
+    zero/security/MalwareSignatures.h
+    zero/security/SystemIndicators.cpp
+    zero/security/SystemIndicators.h
+    zero/perf/JvmArgsAdvisor.cpp
+    zero/perf/JvmArgsAdvisor.h
     zero/perf/PerformanceCatalog.cpp
     zero/perf/PerformanceCatalog.h
     zero/perf/PerformanceProfile.cpp
@@ -1250,6 +1260,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/content/RemoteImageCache.h
     ui/zero/content/TargetInstanceButton.cpp
     ui/zero/content/TargetInstanceButton.h
+    ui/zero/prelaunch/PreLaunchDialog.cpp
+    ui/zero/prelaunch/PreLaunchDialog.h
     ui/zero/perf/PerformanceDialog.cpp
     ui/zero/perf/PerformanceDialog.h
     ui/zero/palette/PaletteDraw.cpp

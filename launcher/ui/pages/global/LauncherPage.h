@@ -36,6 +36,8 @@
 #pragma once
 
 #include <QDialog>
+class QCheckBox;
+class QLabel;
 class QRadioButton;
 #include <memory>
 
@@ -87,4 +89,9 @@ class LauncherPage : public QWidget, public BasePage {
     QRadioButton* m_whileTray = nullptr;
     QRadioButton* m_whileOpen = nullptr;
     QRadioButton* m_whileClose = nullptr;
+    // ZERO: "Before you play" (ZeroPreLaunchCheck; the instances' ZeroSkipPreLaunchCheck)
+    QCheckBox* m_checkMods = nullptr;
+    QWidget* m_skipRow = nullptr;
+    QLabel* m_skipLabel = nullptr;
+    void refreshSkippedInstances();
 };

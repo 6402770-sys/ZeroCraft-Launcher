@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-16 (session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds; NOT committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-16 (session 16: Mission 004 B2 done and committed — resume at "Mission 004" › 🔴 RESUME HERE (B3). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -715,6 +715,21 @@ Status per batch is logged below as it lands.
   entries (`ui/zero/palette/ServerCommands`, async `ServerVaultScanner`, join = ServersPage::playOn); Storage scan progress + "Largest items"
   (StorageScanner `findLargeItems`/`aggregateLargest`). Not runtime-tested: tray with a real game launch/quit, Home Servers with real favorites.
   Old-logs clean keeps its existing 30-day rule. Now-playing Stop = same kill as the hero (no confirm, as before).
+- ✅ **B2 done** (session 16; 92/92 + FileSystem 25/25). **Java arguments**: pure `zero/perf/JvmArgsAdvisor` + "JAVA ARGUMENTS" in
+  `ui/zero/perf/PerformanceDialog` (per-instance override only, Undo toast in MainWindow). Session 16 fixed a real bug there: the checkbox
+  listened to `toggled`, which fires before `clicked`, so a refresh put the box back to its default (only `clicked` now); 2 tests answered
+  the resolver too late (fixed). **Before you play**: pure `zero/prelaunch/PreLaunchCheck` + `zero/security/` (JarScanner, ScanCache
+  `<instanceRoot>/.zero/scan-cache.json`, MalwareSignatures from qrc `:/zero/security/malware-signatures.json`, SystemIndicators read-only),
+  UI `ui/zero/prelaunch/PreLaunchDialog` (`checkBeforeLaunch` replaces `askBeforeLaunch` in `Application::launch`; pack rollback is a row).
+  Settings `ZeroPreLaunchCheck` (global, Settings › Launcher "Before you play" group, + "Check them again" for opted-out instances) and
+  `ZeroSkipPreLaunchCheck` (per instance; skips Mods/Packs, never malware). All 27 IOCs were re-checked by the orchestrator against
+  fractureiser `docs/tech.md` and Check Point's Stargazers report. Cached launch with nothing found opens no dialog (~1 ms, no jar opened).
+  Tests: `PreLaunchCheck_test` (44, synthetic jars), `ZeroPreLaunchDialog_test` (32; `ZERO_PRELAUNCH_SHOTS=<dir>` saves PNGs).
+  Limits / open: only jars directly in `mods/` are scanned (no version subfolders); a fix's recheck runs on the UI thread (brief freeze on
+  huge packs); a scan whose dialog was cancelled keeps running and the next Play of that instance waits for it; Minecraft theme look and
+  the real Play path not driven by hand (owner QA below). Docs: `docs/zero/ARCHITECTURE.md` "Before you play".
+- 🔴 **RESUME HERE: B3** (updates for everything, Downloads center, smart drag & drop), then B4 → B5. Discord Application ID still to
+  come from the owner (feature hidden until then).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
@@ -775,6 +790,10 @@ Status per batch is logged below as it lands.
 
 ## Manual QA checklist (owner, real input needed)
 Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On** (Windows animation effects are off here).
+- [ ] **Before you play** (B2): put a harmless copy of a mod in an instance's `mods` twice (`a.jar`, `b.jar`) → Play shows "Before you play"
+      with "Two copies of the same mod" → disable one → Play. Play again: no dialog, no delay. Tick "Don't check this instance again" → Play →
+      Settings › Launcher shows "1 instance skips…" → "Check them again". Minecraft theme look. Boost performance: "Use recommended Java
+      arguments" ticks/unticks, Apply → toast Undo restores the old arguments.
 - [ ] **Guided tour**: on a fresh data dir (`-d <empty folder outside Temp>`): intro → Get started → close Add account → the tour starts on Home; Next / Back / Esc / Enter / Right / Left work, the spotlight glides, step 3 shows Library and
       then comes back to Home, Finish shows "You're all set", Skip shows nothing; restart: no tour. Ctrl+K → "Take the tour" starts it again from step 1. Check both themes and a 1100 x 700 window.
 - [ ] Session-1 items still open: Prism import, Microsoft login/account switch, create vanilla + Fabric instance,

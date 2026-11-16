@@ -170,10 +170,11 @@ struct Summary {
     bool memory = false;   ///< the memory toggle is on and changes something
     int memoryFromMb = 0;
     int memoryToMb = 0;
+    bool javaArgs = false;  ///< the recommended Java arguments will be written
 
-    bool isEmpty() const { return mods == 0 && !memory; }
+    bool isEmpty() const { return mods == 0 && !memory && !javaArgs; }
 };
-/// "Adds 4 mods (+1 they need) · Memory 2 → 6 GB"; parts without content are left out; "Nothing to change" when empty.
+/// "Adds 4 mods (+1 they need) · Memory 2 → 6 GB · Java arguments tuned"; parts without content are left out; "Nothing to change" when empty.
 QString summaryText(const Summary& summary);
 /// "Boosted Fabric Fun"
 QString boostedToastText(const QString& instanceName);

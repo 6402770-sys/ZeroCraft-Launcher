@@ -4,9 +4,14 @@
 #pragma once
 
 #include <QDateTime>
+#include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
+#include <optional>
+
+#include "zero/content/PackOrder.h"
 
 #include "ui/zero/instance/ModsDialogs.h"
 
@@ -27,6 +32,22 @@ RollbackEnv rollbackEnvFor(MinecraftInstance* instance);
 
 /// The game of `instance` stopped: reads its latest.log and writes or removes the rollback marker. `launchStart`: logs older than it are ignored.
 void detectRollbackAfterLaunch(MinecraftInstance* instance, const QDateTime& launchStart);
+
+/// What the question before Play is about (the "Before you play" dialog shows it as one row; `askBeforeLaunch` as its own question).
+struct RollbackOffer {
+    QString markerPath;
+    QStringList presentSuspects;   ///< the suspect packs that are still in the folder
+    QStringList order;             ///< the pack order to write for a restore (top first)
+    QSet<QString> existing;        ///< the pack files in the folder
+};
+
+/// Is there something to ask? A valid marker not asked yet, options.txt readable with no `file/` pack on, and at least one pack that can
+/// still come back. Reads files only.
+std::optional<RollbackOffer> rollbackOffer(const RollbackEnv& env);
+/// Writes the restore order (a history entry makes it undoable) and drops the marker when it worked.
+Content::Packs::Outcome restoreRollback(const RollbackEnv& env, const RollbackOffer& offer);
+/// The user chose to play without the packs: the marker stays but is not asked again.
+void dismissRollback(const RollbackOffer& offer);
 
 /// Before playing: when the game turned the packs off last time and options.txt has no pack on now, asks once whether to put them back
 /// (Restore without X and play / Play without them / Cancel). False = the user cancelled the launch. `ask` defaults to a ChoiceDialog.

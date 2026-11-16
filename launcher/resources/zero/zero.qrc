@@ -103,6 +103,7 @@
         <file>sounds/soft/success.wav</file>
         <file>sounds/soft/error.wav</file>
         <file>sounds/soft/launch.wav</file>
+        <file>security/malware-signatures.json</file>
         <file alias="icons/LICENSE">icons/LICENSE</file>
     </qresource>
 </RCC>

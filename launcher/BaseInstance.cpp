@@ -78,6 +78,7 @@ BaseInstance::BaseInstance(SettingsObject* globalSettings, std::unique_ptr<Setti
     m_settings->registerSetting("notes", "");
     // ZERO: instance profile (docs/zero/ARCHITECTURE.md). The description is `notes`.
     m_settings->registerSetting("ZeroFavorite", false);  // ZERO
+    m_settings->registerSetting("ZeroSkipPreLaunchCheck", false);  // ZERO: "Don't check this instance again" (mods and packs; malware is always checked)
     m_settings->registerSetting("ZeroTags", "[]");       // ZERO: JSON array of strings
     m_settings->registerSetting("ZeroArtwork", "");      // ZERO: path relative to the instance root
 

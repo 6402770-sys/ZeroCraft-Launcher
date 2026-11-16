@@ -30,6 +30,7 @@
 #include "zero/content/CartInstall.h"
 #include "zero/content/ModInstall.h"
 #include "zero/content/ModTarget.h"
+#include "zero/perf/JvmArgsAdvisor.h"
 #include "zero/perf/PerformanceCatalog.h"
 #include "zero/perf/PerformanceProfile.h"
 
@@ -77,6 +78,14 @@ struct PerformanceEnvironment {
     std::function<int()> maxMemoryMb;
     /// Looks at the Java of the instance (may answer at once or later, exactly once, and not at all once `context` is gone): the one-line problem, or nothing when it is fine.
     std::function<void(QObject* context, std::function<void(const std::optional<QString>&)>)> checkJava;
+    /// The Java major the instance will run with (asked once Java Doctor's answer is in); 0 or null = unknown (no Java arguments section).
+    std::function<int()> javaMajor;
+    /// The PC's logical cores; null = QThread::idealThreadCount().
+    std::function<int()> cpuCores;
+    /// The Java arguments the instance has now (its own when it overrides them, else the launcher's); null = none.
+    std::function<QString()> currentJvmArgs;
+    /// Writes OverrideJavaArgs = true and JvmArgs = `args` to the instance and returns what it had (for Undo). Null = nothing is written.
+    std::function<JvmArgsPrevious(const QString& args)> writeJvmArgs;
     /// Whether the instance runs right now; null = TargetInstance::running.
     std::function<bool()> isRunning;
     /// Downloads and installs `plan` (modal, like the cart's install); null = nothing can be installed.
@@ -106,6 +115,8 @@ class PerformanceDialog : public QDialog {
         int modsAdded = 0;           ///< downloads that arrived (mods and dependencies)
         bool memoryWritten = false;
         bool refusedRunning = false; ///< Apply was pressed while the instance runs: nothing was changed
+        bool javaArgsWritten = false;      ///< the recommended Java arguments were written (an override of this instance)
+        JvmArgsPrevious previousJvmArgs;   ///< what the instance had before: Undo puts it back (restoreJvmArgs)
     };
 
     explicit PerformanceDialog(PerformanceEnvironment env, QWidget* parent = nullptr);
@@ -141,6 +152,18 @@ class PerformanceDialog : public QDialog {
     bool javaSectionVisible() const;
     QString javaText() const;
     QPushButton* javaFixButton() const { return m_javaFix; }
+    bool jvmArgsSectionVisible() const;
+    JvmArgsState jvmArgsState() const { return m_jvm.state; }
+    QCheckBox* jvmArgsBox() const { return m_jvmBox; }
+    QString jvmArgsBoxText() const;      ///< the row's text ("" = no row)
+    QString jvmArgsCurrentText() const;  ///< HasCustomArgs: the arguments shown (elided)
+    QString jvmArgsCurrentToolTip() const;
+    QString jvmArgsFineText() const;     ///< AlreadyRecommended: the calm line ("" = none)
+    QPushButton* jvmArgsDetailsButton() const { return m_jvmDetailsButton; }
+    bool jvmArgsDetailsVisible() const;
+    QStringList jvmArgsExplanations() const;  ///< the "What they do" lines, "flag - why"
+    /// The arguments Apply writes (the row is ticked and offered); empty when none.
+    std::optional<JvmArgsAdvice> jvmArgsToWrite() const;
     QString summaryText() const;
     QPushButton* applyButton() const { return m_apply; }
     QPushButton* cancelButton() const { return m_cancel; }
@@ -193,6 +216,7 @@ class PerformanceDialog : public QDialog {
     void onTicksChanged();
     void afterTicksChanged(int delayMs);
     void refreshMemory();
+    void refreshJvmArgs();
     void refreshSummary();
     void refreshIcons();
     void fitBody();
@@ -261,6 +285,17 @@ class PerformanceDialog : public QDialog {
     QWidget* m_javaSection = nullptr;
     QLabel* m_javaLabel = nullptr;
     QPushButton* m_javaFix = nullptr;
+    // Java arguments section
+    JvmArgsAdvice m_jvm;
+    bool m_jvmTouched = false;  ///< the user decided the tick: it no longer follows the state
+    QWidget* m_jvmSection = nullptr;
+    QWidget* m_jvmRow = nullptr;
+    QCheckBox* m_jvmBox = nullptr;
+    QLabel* m_jvmCurrent = nullptr;
+    QLabel* m_jvmFine = nullptr;
+    QPushButton* m_jvmDetailsButton = nullptr;
+    QWidget* m_jvmDetails = nullptr;
+    QVBoxLayout* m_jvmDetailsLayout = nullptr;
     // footer
     QLabel* m_summary = nullptr;
     QPushButton* m_cancel = nullptr;

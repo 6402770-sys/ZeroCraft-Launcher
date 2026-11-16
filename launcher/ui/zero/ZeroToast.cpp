@@ -15,6 +15,7 @@
 #include <utility>
 #include "ZeroIcons.h"
 #include "ZeroMotion.h"
+#include "ZeroSound.h"
 #include "ZeroStyle.h"
 #include "ZeroPaint.h"
 #include "ZeroThemeState.h"
@@ -224,6 +225,10 @@ ZeroToast* ZeroToast::show(QWidget* window, const QString& text, Kind kind, cons
     if (!window)
         return nullptr;
     QWidget* host = window->window();
+    if (kind == Kind::Success)
+        Sound::play(Sound::Event::Success);
+    else if (kind == Kind::Error)
+        Sound::play(Sound::Event::Error);
     auto* toast = new ZeroToast(host, text, kind, actionText, std::move(action));
     toast->presentIn(host);
     return toast;

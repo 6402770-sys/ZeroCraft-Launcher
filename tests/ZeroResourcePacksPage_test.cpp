@@ -30,7 +30,9 @@
 #include "ui/zero/ZeroToast.h"
 #include "ui/zero/content/FilterPanel.h"
 #include "ui/zero/instance/InstancePageParts.h"
+#include "ui/zero/instance/PackRollbackNotice.h"
 #include "ui/zero/instance/ResourcePacksPage.h"
+#include "zero/content/PackRollback.h"
 #include "zero/mods/InstalledModsModel.h"
 
 using namespace Zero;
@@ -152,6 +154,19 @@ struct Rig {
         addZip(S("Gamma.zip"));
         addFolder(S("Folder Pack"));
         QVERIFY(writeZip(packs.filePath(S("Hidden.zip.disabled")), 34, S("\"Hidden one\"")));
+    }
+
+    /// What a launch that ended with "Caught error loading resourcepacks" leaves (zero/content/PackRollback).
+    void writeRollbackMarker(const QStringList& attempted, const QStringList& suspectFiles) const
+    {
+        Content::Packs::Rollback::Marker marker;
+        marker.valid = true;
+        marker.time = QDateTime::currentDateTimeUtc();
+        marker.attempted = attempted;
+        for (const QString& file : suspectFiles) {
+            marker.suspects.append({ file, S("minecraft:core/entity") });
+        }
+        QVERIFY(Content::Packs::Rollback::writeMarker(Content::Packs::Rollback::markerPathForHistory(historyPath()), marker));
     }
 
     Zero::PacksUi::PacksPageEnvironment environment()
@@ -573,6 +588,112 @@ class ZeroResourcePacksPageTest : public QObject {
         QVERIFY(!rig.page->undo());
         QVERIFY(toastTexts(rig.page.get()).contains(S("There is no earlier order to restore")));
         QCOMPARE(rig.optionsBytes(), before);
+    }
+
+    // =============================== the game turned the packs off ===========================================================
+
+    void rollbackNoticeNamesTheSuspectAndRestoresWithoutIt()
+    {
+        Rig rig;
+        rig.addSet();
+        QVERIFY(rig.writeOptions(options({ S("vanilla") })));
+        rig.writeRollbackMarker({ S("vanilla"), S("file/Alpha.zip"), S("file/Beta.zip"), S("file/Gamma.zip") }, { S("Beta.zip") });
+        rig.build();
+        QVERIFY(rig.open(5));
+        QVERIFY(rig.page->rollbackShown());
+        auto* notice = rig.page->rollbackNotice();
+        QCOMPARE(notice->titleLabel()->text(), S("Minecraft turned off your resource packs"));
+        QCOMPARE(notice->bodyLabel()->text(),
+                 S("When the game started, Beta failed to load (it changes the game's shaders), so Minecraft turned every pack off."));
+        QVERIFY(notice->restoreWithoutButton()->isVisibleTo(rig.page.get()));
+        QCOMPARE(notice->restoreWithoutButton()->text(), S("Restore without Beta"));
+        QCOMPARE(notice->restoreAllButton()->text(), S("Restore all"));
+        // only the suspect carries the pill
+        QVERIFY(rig.rowNamed(S("Beta")).brokeLastLaunch);
+        QCOMPARE(rig.rowNamed(S("Beta")).brokeShader, S("minecraft:core/entity"));
+        QVERIFY(!rig.rowNamed(S("Alpha")).brokeLastLaunch);
+
+        QTest::mouseClick(notice->restoreWithoutButton(), Qt::LeftButton);
+        QCOMPARE(rig.page->activePacks(), (QStringList{ S("Gamma.zip"), S("Alpha.zip") }));  // top first
+        QVERIFY(!QFileInfo::exists(Content::Packs::Rollback::markerPathForHistory(rig.historyPath())));
+        QVERIFY(!rig.page->rollbackShown());
+        QVERIFY(!rig.rowNamed(S("Beta")).brokeLastLaunch);
+        QVERIFY(toastTexts(rig.page.get()).contains(S("Turned your resource packs back on, without Beta")));
+        // the toast's Undo is the usual one
+        QVERIFY(rig.page->undo());
+        QVERIFY(rig.page->activePacks().isEmpty());
+    }
+
+    void rollbackRestoreAllWithoutSuspects()
+    {
+        Rig rig;
+        rig.addSet();
+        QVERIFY(rig.writeOptions(options({ S("vanilla") })));
+        rig.writeRollbackMarker({ S("vanilla"), S("file/Alpha.zip"), S("file/Beta.zip"), S("file/Gone.zip") }, {});
+        rig.build();
+        QVERIFY(rig.open(5));
+        auto* notice = rig.page->rollbackNotice();
+        QVERIFY(rig.page->rollbackShown());
+        QVERIFY(notice->bodyLabel()->text().contains(S("one of your packs")));
+        QVERIFY(!notice->restoreWithoutButton()->isVisibleTo(rig.page.get()));  // only "Restore all"
+        QVERIFY(notice->restoreAllButton()->isVisibleTo(rig.page.get()));
+        QVERIFY(rig.page->restoreRollback(false));
+        QCOMPARE(rig.page->activePacks(), (QStringList{ S("Beta.zip"), S("Alpha.zip") }));  // the pack that is gone stays out
+        QVERIFY(toastTexts(rig.page.get()).contains(S("Turned your resource packs back on")));
+        QVERIFY(!rig.page->rollbackShown());
+    }
+
+    void rollbackNoticeIsLockedWhileTheGameRunsAndDismissForgetsIt()
+    {
+        Rig rig;
+        rig.addSet();
+        const QByteArray before = options({ S("vanilla") });
+        QVERIFY(rig.writeOptions(before));
+        rig.writeRollbackMarker({ S("vanilla"), S("file/Alpha.zip") }, { S("Alpha.zip") });
+        rig.build();
+        QVERIFY(rig.open(5));
+        QVERIFY(rig.page->rollbackNotice()->restoreAllButton()->isEnabled());
+        rig.running = true;
+        rig.page->refreshRunning();
+        QVERIFY(!rig.page->rollbackNotice()->restoreAllButton()->isEnabled());
+        QVERIFY(!rig.page->restoreRollback(false));
+        QCOMPARE(rig.optionsBytes(), before);
+        rig.running = false;
+        rig.page->refreshRunning();
+        // Dismiss: the marker and the notice go, options.txt stays as it is
+        QTest::mouseClick(rig.page->rollbackNotice()->dismissButton(), Qt::LeftButton);
+        QVERIFY(!QFileInfo::exists(Content::Packs::Rollback::markerPathForHistory(rig.historyPath())));
+        QVERIFY(!rig.page->rollbackShown());
+        QCOMPARE(rig.optionsBytes(), before);
+        QVERIFY(!rig.rowNamed(S("Alpha")).brokeLastLaunch);
+    }
+
+    void rollbackNoticeStaysHiddenWithoutAMarkerOrWithAnyPackLeft()
+    {
+        Rig rig;
+        rig.addSet();
+        QVERIFY(rig.writeOptions(options({ S("vanilla") })));
+        rig.build();
+        QVERIFY(rig.open(5));
+        QVERIFY(!rig.page->rollbackShown());  // no marker
+        // a marker whose packs are all gone from the folder
+        rig.writeRollbackMarker({ S("vanilla"), S("file/Gone.zip") }, {});
+        rig.page->rebuildNow();
+        QVERIFY(!rig.page->rollbackShown());
+    }
+
+    void turningAPackOnRemovesTheMarker()
+    {
+        Rig rig;
+        rig.addSet();
+        QVERIFY(rig.writeOptions(options({ S("vanilla") })));
+        rig.writeRollbackMarker({ S("vanilla"), S("file/Alpha.zip") }, { S("Alpha.zip") });
+        rig.build();
+        QVERIFY(rig.open(5));
+        QVERIFY(rig.page->rollbackShown());
+        rig.page->requestToggle(rig.rowOf(S("Beta")));  // any new order written by the launcher
+        QVERIFY(!QFileInfo::exists(Content::Packs::Rollback::markerPathForHistory(rig.historyPath())));
+        QVERIFY(!rig.page->rollbackShown());
     }
 
     void undoOfAnOlderChangeIsRefused()

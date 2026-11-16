@@ -9,6 +9,7 @@
 #include <QScrollBar>
 #include <QToolButton>
 #include <QWheelEvent>
+#include "ui/zero/ZeroSmoothScroll.h"
 
 #include <algorithm>
 
@@ -58,6 +59,7 @@ FeaturedStrip::FeaturedStrip(Zero::RemoteImageCache* images, QWidget* parent)
     m_scroll->setWidget(m_inner);
     m_scroll->setFrameShape(QFrame::NoFrame);
     m_scroll->setWidgetResizable(false);
+    m_scroll->setProperty(SmoothScroll::kOptOutProperty, true);  // maps the wheel to card steps itself
     m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scroll->setStyleSheet(QStringLiteral("QScrollArea { background: transparent; border: none; }"));

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // ZERO Launcher - tests of the modpack install flow (docs/zero/CONTENT.md, "Modpacks" > "Install"): the install plan per provider,
 // the real tasks it builds (never started), the default version rules, the logo names and the install dialog (default version,
-// already-installed note, name validation, the logo is fetched only on Install). Offscreen, no network.
+// first decision New instance / Update an instance, name validation, the logo is fetched only on Install). Offscreen, no network.
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QNetworkAccessManager>
@@ -16,6 +17,7 @@
 #include "modplatform/technic/SingleZipPackInstallTask.h"
 #include "modplatform/technic/SolderPackInstallTask.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/content/InstallChoiceCard.h"
 #include "ui/zero/content/ModpackInstallDialog.h"
 #include "ui/zero/content/RemoteImageCache.h"
 #include "zero/content/CreateInstanceModel.h"
@@ -176,6 +178,7 @@ class ZeroModpackInstallTest : public QObject {
         QCOMPARE(plan->extraInfo.value(S("pack_id")), S("AABBCC"));
         QCOMPARE(plan->extraInfo.value(S("pack_version_id")), S("v1"));
         QVERIFY(!plan->extraInfo.contains(S("original_instance_id")));
+        QVERIFY(plan->createNew);  // a new instance: the provider must not go looking for one to update
         QCOMPARE(plan->originalVersion, S("1.2.3"));
         QCOMPARE(plan->originalName, S("Cool Pack"));
         QCOMPARE(plan->name, S("My Instance"));
@@ -209,6 +212,7 @@ class ZeroModpackInstallTest : public QObject {
         const auto plan = planInstall(r);
         QVERIFY(plan);
         QCOMPARE(plan->extraInfo.value(S("original_instance_id")), S("inst-1"));
+        QVERIFY(!plan->createNew);
         QCOMPARE(plan->extraInfo.value(S("pack_version_id")), S("9002"));
         QCOMPARE(plan->originalVersion, S("2.0"));  // CurseForge too, on an update
         QCOMPARE(plan->name, S("Flame Pack 2.0"));
@@ -387,22 +391,207 @@ class ZeroModpackInstallTest : public QObject {
         QCOMPARE(dialog.nameField()->text(), S("Cool Pack"));
         QVERIFY(dialog.canInstall());
         QVERIFY(dialog.installButton()->isEnabled());
-        QVERIFY(dialog.noteText().isEmpty());
+        QVERIFY(!dialog.instanceListVisible());
         QVERIFY(dialog.versionPills().contains(S("Release")));
     }
 
-    void dialogInstalledNote()
+    // ---- the first decision ----
+
+    void dialogNoManagedInstanceDisablesUpdate()
     {
         DialogRig rig;
         auto item = itemWithVersions({ oneRelease() });
-        rig.installed = { { installedKey(*item), S("inst-1"), S("My Cool Pack"), S("f1"), S("1.0") } };
+        // another provider's pack with the same id does not count
+        rig.installed = { { managedKey(S("curseforge"), S("AABBCC")), S("x"), S("Other"), QString(), QString() } };
         ModpackInstallDialog dialog(rig.environment(), item, QString(), QString());
-        QCOMPARE(dialog.noteText(), S("My Cool Pack is already installed. Installing again asks whether to update it or create a separate instance."));
+        QVERIFY(dialog.newCard()->isChecked());
+        QVERIFY(!dialog.updateCard()->isEnabled());
+        QVERIFY(!dialog.updateCard()->isChecked());
+        QCOMPARE(dialog.newCard()->title(), S("New instance"));
+        QCOMPARE(dialog.newCard()->caption(), S("A separate copy"));
+        QCOMPARE(dialog.updateCard()->title(), S("Update an instance"));
+        QCOMPARE(dialog.updateCard()->caption(), S("None of your instances has this pack"));
+        QVERIFY(!dialog.isUpdate());
+        QVERIFY(dialog.updateInstanceId().isEmpty());
+        QVERIFY(dialog.instanceRows().isEmpty());
+        QVERIFY(!dialog.instanceListVisible());
+        QVERIFY(!dialog.keepVisible());
+        QVERIFY(!dialog.keepGameSettings());
+        QCOMPARE(dialog.installButton()->text(), S("Install"));
+        QVERIFY(dialog.nameField()->isVisibleTo(&dialog));
+        QVERIFY(dialog.canInstall());
+        // asking for an update of an instance that does not exist changes nothing
+        ModpackInstallDialog ghost(rig.environment(), item, S("nope"), QString());
+        QVERIFY(ghost.newCard()->isChecked());
+        QVERIFY(!ghost.isUpdate());
+    }
 
-        DialogRig other;
-        other.installed = { { managedKey(S("curseforge"), S("AABBCC")), S("x"), S("Other"), QString(), QString() } };
-        ModpackInstallDialog fresh(other.environment(), item, QString(), QString());
-        QVERIFY(fresh.noteText().isEmpty());  // same id, another provider
+    void dialogManagedInstancePreselectsUpdate()
+    {
+        DialogRig rig;
+        auto item = itemWithVersions({ oneRelease() });
+        rig.installed = { { installedKey(*item), S("inst-1"), S("My Cool Pack"), S("f0"), S("0.9"), 0 } };
+        ModpackInstallDialog dialog(rig.environment(), item, QString(), QString());  // no id from Discover: Update is still the default
+        QVERIFY(dialog.updateCard()->isEnabled());
+        QVERIFY(dialog.updateCard()->isChecked());
+        QCOMPARE(dialog.updateCard()->caption(), S("One you already have"));
+        QVERIFY(dialog.isUpdate());
+        QCOMPARE(dialog.updateInstanceId(), S("inst-1"));
+        QVERIFY(dialog.instanceListVisible());
+        QCOMPARE(dialog.instanceRows().size(), 1);
+        QCOMPARE(dialog.instanceRows().first()->title(), S("My Cool Pack"));
+        QCOMPARE(dialog.instanceRows().first()->caption(), S("Version 0.9  ") + QChar(0xb7) + S("  Never played"));
+        QVERIFY(dialog.instanceRows().first()->isChecked());
+        // update hides what only a new instance needs and shows "Keep my game settings", on
+        QVERIFY(!dialog.nameField()->isVisibleTo(&dialog));
+        QVERIFY(!dialog.groupBox()->isVisibleTo(&dialog));
+        QVERIFY(!dialog.templateBox()->isVisibleTo(&dialog));
+        QVERIFY(dialog.keepVisible());
+        QVERIFY(dialog.keepGameSettings());
+        QCOMPARE(dialog.keepBox()->text(), S("Keep my game settings"));
+        QCOMPARE(dialog.installButton()->text(), S("Update"));
+        QCOMPARE(dialog.windowTitle(), S("Update Cool Pack"));
+        QVERIFY(dialog.canInstall());  // the name does not matter to an update
+        QVERIFY(dialog.versionBox()->isVisibleTo(&dialog));
+
+        dialog.keepBox()->setChecked(false);
+        QVERIFY(!dialog.keepGameSettings());
+    }
+
+    void dialogSwitchesBetweenNewAndUpdate()
+    {
+        DialogRig rig;
+        auto item = itemWithVersions({ oneRelease() });
+        rig.installed = { { installedKey(*item), S("inst-1"), S("My Cool Pack"), S("f0"), S("0.9") } };
+        ModpackInstallDialog dialog(rig.environment(), item, S("inst-1"), QString());
+        QVERIFY(dialog.isUpdate());
+
+        dialog.newCard()->click();
+        QVERIFY(!dialog.isUpdate());
+        QVERIFY(dialog.newCard()->isChecked());
+        QVERIFY(!dialog.updateCard()->isChecked());
+        QVERIFY(dialog.updateInstanceId().isEmpty());
+        QVERIFY(!dialog.instanceListVisible());
+        QVERIFY(!dialog.keepVisible());
+        QVERIFY(!dialog.keepGameSettings());
+        QVERIFY(dialog.nameField()->isVisibleTo(&dialog));
+        QCOMPARE(dialog.nameField()->text(), S("Cool Pack"));  // the suggested name stays
+        QVERIFY(dialog.groupBox()->isVisibleTo(&dialog));
+        QCOMPARE(dialog.installButton()->text(), S("Install"));
+        QCOMPARE(dialog.windowTitle(), S("Install Cool Pack"));
+        dialog.nameField()->clear();
+        QVERIFY(!dialog.canInstall());  // the New form is validated again
+
+        dialog.updateCard()->click();
+        QVERIFY(dialog.isUpdate());
+        QCOMPARE(dialog.updateInstanceId(), S("inst-1"));
+        QVERIFY(dialog.canInstall());  // ... and an update ignores the name
+        QCOMPARE(dialog.installButton()->text(), S("Update"));
+    }
+
+    void dialogListsEveryManagedInstance()
+    {
+        DialogRig rig;
+        auto item = itemWithVersions({ oneRelease() });
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 hour = 3600 * 1000;
+        rig.installed = {
+            { installedKey(*item), S("old"), S("Old Copy 0.5"), S("f0"), S("0.5"), now - 48 * hour },
+            { installedKey(*item), S("recent"), S("Recent Copy"), S("f1"), S("1.0"), now - 5 * 60 * 1000 },
+            { managedKey(S("curseforge"), S("AABBCC")), S("alien"), S("Other Provider"), S("f1"), S("1.0"), now },
+            { installedKey(*item), S("never"), S("Never Played"), QString(), QString(), 0 },
+        };
+        {
+            // no id from Discover: the most recently played first
+            ModpackInstallDialog dialog(rig.environment(), item, QString(), QString());
+            const auto rows = dialog.instanceRows();
+            QCOMPARE(rows.size(), 3);  // the other provider's instance is not a target
+            QCOMPARE(rows.at(0)->title(), S("Recent Copy"));
+            QCOMPARE(rows.at(1)->title(), S("Old Copy 0.5"));
+            QCOMPARE(rows.at(2)->title(), S("Never Played"));
+            QCOMPARE(rows.at(0)->caption(), S("Version 1.0  ") + QChar(0xb7) + S("  Played 5 minutes ago"));
+            QCOMPARE(rows.at(2)->caption(), S("Never played"));  // no version name: just the play time
+            QVERIFY(rows.at(0)->isChecked());
+            QCOMPARE(dialog.updateInstanceId(), S("recent"));
+
+            // choosing another row changes the instance the update targets (radio behaviour)
+            rows.at(1)->click();
+            QVERIFY(rows.at(1)->isChecked());
+            QVERIFY(!rows.at(0)->isChecked());
+            QCOMPARE(dialog.updateInstanceId(), S("old"));
+            std::unique_ptr<InstanceTask> task(dialog.extractTask());
+            QVERIFY(task);
+            QCOMPARE(task->name(), S("Old Copy 1.0"));  // renamed like ManagedPackPage ("0.5" -> the new version name)
+        }
+        {
+            // the instance Discover passed goes first, whatever its play time
+            ModpackInstallDialog dialog(rig.environment(), item, S("never"), QString());
+            const auto rows = dialog.instanceRows();
+            QCOMPARE(rows.size(), 3);
+            QCOMPARE(rows.at(0)->title(), S("Never Played"));
+            QCOMPARE(rows.at(1)->title(), S("Recent Copy"));
+            QVERIFY(rows.at(0)->isChecked());
+            QCOMPARE(dialog.updateInstanceId(), S("never"));
+        }
+    }
+
+    void dialogRowsAreOneRadioGroup()
+    {
+        DialogRig rig;
+        auto item = itemWithVersions({ oneRelease() });
+        rig.installed = { { installedKey(*item), S("a"), S("A"), QString(), QString() }, { installedKey(*item), S("b"), S("B"), QString(), QString() } };
+        ModpackInstallDialog dialog(rig.environment(), item, QString(), QString());
+        dialog.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+        const auto rows = dialog.instanceRows();
+        rows.at(0)->setFocus();
+        QTest::keyClick(rows.at(0), Qt::Key_Down);  // arrows move the choice, as for radio buttons
+        QVERIFY(rows.at(1)->isChecked());
+        QCOMPARE(dialog.updateInstanceId(), S("b"));
+        rows.at(1)->click();  // clicking the chosen one keeps it
+        QVERIFY(rows.at(1)->isChecked());
+    }
+
+    void dialogTechnicCannotUpdate()
+    {
+        DialogRig rig;
+        auto item = technicItem(true);
+        rig.installed = { { installedKey(*item), S("t"), S("Tech Copy"), QString(), QString() } };
+        ModpackInstallDialog dialog(rig.environment(), item, S("t"), QString());
+        QVERIFY(!dialog.updateCard()->isEnabled());
+        QCOMPARE(dialog.updateCard()->caption(), S("Technic packs can't be updated here"));
+        QVERIFY(dialog.newCard()->isChecked());
+        QVERIFY(!dialog.isUpdate());
+        QVERIFY(dialog.updateInstanceId().isEmpty());
+        QVERIFY(!canUpdateInPlace(Provider::Technic));
+        QVERIFY(canUpdateInPlace(Provider::Modrinth));
+        QVERIFY(canUpdateInPlace(Provider::CurseForge));
+    }
+
+    void dialogTasksNeverAskAgain()
+    {
+        DialogRig rig;
+        auto item = itemWithVersions({ oneRelease() });
+        rig.installed = { { installedKey(*item), S("inst-1"), S("My Cool Pack"), S("f0"), S("0.9") } };
+        ModpackInstallDialog dialog(rig.environment(), item, QString(), QString());
+        {
+            // Update: the provider updates inst-1 without its own "Similar modpack was found!" question
+            std::unique_ptr<InstanceTask> task(dialog.extractTask());
+            QVERIFY(dynamic_cast<InstanceImportTask*>(task.get()));
+            QVERIFY(!task->shouldConfirmUpdate());
+            QVERIFY(!task->shouldAlwaysCreateNew());
+            QCOMPARE(task->name(), S("My Cool Pack"));  // no version in its name: unchanged
+            QCOMPARE(TaskPeek::icon(task.get()), S("default"));  // the instance keeps its icon (the fake environment gives none)
+        }
+        dialog.newCard()->click();
+        {
+            // New: no question either, and the provider is told not to look for the instance it would otherwise update
+            std::unique_ptr<InstanceTask> task(dialog.extractTask());
+            QVERIFY(task);
+            QVERIFY(!task->shouldConfirmUpdate());
+            QVERIFY(task->shouldAlwaysCreateNew());
+            QCOMPARE(task->name(), S("Cool Pack"));
+        }
     }
 
     void dialogLogoOnlyOnAccept()

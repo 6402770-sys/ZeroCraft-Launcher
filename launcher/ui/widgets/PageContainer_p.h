@@ -92,6 +92,7 @@ class PageView : public QListView {
         // ZERO: painted rows (icon, name, plain-language summary), fixed width, transparent
         setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
         setItemDelegate(new Zero::PageNavDelegate(this));
+        setProperty("zeroSound", "navigate");  // ZERO: choosing a page makes the navigate sound (Zero::Sound)
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         setFrameShape(QFrame::NoFrame);
         setMouseTracking(true);

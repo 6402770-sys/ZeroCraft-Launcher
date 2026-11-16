@@ -32,6 +32,7 @@
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/content/FilterPanel.h"
 #include "ui/zero/instance/InstancePageParts.h"
+#include "ui/zero/instance/PackRollbackNotice.h"
 
 namespace Zero {
 namespace PacksUi {
@@ -129,6 +130,13 @@ ResourcePacksPage::ResourcePacksPage(MinecraftInstance* inst, ResourcePackFolder
     : ResourcePacksPage(environmentFor(inst), model, parent)
 {
     connect(inst, &BaseInstance::runningStatusChanged, this, [this]() { refreshRunning(); });
+    // the application checks latest.log when the launch ends (its own slot runs first); the marker is read again with the next rebuild
+    const QString id = inst->id();
+    connect(APPLICATION, &Application::launchEnded, this, [this, id](const QString& endedId) {
+        if (endedId == id) {
+            scheduleRebuild();
+        }
+    });
 }
 
 ResourcePacksPage::ResourcePacksPage(const PacksPageEnvironment& env, ResourcePackFolderModel* model, QWidget* parent)
@@ -164,6 +172,12 @@ void ResourcePacksPage::build()
     m_banner = new ModsUi::RunningBanner(tr("Close the game to change packs"), this);
     m_banner->hide();
     root->addWidget(m_banner);
+
+    m_rollbackNotice = new PackRollbackNotice(this);
+    connect(m_rollbackNotice, &PackRollbackNotice::restoreWithoutRequested, this, [this]() { restoreRollback(true); });
+    connect(m_rollbackNotice, &PackRollbackNotice::restoreAllRequested, this, [this]() { restoreRollback(false); });
+    connect(m_rollbackNotice, &PackRollbackNotice::dismissRequested, this, &ResourcePacksPage::dismissRollback);
+    root->addWidget(m_rollbackNotice);
 
     // ---- toolbar --------------------------------------------------------------------------------------------------------------
     m_toolbar = new QWidget(this);
@@ -428,6 +442,9 @@ void ResourcePacksPage::reloadOptions()
 {
     const QString path = m_env.optionsPath ? m_env.optionsPath() : QString();
     m_options = path.isEmpty() ? Content::Packs::PackList() : readOptions(path);
+    const QString history = m_env.historyPath ? m_env.historyPath() : QString();
+    m_marker = history.isEmpty() ? Content::Packs::Rollback::Marker()
+                                 : Content::Packs::Rollback::readMarker(Content::Packs::Rollback::markerPathForHistory(history));
     m_orderState = !supportsOrdering(m_env.target().mcVersion) ? OrderState::OldVersion
                    : m_options.state == Content::Packs::PackList::State::Unreadable ? OrderState::Unreadable
                                                                                     : OrderState::Ready;
@@ -455,8 +472,91 @@ void ResourcePacksPage::rebuild()
     }
     if (isOrdered()) {
         overlayActive(m_rows, activeFiles(m_options.entries));
+        if (m_marker.valid) {
+            for (PackRow& row : m_rows) {
+                for (const auto& suspect : m_marker.suspects) {
+                    if (!row.hidden && suspect.file == row.fileName) {
+                        row.brokeLastLaunch = true;
+                        row.brokeShader = suspect.shader;
+                        break;
+                    }
+                }
+            }
+        }
     }
     applyView();
+}
+
+QStringList ResourcePacksPage::presentSuspects() const
+{
+    QStringList present;
+    for (const QString& name : Content::Packs::Rollback::suspectFiles(m_marker.suspects)) {
+        const auto it = std::find_if(m_rows.begin(), m_rows.end(), [&name](const PackRow& row) { return row.fileName == name && !row.hidden; });
+        if (it != m_rows.end()) {
+            present.append(name);
+        }
+    }
+    return present;
+}
+
+QStringList ResourcePacksPage::presentAttempted() const
+{
+    QStringList present;
+    for (const QString& name : Content::Packs::Rollback::attemptedFilesTopFirst(m_marker.attempted)) {
+        const auto it = std::find_if(m_rows.begin(), m_rows.end(), [&name](const PackRow& row) { return row.fileName == name && !row.hidden; });
+        if (it != m_rows.end()) {
+            present.append(name);
+        }
+    }
+    return present;
+}
+
+bool ResourcePacksPage::rollbackShown() const
+{
+    return m_rollbackNotice && m_rollbackNotice->isVisibleTo(this);
+}
+
+void ResourcePacksPage::updateRollbackNotice()
+{
+    namespace Rollback = Content::Packs::Rollback;
+    const bool show = m_loaded && m_marker.valid && isOrdered() && !presentAttempted().isEmpty();
+    if (!show) {
+        m_rollbackNotice->hide();
+        return;
+    }
+    const QStringList suspects = presentSuspects();
+    m_rollbackNotice->setTitleAndBody(Rollback::noticeTitle(), Rollback::noticeBody(suspects));
+    m_rollbackNotice->setActions(suspects.isEmpty() ? QString() : Rollback::restoreWithoutText(suspects), Rollback::restoreAllText());
+    m_rollbackNotice->setRestoreEnabled(!blocked(), tr("Close the game first"));
+    m_rollbackNotice->show();
+}
+
+bool ResourcePacksPage::restoreRollback(bool withoutSuspects)
+{
+    namespace Rollback = Content::Packs::Rollback;
+    refreshRunning();
+    if (blocked() || !isOrdered() || !m_marker.valid || !m_env.historyPath) {
+        return false;
+    }
+    const QStringList visible = activatableNames(m_rows);
+    const QSet<QString> existing(visible.begin(), visible.end());
+    const QStringList suspects = withoutSuspects ? presentSuspects() : QStringList();
+    const QStringList now = activeFiles(m_options.entries);
+    const QStringList order = Rollback::restoreOrder(m_marker, withoutSuspects, now, existing);
+    const QString text = suspects.isEmpty() ? Rollback::restoredAllText() : Rollback::restoredWithoutText(suspects);
+    if (order == now) {
+        dismissRollback();  // already like that: nothing to write, nothing left to ask
+        return false;
+    }
+    return apply(order, text);  // a written order removes the marker (Packs::writeOrder)
+}
+
+void ResourcePacksPage::dismissRollback()
+{
+    if (m_env.historyPath) {
+        Content::Packs::Rollback::clearMarker(Content::Packs::Rollback::markerPathForHistory(m_env.historyPath()));
+    }
+    rebuildNow();
 }
 
 void ResourcePacksPage::applyView()
@@ -568,6 +668,7 @@ void ResourcePacksPage::updateChrome()
     m_list->rowDelegate()->setLocked(m_locked);
     m_list->viewport()->update();
     m_banner->setVisible(m_locked);
+    updateRollbackNotice();
 }
 
 void ResourcePacksPage::setView(View view)

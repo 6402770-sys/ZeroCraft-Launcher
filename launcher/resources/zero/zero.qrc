@@ -89,6 +89,20 @@
         <file>icons/gem.svg</file>
         <file>icons/wrench.svg</file>
         <file>icons/x.svg</file>
+        <file>sounds/retro/click.wav</file>
+        <file>sounds/retro/toggle-on.wav</file>
+        <file>sounds/retro/toggle-off.wav</file>
+        <file>sounds/retro/navigate.wav</file>
+        <file>sounds/retro/success.wav</file>
+        <file>sounds/retro/error.wav</file>
+        <file>sounds/retro/launch.wav</file>
+        <file>sounds/soft/click.wav</file>
+        <file>sounds/soft/toggle-on.wav</file>
+        <file>sounds/soft/toggle-off.wav</file>
+        <file>sounds/soft/navigate.wav</file>
+        <file>sounds/soft/success.wav</file>
+        <file>sounds/soft/error.wav</file>
+        <file>sounds/soft/launch.wav</file>
         <file alias="icons/LICENSE">icons/LICENSE</file>
     </qresource>
 </RCC>

@@ -29,6 +29,7 @@
 #include "zero/content/InstalledPacks.h"
 #include "zero/content/ModTarget.h"
 #include "zero/content/PackOrder.h"
+#include "zero/content/PackRollback.h"
 
 class MinecraftInstance;
 class QAction;
@@ -51,6 +52,8 @@ class RunningBanner;
 }
 
 namespace PacksUi {
+
+class PackRollbackNotice;
 
 /// What the page needs from the application besides the model (tests inject fakes; the application page fills them from the instance).
 struct PacksPageEnvironment {
@@ -123,6 +126,16 @@ class ResourcePacksPage : public QWidget, public BasePage {
     int selectedRow() const;
     void selectRow(int row);
 
+    /// "Minecraft turned off your resource packs" (zero/content/PackRollback): the marker the last launch left, when it applies here.
+    bool rollbackShown() const;
+    const Content::Packs::Rollback::Marker& rollbackMarker() const { return m_marker; }
+    PackRollbackNotice* rollbackNotice() const { return m_rollbackNotice; }
+    /// Puts the packs of the last launch back (minus the suspects when `withoutSuspects`) with one write and a toast with Undo. False when
+    /// nothing was written.
+    bool restoreRollback(bool withoutSuspects);
+    /// Forgets the marker (the notice and the "Broke the last launch" pills go).
+    void dismissRollback();
+
     // Parts, for the tests and the dev aids.
     PackListView* listView() const { return m_list; }
     PackListModel* listModel() const { return m_listModel; }
@@ -156,6 +169,11 @@ class ResourcePacksPage : public QWidget, public BasePage {
     void updateChrome();
     void setView(View view);
     void reloadOptions();
+    /// The suspects of the marker whose files are still here and visible to the game, in the order of the marker.
+    QStringList presentSuspects() const;
+    /// The packs of the marker that are still here (visible to the game).
+    QStringList presentAttempted() const;
+    void updateRollbackNotice();
     /// A row of the list and the Prism pack behind it, checked: `pack` is null when the Prism model moved on since the row was read.
     struct Picked {
         int listRow = -1;
@@ -182,6 +200,7 @@ class ResourcePacksPage : public QWidget, public BasePage {
 
     // chrome
     ModsUi::RunningBanner* m_banner = nullptr;
+    PackRollbackNotice* m_rollbackNotice = nullptr;
     QWidget* m_toolbar = nullptr;
     QLineEdit* m_search = nullptr;
     Content::SegmentedControl* m_filterControl = nullptr;
@@ -204,6 +223,7 @@ class ResourcePacksPage : public QWidget, public BasePage {
     QList<quintptr> m_tokens;               ///< the Prism packs of m_rows (compared, never dereferenced)
     QList<int> m_sourceRows;
     Content::Packs::PackList m_options;
+    Content::Packs::Rollback::Marker m_marker;
     OrderState m_orderState = OrderState::Ready;
     Content::Packs::Filter m_filter = Content::Packs::Filter::All;
     QString m_query;

@@ -114,6 +114,18 @@ Result<> exportTheme(const QString& themeFolder, const QString& zipPath)
     if (auto r = collect(def.fontFile, kFontStem, fontExtensions(), kMaxFontBytes, QObject::tr("font"), fontSource, fontEntry); !r)
         return std::unexpected{ r.error() };
 
+    // Interface sounds: flat `sound-<event>.wav` entries; a missing or oversize file is dropped from the definition.
+    QMap<QString, QString> soundSources;  // entry name -> file
+    for (auto it = def.sounds.begin(); it != def.sounds.end();) {
+        const QFileInfo fi(folder.absoluteFilePath(it.value()));
+        if (!isSoundFileName(it.value()) || !fi.isFile() || fi.size() > kMaxSoundBytes) {
+            it = def.sounds.erase(it);
+            continue;
+        }
+        soundSources.insert(it.value(), fi.absoluteFilePath());
+        ++it;
+    }
+
     const QString partPath = zipPath + QStringLiteral(".part");
     QFile::remove(partPath);
     {
@@ -137,6 +149,10 @@ Result<> exportTheme(const QString& themeFolder, const QString& zipPath)
         }
         if (!fontSource.isEmpty()) {
             if (auto r = writer.addFile(fontSource, fontEntry); !r)
+                return fail(r.error());
+        }
+        for (auto it = soundSources.cbegin(); it != soundSources.cend(); ++it) {
+            if (auto r = writer.addFile(it.value(), it.key()); !r)
                 return fail(r.error());
         }
         if (auto r = writer.close(); !r) {
@@ -171,6 +187,7 @@ Result<ImportedTheme> importTheme(const QString& zipPath, const QString& themesR
     QByteArray json;
     bool haveJson = false;
     QString backgroundEntry, iconEntry, fontEntry;
+    QStringList soundEntries;
     bool tooBig = false;
 
     MMCZip::ArchiveReader reader(zipPath);
@@ -180,8 +197,9 @@ Result<ImportedTheme> importTheme(const QString& zipPath, const QString& themesR
         const bool isBackground = isBackgroundEntry(name);
         const bool isIcon = isIconEntry(name);
         const bool isFont = isFontEntry(name);
+        const bool isSound = isSoundFileName(name);
         // Flat entries only: anything with a separator, "..", a drive or an unknown name fails both checks.
-        if (!f->isFile() || (!isJson && !isBackground && !isIcon && !isFont))
+        if (!f->isFile() || (!isJson && !isBackground && !isIcon && !isFont && !isSound))
             return std::unexpected{ QObject::tr("The theme file contains an unexpected entry (\"%1\") and was rejected.").arg(name) };
 
         if (isJson) {
@@ -196,13 +214,22 @@ Result<ImportedTheme> importTheme(const QString& zipPath, const QString& themesR
             return {};
         }
 
-        QString* entry = isBackground ? &backgroundEntry : isIcon ? &iconEntry : &fontEntry;
-        if (!entry->isEmpty())
+        QString soundDummy;
+        QString* entry = isBackground ? &backgroundEntry : isIcon ? &iconEntry : isFont ? &fontEntry : &soundDummy;
+        if (isSound) {
+            if (soundEntries.contains(name))
+                return std::unexpected{ QObject::tr("The theme file contains two copies of a sound and was rejected.") };
+            soundEntries << name;
+        } else if (!entry->isEmpty())
             return std::unexpected{ isBackground ? QObject::tr("The theme file contains two background files and was rejected.")
                                                  : isIcon ? QObject::tr("The theme file contains two icons and was rejected.")
                                                           : QObject::tr("The theme file contains two fonts and was rejected.") };
-        *entry = name;
-        const qint64 cap = isBackground ? limits.maxBackgroundBytes : isIcon ? limits.maxIconBytes : limits.maxFontBytes;
+        if (!isSound)
+            *entry = name;
+        const qint64 cap = isBackground ? limits.maxBackgroundBytes
+                           : isIcon     ? limits.maxIconBytes
+                           : isFont     ? limits.maxFontBytes
+                                        : limits.maxSoundBytes;
         QFile out(stage.absoluteFilePath(name));
         if (!out.open(QIODevice::WriteOnly))
             return std::unexpected{ QObject::tr("Could not write %1: %2").arg(name, out.errorString()) };
@@ -259,6 +286,17 @@ Result<ImportedTheme> importTheme(const QString& zipPath, const QString& themesR
     };
     reconcile(def->iconFile, iconEntry);
     reconcile(def->fontFile, fontEntry);
+
+    // The sounds the definition names are the ones in the archive; shipped files nobody names, and named ones that are missing, are dropped.
+    for (auto it = def->sounds.begin(); it != def->sounds.end();) {
+        if (soundEntries.contains(it.value()))
+            ++it;
+        else
+            it = def->sounds.erase(it);
+    }
+    for (const QString& entry : std::as_const(soundEntries))
+        if (!def->sounds.contains(soundEventOf(entry)))
+            QFile::remove(stage.absoluteFilePath(entry));
 
     def->name = uniqueName(def->name, existingThemeNames(root));
     const QString slug = uniqueSlug(root, def->name);

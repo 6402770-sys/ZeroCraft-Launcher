@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "PackOrder.h"
 
+#include "zero/content/PackRollback.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -456,6 +458,8 @@ Outcome writeOrder(const QString& optionsPath, const QString& historyPath, const
         outcome.result = Result::IoError;
         return outcome;
     }
+    // a new pack order answers the question "the game turned the packs off" (zero/content/PackRollback): the marker is obsolete
+    Rollback::clearMarker(Rollback::markerPathForHistory(historyPath));
     outcome.result = Result::Ok;
     outcome.id = entry.id;
     return outcome;

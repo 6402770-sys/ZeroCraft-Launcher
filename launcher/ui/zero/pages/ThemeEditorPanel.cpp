@@ -31,6 +31,7 @@
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroMotion.h"
 #include "ui/zero/ZeroPaint.h"
+#include "ui/zero/ZeroSound.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
@@ -625,6 +626,69 @@ void ThemeEditorPanel::build()
     m_fontBlock->hide();
     col->addWidget(m_fontBlock);
 
+    // Sounds (interface sounds of this theme)
+    section(tr("Sounds"));
+    m_soundStyle = new Content::SegmentedControl(
+        { { QStringLiteral("retro"), tr("Retro"), {} }, { QStringLiteral("soft"), tr("Soft"), {} }, { QStringLiteral("none"), tr("None"), {} } }, body);
+    m_soundStyle->setAccessibleName(tr("Sound style"));
+    m_soundStyle->setToolTip(tr("The style of the interface sounds. Sounds you replace below play in any style."));
+    m_soundStyle->onActivated = [this](const QString& v) { m_model->setSoundStyle(v); };
+    col->addWidget(m_soundStyle);
+    col->addSpacing(Tokens::spaceSm);
+    const struct {
+        const char* id;
+        QString label;
+    } soundEvents[] = { { "click", tr("Click") },     { "toggle-on", tr("Switch on") }, { "toggle-off", tr("Switch off") }, { "navigate", tr("Navigate") },
+                        { "success", tr("Success") }, { "error", tr("Error") },         { "launch", tr("Launch") } };
+    for (const auto& ev : soundEvents) {
+        const QString event = QString::fromLatin1(ev.id);
+        SoundRow row;
+        auto* rowWidget = new QWidget(body);
+        auto* line = new QHBoxLayout(rowWidget);
+        line->setContentsMargins(0, 0, 0, 0);
+        line->setSpacing(Tokens::spaceXs);
+        auto* names = new QVBoxLayout;
+        names->setContentsMargins(0, 0, 0, 0);
+        names->setSpacing(0);
+        row.name = makeLabel(ev.label, Role::Body, rowWidget);
+        names->addWidget(row.name);
+        row.file = makeLabel(QString(), Role::Caption, rowWidget, "tertiary");
+        row.file->hide();
+        names->addWidget(row.file);
+        line->addLayout(names, 1);
+        row.play = new QToolButton(rowWidget);
+        Style::setProperty(row.play, "zeroVariant", "ghost");
+        Style::setProperty(row.play, "zeroSize", "icon");
+        row.play->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        row.play->setIconSize(QSize(14, 14));
+        row.play->setFixedSize(24, 24);
+        row.play->setCursor(Qt::PointingHandCursor);
+        row.play->setToolTip(tr("Play this sound"));
+        row.play->setAccessibleName(tr("Play %1 sound").arg(ev.label));
+        row.play->setProperty(Sound::kOptOutProperty, true);  // it plays its own sound (the preview), not a click on top
+        connect(row.play, &QToolButton::clicked, this, [this, event]() { playSound(event); });
+        line->addWidget(row.play);
+        row.replace = new LinkButton(tr("Replace…"), 22, rowWidget);
+        row.replace->setAccessibleName(tr("Replace %1 sound").arg(ev.label));
+        connect(row.replace, &QPushButton::clicked, this, [this, event]() { chooseSound(event); });
+        line->addWidget(row.replace);
+        row.reset = new LinkButton(tr("Reset"), 22, rowWidget);
+        row.reset->setAccessibleName(tr("Reset %1 sound").arg(ev.label));
+        row.reset->hide();
+        connect(row.reset, &QPushButton::clicked, this, [this, event]() {
+            m_soundMessage->hide();
+            m_model->resetEventSound(event);
+        });
+        line->addWidget(row.reset);
+        m_soundRows.insert(event, row);
+        col->addWidget(rowWidget);
+    }
+    m_soundMessage = makeLabel(QString(), Role::Caption, body);
+    m_soundMessage->setWordWrap(true);
+    Style::setProperty(m_soundMessage, "zeroTone", "danger");
+    m_soundMessage->hide();
+    col->addWidget(m_soundMessage);
+
     // Corners
     section(tr("Corners"));
     m_corners = new Content::SegmentedControl({ { QStringLiteral("rounded"), tr("Rounded"), {} }, { QStringLiteral("square"), tr("Square"), {} } }, body);
@@ -742,7 +806,7 @@ bool ThemeEditorPanel::save()
     m_live.stop();
     QString id;
     if (!m_library->saveTheme(m_model->folder(), m_model->definition(), m_model->pendingBackground(), nullptr, &id,
-                              { m_model->pendingIcon(), m_model->pendingFont() }))
+                              { m_model->pendingIcon(), m_model->pendingFont(), m_model->pendingEventSounds() }))
         return false;  // the library showed the error; the panel stays as the user left it
     closePanel();
     emit saved(id);
@@ -905,6 +969,35 @@ void ThemeEditorPanel::chooseIcon()
     m_model->setIcon(path);
 }
 
+bool ThemeEditorPanel::setEventSoundFile(const QString& event, const QString& path)
+{
+    if (auto ok = Custom::validateSoundSource(path); !ok) {
+        m_soundMessage->setText(ok.error());
+        m_soundMessage->show();
+        return false;
+    }
+    m_soundMessage->hide();
+    m_model->setEventSound(event, path);
+    return true;
+}
+
+void ThemeEditorPanel::chooseSound(const QString& event)
+{
+    const QString start = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
+    const QString path = QFileDialog::getOpenFileName(this, tr("Choose a sound"), start, tr("Sounds (*.wav)"));
+    if (path.isEmpty())
+        return;
+    setEventSoundFile(event, path);
+}
+
+void ThemeEditorPanel::playSound(const QString& event)
+{
+    if (const auto e = Sound::eventFromId(event)) {
+        flushPreview();  // the live spec (style, picked files) must be the app's current one
+        Sound::preview(*e);
+    }
+}
+
 void ThemeEditorPanel::chooseFont()
 {
     const QString start = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
@@ -1024,6 +1117,15 @@ void ThemeEditorPanel::syncFromModel()
         m_iconPreview->setPixmap(pm);
     }
 
+    // Sounds
+    m_soundStyle->setSelected(m_model->soundStyle());
+    for (auto it = m_soundRows.cbegin(); it != m_soundRows.cend(); ++it) {
+        const bool own = m_model->hasEventSound(it.key());
+        it->reset->setVisible(own);
+        it->file->setVisible(own);
+        it->file->setText(m_model->eventSoundName(it.key()));
+    }
+
     // Font
     const bool customFont = m_model->fontChoice() == ThemeEditorModel::AssetChoice::Custom;
     m_fontControl->setSelected(customFont ? QStringLiteral("custom") : QStringLiteral("default"));
@@ -1047,6 +1149,8 @@ void ThemeEditorPanel::refreshIcons()
 {
     const auto& t = Theme::current();
     m_menuButton->setIcon(Icons::icon(QStringLiteral("ellipsis"), t.textSecondary));
+    for (auto it = m_soundRows.cbegin(); it != m_soundRows.cend(); ++it)
+        it->play->setIcon(Icons::icon(QStringLiteral("play"), t.textSecondary));
     m_allToggle->setIcon(Icons::icon(m_allToggle->isChecked() ? QStringLiteral("chevron-up") : QStringLiteral("chevron-down"), t.textSecondary));
 }
 

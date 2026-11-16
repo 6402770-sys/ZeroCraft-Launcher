@@ -782,6 +782,51 @@ class ZeroThemeEditorTest : public QObject {
         f.panel->cancel();
     }
 
+    void soundsSectionReplacesRejectsAndResets()
+    {
+        Fixture f;
+        f.panel->openNew();
+        QVERIFY(f.panel->soundStyleControl());
+        QCOMPARE(f.panel->model()->soundStyle(), QStringLiteral("soft"));
+        QVERIFY(!f.panel->soundResetButton(QStringLiteral("click"))->isVisibleTo(f.panel));
+
+        // Anything but a real .wav is refused with an inline message and changes nothing.
+        const QString mp3 = f.dir.filePath(QStringLiteral("song.mp3"));
+        QFile(mp3).open(QIODevice::WriteOnly);
+        QVERIFY(!f.panel->setEventSoundFile(QStringLiteral("click"), mp3));
+        QVERIFY(f.panel->soundMessage()->isVisibleTo(f.panel));
+        QVERIFY(!f.panel->soundMessage()->text().isEmpty());
+        QVERIFY(!f.panel->model()->hasEventSound(QStringLiteral("click")));
+
+        // A valid WAV is taken; Reset shows, and it is copied into the theme folder on save.
+        const QString wav = f.dir.filePath(QStringLiteral("mine.wav"));
+        {
+            QFile w(wav);
+            QVERIFY(w.open(QIODevice::WriteOnly));
+            QByteArray h("RIFF\x24\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0\x44\xAC\0\0\x88\x58\x01\0\x02\0\x10\0data\0\0\0\0", 44);
+            w.write(h);
+        }
+        QVERIFY(f.panel->setEventSoundFile(QStringLiteral("click"), wav));
+        QVERIFY(!f.panel->soundMessage()->isVisibleTo(f.panel));
+        QVERIFY(f.panel->soundResetButton(QStringLiteral("click"))->isVisibleTo(f.panel));
+        f.panel->soundStyleControl()->setSelected(QStringLiteral("retro"));
+        f.panel->model()->setSoundStyle(QStringLiteral("retro"));
+        QCOMPARE(f.panel->model()->soundStyle(), QStringLiteral("retro"));
+
+        f.panel->nameEdit()->setText(QStringLiteral("Noisy"));
+        emit f.panel->nameEdit()->textEdited(QStringLiteral("Noisy"));
+        QVERIFY(f.panel->save());
+        QVERIFY(QFileInfo::exists(f.root + QStringLiteral("/noisy/sound-click.wav")));
+
+        // Edit again and Reset: the file goes away on the next save.
+        QVERIFY(f.panel->openEdit(f.appliedIds.last()));
+        QVERIFY(f.panel->soundResetButton(QStringLiteral("click"))->isVisibleTo(f.panel));
+        f.panel->soundResetButton(QStringLiteral("click"))->click();
+        QVERIFY(!f.panel->model()->hasEventSound(QStringLiteral("click")));
+        QVERIFY(f.panel->save());
+        QVERIFY(!QFileInfo::exists(f.root + QStringLiteral("/noisy/sound-click.wav")));
+    }
+
     void panelWidthFollowsThePage()
     {
         Fixture f;

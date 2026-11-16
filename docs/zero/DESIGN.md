@@ -156,3 +156,11 @@ Implementation notes (motion system, `ZeroMotion` / `ZeroTransition` / `ZeroRipp
   (grid cards in the Library do lift 2 px with a real outer shadow because the delegate owns the whole viewport).
 - Dialogs fade in through the window opacity (160 ms): opacity 0 is set while the dialog polishes (before its native window
   exists) and eased to 1 on show.
+
+## Interface sounds
+
+- **Subtle.** Short blips and taps (each at most 300 ms, success at most 500 ms), peak about -6 dBFS, played at 35 % by default. No hover sounds, nothing for programmatic changes, never louder than the user's setting.
+- **Original.** Every sound is synthesized by `scripts/zero/gen-ui-sounds.py` (oscillators and fixed-seed noise, deterministic). Nothing is sampled from Minecraft or any third party. The WAVs are generated once and checked in (`launcher/resources/zero/sounds/<set>/<event>.wav`).
+- **Per theme.** Minecraft plays the `retro` set (square / pulse 8-bit blips); Obsidian and the other built-ins play `soft` (sine / triangle with a hint of filtered noise). A custom theme picks Retro / Soft / None in Theme Studio ("Sounds") and may replace single events with its own `.wav`; those files live in the theme folder (`sound-<event>.wav`) and travel with an exported theme. Replaced sounds keep playing under "None".
+- **Events.** `click`, `toggle-on`, `toggle-off`, `navigate` (rail and instance page list), `success` / `error` (toasts), `launch` (Play).
+- **Toggle.** Appearance > Interface sounds (on by default) with a volume slider and a Preview button. One app-wide filter (`ui/zero/ZeroSound`) does the work; a widget opts out with the property `zeroNoSound`, or picks another event with `zeroSound` (`navigate`, `launch`, `none`).

@@ -95,6 +95,7 @@ void ThemeEditorModel::begin(const Definition& def, const QString& folder, const
     m_stash[0] = m_stash[1] = Stash();
     m_icon = Asset();
     m_font = Asset();
+    m_pendingSounds.clear();
     // The three main colors are always explicit in the editor; "touched" = differs from the base theme's own color.
     for (MainColor c : { MainColor::Accent, MainColor::Background, MainColor::Text }) {
         QColor& field = mainField(m_def, c);
@@ -366,6 +367,8 @@ Definition ThemeEditorModel::effectiveDefinition() const
         d.iconFile = QStringLiteral("icon.") + QFileInfo(m_icon.pending).suffix().toLower();
     if (!m_font.pending.isEmpty())
         d.fontFile = QStringLiteral("font.") + QFileInfo(m_font.pending).suffix().toLower();
+    for (auto it = m_pendingSounds.cbegin(); it != m_pendingSounds.cend(); ++it)
+        d.sounds.insert(it.key(), soundFileName(it.key()));
     if (d.backgroundKind == BackgroundKind::None)
         d.cardOpacity = 1.0;  // translucent cards over a flat background would just be dull
     if (!m_pending.isEmpty())
@@ -396,6 +399,9 @@ ThemeSpec ThemeEditorModel::spec() const
         s.appIcon = m_icon.pending;
     if (!m_font.pending.isEmpty() && QFileInfo(m_font.pending).isFile())
         s.fontFile = m_font.pending;
+    for (auto it = m_pendingSounds.cbegin(); it != m_pendingSounds.cend(); ++it)
+        if (QFileInfo(it.value()).isFile())
+            s.soundFiles.insert(it.key(), it.value());
     return s;
 }
 
@@ -521,6 +527,66 @@ bool ThemeEditorModel::selectCustomFont()
 void ThemeEditorModel::setFont(const QString& path)
 {
     setAsset(m_font, &Definition::fontFile, QStringLiteral("font."), path);
+}
+
+// ---------------------------------------------------------------- interface sounds
+
+QString ThemeEditorModel::soundStyle() const
+{
+    if (soundSetIds().contains(m_def.soundSet))
+        return m_def.soundSet;
+    return m_def.base == Base::Minecraft ? QStringLiteral("retro") : QStringLiteral("soft");
+}
+
+void ThemeEditorModel::setSoundStyle(const QString& style)
+{
+    if (!soundSetIds().contains(style) || soundStyle() == style)
+        return;
+    m_def.soundSet = style;
+    edited();
+}
+
+bool ThemeEditorModel::hasEventSound(const QString& event) const
+{
+    return m_pendingSounds.contains(event) || m_def.sounds.contains(event);
+}
+
+QString ThemeEditorModel::eventSoundName(const QString& event) const
+{
+    if (m_pendingSounds.contains(event))
+        return QFileInfo(m_pendingSounds.value(event)).fileName();
+    return m_def.sounds.value(event);
+}
+
+QString ThemeEditorModel::eventSoundPath(const QString& event) const
+{
+    if (m_pendingSounds.contains(event)) {
+        const QString p = m_pendingSounds.value(event);
+        return QFileInfo(p).isFile() ? p : QString();
+    }
+    const QString file = m_def.sounds.value(event);
+    if (file.isEmpty() || m_folder.isEmpty())
+        return {};
+    const QFileInfo fi(QDir(m_folder).absoluteFilePath(file));
+    return fi.isFile() ? fi.absoluteFilePath() : QString();
+}
+
+void ThemeEditorModel::setEventSound(const QString& event, const QString& path)
+{
+    if (path.isEmpty() || !soundEventIds().contains(event))
+        return;
+    m_pendingSounds.insert(event, QFileInfo(path).absoluteFilePath());
+    m_def.sounds.insert(event, soundFileName(event));
+    edited();
+}
+
+void ThemeEditorModel::resetEventSound(const QString& event)
+{
+    if (!hasEventSound(event))
+        return;
+    m_pendingSounds.remove(event);
+    m_def.sounds.remove(event);
+    edited();
 }
 
 QColor ThemeEditorModel::parseHex(const QString& text)

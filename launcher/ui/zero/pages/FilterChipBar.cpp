@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QWheelEvent>
+#include "ui/zero/ZeroSmoothScroll.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroMotion.h"
 #include "ui/zero/ZeroPaint.h"
@@ -207,6 +208,7 @@ FilterChipBar::FilterChipBar(QWidget* parent) : QWidget(parent)
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     m_scroll = new ChipScroll(this);
+    m_scroll->setProperty(SmoothScroll::kOptOutProperty, true);  // ChipScroll maps the wheel to horizontal itself
     m_scroll->setFrameShape(QFrame::NoFrame);
     m_scroll->setWidgetResizable(true);
     m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);

@@ -144,6 +144,35 @@ ThemeSpec baseSpec(Base base)
     return base == Base::Minecraft ? ThemeSpec::minecraft() : ThemeSpec::obsidian();
 }
 
+QStringList soundEventIds()
+{
+    return { QStringLiteral("click"),   QStringLiteral("toggle-on"), QStringLiteral("toggle-off"), QStringLiteral("navigate"),
+             QStringLiteral("success"), QStringLiteral("error"),     QStringLiteral("launch") };
+}
+
+QStringList soundSetIds()
+{
+    return { QStringLiteral("retro"), QStringLiteral("soft"), QStringLiteral("none") };
+}
+
+QString soundFileName(const QString& event)
+{
+    return soundEventIds().contains(event) ? QStringLiteral("sound-") + event + QStringLiteral(".wav") : QString();
+}
+
+QString soundEventOf(const QString& name)
+{
+    for (const QString& event : soundEventIds())
+        if (name == soundFileName(event))
+            return event;
+    return {};
+}
+
+bool isSoundFileName(const QString& name)
+{
+    return !soundEventOf(name).isEmpty();
+}
+
 QStringList overrideKeys()
 {
     QStringList keys;
@@ -238,6 +267,16 @@ Result<Definition> parseDefinition(const QByteArray& json)
     const QString font = root.value(QStringLiteral("font")).toString();
     if (isPlainFileWith(font, fontExtensions()))
         d.fontFile = font;
+
+    // Interface sounds: a known style, and per event the one file name that event may use.
+    const QJsonObject sounds = root.value(QStringLiteral("sounds")).toObject();
+    const QString set = sounds.value(QStringLiteral("set")).toString();
+    if (soundSetIds().contains(set))
+        d.soundSet = set;
+    const QJsonObject files = sounds.value(QStringLiteral("files")).toObject();
+    for (const QString& event : soundEventIds())
+        if (files.value(event).toString() == soundFileName(event))
+            d.sounds.insert(event, soundFileName(event));
     return d;
 }
 
@@ -283,6 +322,18 @@ QByteArray serializeDefinition(const Definition& def)
         root.insert(QStringLiteral("icon"), def.iconFile);
     if (!def.fontFile.isEmpty())
         root.insert(QStringLiteral("font"), def.fontFile);
+    if (!def.soundSet.isEmpty() || !def.sounds.isEmpty()) {
+        QJsonObject sounds;
+        if (soundSetIds().contains(def.soundSet))
+            sounds.insert(QStringLiteral("set"), def.soundSet);
+        QJsonObject files;
+        for (auto it = def.sounds.cbegin(); it != def.sounds.cend(); ++it)
+            if (it.value() == soundFileName(it.key()))
+                files.insert(it.key(), it.value());
+        if (!files.isEmpty())
+            sounds.insert(QStringLiteral("files"), files);
+        root.insert(QStringLiteral("sounds"), sounds);
+    }
     return QJsonDocument(root).toJson(QJsonDocument::Indented);
 }
 
@@ -450,6 +501,17 @@ ThemeSpec deriveSpec(const Definition& def, const QString& folder, const QString
     };
     s.appIcon = folderFile(def.iconFile, iconExtensions());
     s.fontFile = folderFile(def.fontFile, fontExtensions());
+
+    // Interface sounds: the chosen style, and the theme's own WAVs (a missing file is treated as "not replaced").
+    if (soundSetIds().contains(def.soundSet))
+        s.soundSet = def.soundSet;
+    if (!folder.isEmpty()) {
+        for (auto it = def.sounds.cbegin(); it != def.sounds.cend(); ++it) {
+            const QString path = folderFile(it.value(), { QStringLiteral("wav") });
+            if (it.value() == soundFileName(it.key()) && !path.isEmpty())
+                s.soundFiles.insert(it.key(), path);
+        }
+    }
 
     // Card opacity applies to surface / surfaceHover only (cards and panels); everything else stays opaque.
     s.cardOpacity = clamp(def.cardOpacity, kMinCardOpacity, 1.0);

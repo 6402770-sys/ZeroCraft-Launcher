@@ -26,6 +26,11 @@ QString technicMinecraft(const ModpackItem& item)
 }
 }  // namespace
 
+bool canUpdateInPlace(Provider provider)
+{
+    return !isTechnic(provider);
+}
+
 bool isInstallable(const ModpackVersion& version, Provider provider)
 {
     if (isTechnic(provider)) {
@@ -84,6 +89,7 @@ std::optional<InstallPlan> planInstall(const InstallRequest& request)
     const ModpackItem& item = *request.item;
     InstallPlan plan;
     const bool update = !request.updateInstanceId.isEmpty();
+    plan.createNew = !update;
 
     if (isTechnic(item.provider)) {
         // TechnicPage::selectVersion(): a zip URL wins over Solder; Solder gets the build the user picked.
@@ -141,6 +147,9 @@ InstanceTask* createInstallTask(const InstallPlan& plan, QWidget* parent, QNetwo
             task = new Technic::SingleZipPackInstallTask(plan.url, plan.minecraftVersion);
             break;
     }
+    // The install dialog asked "New instance or update?": the provider's own question ("Similar modpack was found!") never shows.
+    task->setConfirmUpdate(false);
+    task->setAlwaysCreateNew(plan.createNew);
     // Exactly what NewInstanceDialog::extractTask() sets.
     task->setName(plan.name);
     task->setOriginalName(plan.originalName.trimmed(), plan.originalVersion);

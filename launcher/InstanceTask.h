@@ -35,6 +35,9 @@ class InstanceTask : public Task {
 
     bool shouldConfirmUpdate() const { return m_confirmUpdate; }
     void setConfirmUpdate(bool confirm) { m_confirmUpdate = confirm; }
+    // ZERO: true = never look for an instance of the same modpack to update, always create a new one (the install dialog asked already).
+    bool shouldAlwaysCreateNew() const { return m_alwaysCreateNew; }
+    void setAlwaysCreateNew(bool createNew) { m_alwaysCreateNew = createNew; }
 
     bool shouldOverride() const { return m_overrideExisting; }
     bool shouldCopyTemplateDir() const { return m_copyTemplateDir; }
@@ -67,6 +70,7 @@ class InstanceTask : public Task {
 
     bool m_overrideExisting = false;
     bool m_confirmUpdate = true;
+    bool m_alwaysCreateNew = false;
     bool m_copyTemplateDir = false;
 
     QString m_originalInstanceId;

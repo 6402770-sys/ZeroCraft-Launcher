@@ -191,7 +191,7 @@ void ModDelegate::paintIcon(QPainter* p, const QRect& rect, const Row& row) cons
         p->setPen(QPen(t.border, 1));
         p->setBrush(Qt::NoBrush);
         p->drawPath(Paint::panelPath(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5), t.radiusMd));
-        Icons::icon(QStringLiteral("blocks"), t.textTertiary).paint(p, QRect(rect.center().x() - 8, rect.center().y() - 8, 16, 16));
+        Icons::icon(m_fallbackIcon, t.textTertiary).paint(p, QRect(rect.center().x() - 8, rect.center().y() - 8, 16, 16));
     } else {
         p->setClipPath(shape);
         Content::Draw::drawCover(p, rect, pixmap);

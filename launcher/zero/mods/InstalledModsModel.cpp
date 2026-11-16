@@ -634,8 +634,9 @@ RemoveConfirm removeConfirm(const QStringList& names, Noun noun)
 {
     RemoveConfirm confirm;
     confirm.title = names.size() == 1 ? QObject::tr("Remove %1?").arg(names.first())
-                    : noun == Noun::Packs ? QObject::tr("Remove %1 packs?").arg(names.size())
-                                          : QObject::tr("Remove %1 mods?").arg(names.size());
+                    : noun == Noun::Packs     ? QObject::tr("Remove %1 packs?").arg(names.size())
+                    : noun == Noun::Shaders ? QObject::tr("Remove %1 shader packs?").arg(names.size())
+                                            : QObject::tr("Remove %1 mods?").arg(names.size());
     confirm.listed = names.mid(0, kRemoveListMax);
     if (names.size() > kRemoveListMax) {
         confirm.more = QObject::tr("and %1 more").arg(names.size() - kRemoveListMax);
@@ -652,14 +653,18 @@ RemoveResult removeResult(const QStringList& removedNames, const QStringList& fa
     if (removedNames.size() == 1) {
         removed = QObject::tr("Removed %1").arg(removedNames.first());
     } else if (!removedNames.isEmpty()) {
-        removed = (noun == Noun::Packs ? QObject::tr("Removed %1 packs") : QObject::tr("Removed %1 mods")).arg(removedNames.size());
+        removed = (noun == Noun::Packs     ? QObject::tr("Removed %1 packs")
+                   : noun == Noun::Shaders ? QObject::tr("Removed %1 shader packs")
+                                           : QObject::tr("Removed %1 mods"))
+                      .arg(removedNames.size());
     }
     QString failed;
     if (failedNames.size() == 1) {
         failed = QObject::tr("Couldn't move %1 to the Recycle Bin").arg(failedNames.first());
     } else if (!failedNames.isEmpty()) {
-        failed = (noun == Noun::Packs ? QObject::tr("Couldn't move %1 packs to the Recycle Bin")
-                                      : QObject::tr("Couldn't move %1 mods to the Recycle Bin"))
+        failed = (noun == Noun::Packs     ? QObject::tr("Couldn't move %1 packs to the Recycle Bin")
+                  : noun == Noun::Shaders ? QObject::tr("Couldn't move %1 shader packs to the Recycle Bin")
+                                          : QObject::tr("Couldn't move %1 mods to the Recycle Bin"))
                      .arg(failedNames.size());
     }
     if (failed.isEmpty()) {

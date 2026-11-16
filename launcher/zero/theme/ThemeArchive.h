@@ -14,6 +14,8 @@ inline constexpr qint64 kMaxBackgroundBytes = 200LL * 1024 * 1024;
 /// The largest launcher icon (2 MB) and UI font file (20 MB) a theme may carry (editor pickers, import).
 inline constexpr qint64 kMaxIconBytes = 2LL * 1024 * 1024;
 inline constexpr qint64 kMaxFontBytes = 20LL * 1024 * 1024;
+/// The largest interface sound (a .wav) a theme may carry per event.
+inline constexpr qint64 kMaxSoundBytes = 1LL * 1024 * 1024;
 
 /// Size caps applied while an import streams the archive.
 struct ImportLimits {
@@ -21,6 +23,7 @@ struct ImportLimits {
     qint64 maxBackgroundBytes = kMaxBackgroundBytes;
     qint64 maxIconBytes = kMaxIconBytes;
     qint64 maxFontBytes = kMaxFontBytes;
+    qint64 maxSoundBytes = kMaxSoundBytes;
 };
 
 /// File extensions a background entry (`background.<ext>`) may have: imageExtensions() + videoExtensions() (ThemeFiles.h).
@@ -30,7 +33,7 @@ QStringList backgroundExtensions();
 QStringList existingThemeNames(const QString& themesRoot);
 
 /// Writes `zipPath` (replacing it) with `zero-theme.json` and the background, icon and font files only (stored as `background.<ext>`,
-/// `icon.<ext>`, `font.<ext>`; a missing file is exported as "none" / default). Fails when the folder holds no readable theme.
+/// `icon.<ext>`, `font.<ext>`, `sound-<event>.wav`; a missing file is exported as "none" / default). Fails when the folder holds no readable theme.
 Result<> exportTheme(const QString& themeFolder, const QString& zipPath);
 
 struct ImportedTheme {

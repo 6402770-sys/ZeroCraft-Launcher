@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-14 (session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-16 (session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds; NOT committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -664,6 +664,35 @@ remove them with `git worktree remove --force <path>` once the owner agrees.
   `MainWindow::startGuidedTour()`, palette entry "Take the tour" (`action:take-tour`), `ZeroNavRail::itemWidget`, `LibraryPage::newInstanceButton`.
   Step 3 (New instance) shows Library for that step only. Dev aids `ZERO_FORCE_TOUR=1`, `ZERO_SCREENSHOT_TOUR=<1-6>`. Details: SHELL.md "Guided tour". Tests: `ZeroTour_test.cpp`.
   Real click-through with the mouse is still open for the owner (see QA below).
+
+- ✅ **Modpack install: first decision + Keep my game settings** (not committed): the Discover modpack install dialog starts with "What do you want to do?"
+  (New instance / Update an instance cards, `InstallChoiceCard`), Update lists every instance that manages the pack (name, version, last played) and
+  has "Keep my game settings" (on); the provider's second prompt ("Similar modpack was found!") is gone: `createInstallTask` calls `setConfirmUpdate(false)`
+  and, for a New instance, the new `InstanceTask::setAlwaysCreateNew(true)` (read in `FlameCreationTask` / `ModrinthCreationTask::executeTask`, forwarded by
+  `InstanceImportTask`) so the provider does not look for an instance to update; Technic: Update disabled. Keep = `zero/content/ModpackKeep` (options.txt,
+  optionsof.txt, optionsshaders.txt, servers.dat, config/iris.properties, config/oculus.properties copied before the task, restored after a successful update
+  of the same instance; `MainWindow::installModpack`). Tests: `ZeroModpackInstall_test.cpp`, `ModpackKeep_test.cpp`. Verified in the provider code: an update only
+  removes the old pack's own files (old `overrides` / `client-overrides` lists and the old manifest's files); files the user added are not in those lists and stay.
+
+- 🧩 **Session 15 (2026-11-16, owner list, /savvy-flow; nothing committed, 85/85 ctest + FileSystem 25/25)**:
+  1. **Resource packs "turn off by themselves"** — root cause is vanilla Minecraft, not ZERO: when the startup resource reload throws (here old
+     packs' core shaders using `#moj_import` fail on 26.3: `Couldn't parse GLSL: minecraft:core/entity`), the game logs `Caught error loading
+     resourcepacks, removing all selected resourcepacks` and saves `resourcePacks:["vanilla"]` (evidence: owner's `Axas Perfect Pack(1)` logs; in
+     that case the effective `core/entity` came from Refined Buckets 2.4.1 overlay `26-1/`, formats 76-99; 26.3 = format 97). Any instance can hit it.
+     Fix: `zero/content/PackRollback` (log parse, suspect = top-most pack providing the failing shader at the instance's format; format read from the
+     client jar's version.json `pack_version`, table fallback), marker `<instance>/.zero/pack-rollback.json`, detection on `launchEnded`
+     (Application.cpp), notice + "Broke the last launch" pill on the Resource Packs page (`PackRollbackNotice`), question before Play
+     (`PackRollbackPrompt::askBeforeLaunch` in `Application::launch`, once per marker). Docs: CONTENT-PACKS.md "D3 Pack rollback".
+  2. **Smooth wheel scrolling** app-wide: `ui/zero/ZeroSmoothScroll` (viewport wheel filter, glide 200 ms OutCubic, touchpad/Ctrl pass through,
+     edges propagate, motion off = instant, QPlainTextEdit by lines; opt-out property `zeroNoSmoothScroll` on FeaturedStrip/FilterChipBar).
+  3. **Modpack install: New instance / Update an instance** first + Keep my game settings (entry above). The pre-update copy + Undo already existed.
+  4. **Shader Packs page** in ZERO design: `ui/zero/instance/ShaderPacksPage` (reuses ModListView/ModDelegate, shader-mod strip, Recycle Bin remove,
+     Check for updates via Prism's dialog in the overflow menu); Change version / Lock updates hidden (no real equivalent).
+  5. **UI sounds**: `ui/zero/ZeroSound` (QSoundEffect pool, throttle, app-wide button filter, toasts, rail/page nav, Play), original WAVs from
+     `scripts/zero/gen-ui-sounds.py` (`retro` for the Minecraft theme, `soft` for others), settings `ZeroUiSounds` (on) / `ZeroUiSoundVolume` (35)
+     in Appearance, Theme Studio "Sounds" section (style + per-event WAV replace, travels in theme export).
+  Owner QA still needed (real app, by ear/eye): sounds in both themes, smooth scroll feel, modpack dialog with a real update, Shader Packs page,
+  rollback notice + Play question on an instance that rolled back. Owner declined "choose active shader from the launcher".
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.

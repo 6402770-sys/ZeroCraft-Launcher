@@ -87,9 +87,50 @@ by extracting shared pieces rather than copying; the Mods page's behaviour and t
 - External changes: the game rewrites `options.txt` on exit: re-read it when the page is shown, after the instance stops
   (`instance->runningStatusChanged`) and on the folder watcher's reload.
 
+## Shader packs page (instance window, page id `"shaderpacks"`)
+
+`ui/zero/instance/ShaderPacksPage` replaces Prism's `ShaderPackPage`. Source: `inst->shaderPackList()`. It is a sibling of the Mods page and reuses its list parts (`ModListModel` / `ModListView` / `ModDelegate`, the sun icon as tile fallback), the running banner ("Close the game to change shaders"), the toolbar parts, `ZeroEmptyState`, `ZeroSkeleton`, `ZeroToast`.
+- Rows: name, line "version (only from provider metadata) · size · modified", provider pill ("Local file" without metadata), switch. On = no `.disabled` suffix; the switch is Prism's rename through the BASE `setResourceEnabled`. A folder pack cannot be renamed that way: its switch answers with a toast. Space toggles, Delete removes, Ctrl+F searches.
+- Strip: `shaderNoticeFor` / `ShaderModNotice` (same as Discover > Shaders) from the file names in `<game root>/mods`; its button opens Discover > Mods for Iris / Oculus. No strip while a shader mod (not `.disabled`) is there.
+- Toolbar: search, "Add file" (.zip), "Download shaders" (Discover > Shaders for the instance), `...`: Add folder, Check for updates (Prism's checker dialog over every pack, hidden when absent), Open shader packs folder, Open the classic shader packs page.
+- Remove goes to the Recycle Bin (`FS::trash`, never a permanent delete) after a question; metadata of the files that went is dropped. Adding a pack whose name exists asks first and sends the old one to the Recycle Bin.
+- Hidden because it is not backed by the ZERO code yet: Change version and Lock updates (Prism's dialogs only; the Mods page has no equivalent). Tests: `tests/ZeroShaderPacksPage_test.cpp` (screenshots with `ZERO_SHADER_SHOTS=<dir>`).
+
+## D3 Pack rollback ("Minecraft turned off your resource packs")
+Vanilla behaviour: when the resource reload at startup throws (typically an old pack whose core shader no longer compiles on a new
+Minecraft), the game logs `Caught error loading resourcepacks, removing all selected resourcepacks`, clears EVERY selected pack and
+saves `options.txt` (`resourcePacks:["vanilla"]`). The launcher cannot fix a broken pack; it detects this, explains it, lets the user
+restore, and names the suspect. Core: `zero/content/PackRollback`.
+- **Detect (after the game stops)**: `Application` hooks `launchEnded` (like AutoBackup / SessionHistory; no page needed) and reads
+  `<gameRoot>/logs/latest.log` (ignored when older than the launch start). It takes the last `Reloading ResourceManager:` list before
+  the rollback line as the attempted list (options.txt order, bottom to top: keep `file/...`, `ns:id` ids and `vanilla` /
+  `programmer_art` / `high_contrast`; bare mod ids are Fabric mod resources and dropped) and the shaders named in
+  `Couldn't parse GLSL: minecraft:core/entity:3: ...` as the failing ones. Respackopts "Could not evaluate condition" lines are noise.
+- **Suspects**: per failing shader, the TOP-most attempted `file/` pack (zip or folder) that provides
+  `assets/<ns>/shaders/<path>.{vsh,fsh,glsl}` at its root or in a `pack.mcmeta` `overlays.entries` directory that applies to the
+  instance's resource format (`formats` as int / `[min,max]` / `{min_inclusive,max_inclusive}`, `min_format` / `max_format` as int or
+  `[major,minor]`; only the major is compared). The format comes from the pack-format table by Minecraft version; a version the table
+  does not know (newer than it) counts every declared overlay as applicable.
+- **Marker** `<instance root>/.zero/pack-rollback.json` `{format, time, attempted, suspects: [{file, shader}], asked}`. Written when
+  the game rolled back; removed when the launch loaded the packs fine, when the user restores or dismisses, and by every successful
+  `Packs::writeOrder` (any new pack order). A launch without `file/` packs leaves it alone.
+- **Page notice** (top of the Resource packs page, warning tone): "Minecraft turned off your resource packs" + "When the game started,
+  <Pack> failed to load (it changes the game's shaders), so Minecraft turned every pack off." Buttons **Restore without <Pack>**
+  (primary, only with suspects), **Restore all**, dismiss (x). A restore is one `writeOrder` (the attempted `file/` packs that still
+  exist on top, packs that are on now below) with the usual toast + Undo; locked while the game runs. Suspect rows get the warning pill
+  "Broke the last launch" (the shader in the tooltip). No suspect: body says "one of your packs", only **Restore all**.
+- **Before Play** (`Application::launch`, the one choke point of every Play button; skipped without a window): when the marker exists, is
+  not `asked`, and `options.txt` has no `file/` pack on, a dialog "Minecraft turned off your resource packs last time" offers
+  [Restore without <Pack> and play] (or [Restore and play]), [Play without them] (sets `asked`), [Cancel] (cancels the launch,
+  `asked` stays false, so the question returns with the next Play). Nothing changes while the game runs.
+- Limits: `ns:id` entries (built-in packs of mods) are not rewritten by a restore (`writeOrder` only manages `file/` entries); a
+  pack that provides no shader but still breaks the reload (other causes) is not named, the notice then offers only **Restore all**.
+
 ## Tests
 Pure parts offscreen without network: `PackOrder` (parse / write round trips incl. CRLF, no final newline, other keys
 untouched, non-`file/` slots kept, missing file, missing key, history cap, Undo, running refusal), description to plain text
 (JSON components, arrays, `§` codes), pack-format fit; widgets with fakes as `ZeroModsPage_test` (real
 `ResourcePackFolderModel` on a temp folder with small zips + one folder pack); Discover section with fake sources as
-`ZeroDiscoverMods_test`. Screenshots both themes at 1280×800 and 1100×700.
+`ZeroDiscoverMods_test`. `PackRollback_test` covers the pack rollback (logs written in the test, zips built in a temp dir:
+root shader, overlay in / out of range, a higher pack shadowing a lower one, folder pack, no rollback line, stale log, marker,
+restore order, the question before Play with a fake dialog); the page notice is in `ZeroResourcePacksPage_test`. Screenshots both themes at 1280×800 and 1100×700.

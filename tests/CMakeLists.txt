@@ -35,6 +35,8 @@ set(TEST_SOURCES
     ZeroPixelFont_test.cpp
     ZeroFormat_test.cpp
     ZeroMotion_test.cpp
+    ZeroSmoothScroll_test.cpp
+    ZeroSound_test.cpp
     ZeroPlayButton_test.cpp
     ZeroShell_test.cpp
     ZeroVideoBackground_test.cpp
@@ -75,9 +77,12 @@ set(TEST_SOURCES
     ZeroModInstall_test.cpp
     ZeroModDependencies_test.cpp
     ZeroModpackInstall_test.cpp
+    ModpackKeep_test.cpp
     ZeroModsPage_test.cpp
     PackOrder_test.cpp
+    PackRollback_test.cpp
     ZeroResourcePacksPage_test.cpp
+    ZeroShaderPacksPage_test.cpp
     PerformanceProfile_test.cpp
     ZeroElyAuth_test.cpp
     ZeroPerformanceDialog_test.cpp

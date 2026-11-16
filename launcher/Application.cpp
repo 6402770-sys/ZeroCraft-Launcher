@@ -57,7 +57,10 @@
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
+#include "ui/zero/instance/PackRollbackPrompt.h"  // ZERO: "Minecraft turned off your resource packs"
 #include "zero/ZeroLanguage.h"  // ZERO
+#include "ui/zero/ZeroSmoothScroll.h"
+#include "ui/zero/ZeroSound.h"  // ZERO: smooth wheel scrolling
 #include "ui/zero/ZeroTheme.h"  // ZERO
 #include "ui/zero/onboarding/IntroGate.h"  // ZERO: first-run intro gating
 #include "ui/dialogs/ProgressDialog.h"
@@ -678,6 +681,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // "system" (follow Windows "Animation effects") | "on" | "off". Empty = never chosen = "system", except that a
         // legacy ZeroReduceMotion=true keeps meaning "off" (Zero::Motion::resolveEnabled).
         m_settings->registerSetting("ZeroMotion", QString());
+        m_settings->registerSetting("ZeroUiSounds", true);       // interface sounds (Zero::Sound): on by default, low volume
+        m_settings->registerSetting("ZeroUiSoundVolume", 35);    // 0..100
         m_settings->registerSetting("ZeroExportFormat", QString("zip"));  // Library export chooser: "zip" | "mrpack" | "curseforge"
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
         m_settings->registerSetting("ZeroWorldsFavoritesOnly", false);  // Worlds page: show only favorite worlds
@@ -1126,6 +1131,23 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             });
             connect(this, &Application::launchEnded, autoBackup, &Zero::Backup::AutoBackup::onLaunchEnded);
         }
+
+        // ZERO: pack rollback. When the game stops, latest.log tells whether Minecraft turned every resource pack off (a pack whose
+        // shaders do not compile); the marker it leaves drives the notice of the Resource packs page and the question before Play.
+        {
+            auto launchStarts = std::make_shared<QHash<QString, QDateTime>>();
+            connect(this, &Application::launchPhaseChanged, this, [launchStarts](const QString& id, Application::LaunchPhase phase) {
+                if (phase == Application::LaunchPhase::Preparing)
+                    launchStarts->insert(id, QDateTime::currentDateTime());
+            });
+            connect(this, &Application::launchEnded, this, [this, launchStarts](const QString& id, bool, bool, bool gameStarted) {
+                const QDateTime started = launchStarts->take(id);
+                if (!gameStarted)
+                    return;
+                if (auto* inst = dynamic_cast<MinecraftInstance*>(m_instances->getInstanceById(id)))
+                    Zero::PacksUi::detectRollbackAfterLaunch(inst, started);
+            });
+        }
     }
 
     // and accounts
@@ -1347,6 +1369,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             msgBox->open();
         }
     }
+
+    Zero::SmoothScroll::install(this);  // ZERO: smooth mouse-wheel scrolling app-wide
+    Zero::Sound::install(this);         // ZERO: interface sounds (button / switch / navigation / toast / Play)
 
     if (qgetenv("XDG_CURRENT_DESKTOP") == "gamescope") {
         installEventFilter(new ToolTipFilter);
@@ -1742,6 +1767,12 @@ bool Application::launch(MinecraftInstance* instance,
             if (!instance->window()->saveAll()) {
                 return false;
             }
+        }
+        // ZERO: the game turned the packs off last time: ask once whether to put them back (not for launches without a window)
+        if ((m_mainWindow != nullptr || instance->window() != nullptr) &&
+            !Zero::PacksUi::askBeforeLaunch(instance, instance->window() != nullptr ? static_cast<QWidget*>(instance->window())
+                                                                                    : static_cast<QWidget*>(m_mainWindow))) {
+            return false;
         }
         instance->setLaunchController(std::make_unique<LaunchController>());
         auto* controller = instance->launchController();

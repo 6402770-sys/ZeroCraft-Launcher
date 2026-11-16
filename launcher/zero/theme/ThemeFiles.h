@@ -3,6 +3,7 @@
 // zero-theme.json helpers of CustomTheme.h. Export / import / trash live in ThemeArchive.h.
 #pragma once
 
+#include <QMap>
 #include <QString>
 #include <QStringList>
 
@@ -30,6 +31,10 @@ Result<> validateIconSource(const QString& path, qint64 maxBytes = kMaxIconBytes
 /// Checks a font picked in the editor: a readable ttf / otf of at most `maxBytes`. (Whether Qt can load it is found out when it is applied.)
 Result<> validateFontSource(const QString& path, qint64 maxBytes = kMaxFontBytes);
 
+/// Checks an interface sound picked in the editor: a readable .wav (RIFF / WAVE header) of at most `maxBytes`. QSoundEffect plays WAV only,
+/// so anything else is refused with a readable message.
+Result<> validateSoundSource(const QString& path, qint64 maxBytes = kMaxSoundBytes);
+
 /// Limits applied by saveTheme() (a parameter so tests can use a tiny cap).
 struct SaveLimits {
     qint64 maxVideoBytes = kMaxBackgroundBytes;
@@ -42,6 +47,9 @@ struct SaveLimits {
 struct AssetSources {
     QString icon;  // png svg ico, <= SaveLimits::maxIconBytes, copied in as `icon.<ext>`
     QString font;  // ttf otf, <= SaveLimits::maxFontBytes, copied in as `font.<ext>`
+    /// Interface sound event id -> a .wav (<= kMaxSoundBytes) copied in as `sound-<event>.wav`; the definition's `sounds` entry is set.
+    /// Events missing from `def.sounds` make saveTheme delete their old file.
+    QMap<QString, QString> sounds;
 };
 
 struct SavedTheme {

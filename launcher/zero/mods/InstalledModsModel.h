@@ -226,7 +226,7 @@ struct RemoveConfirm {
     QString confirmLabel;  ///< "Remove"
 };
 /// What the Remove texts call the files: the Mods page says "mods", the Resource packs page "packs" (shared code, one set of texts).
-enum class Noun { Mods, Packs };
+enum class Noun { Mods, Packs, Shaders };
 RemoveConfirm removeConfirm(const QStringList& names, Noun noun = Noun::Mods);
 
 enum class Outcome { Success, Warning, Error };

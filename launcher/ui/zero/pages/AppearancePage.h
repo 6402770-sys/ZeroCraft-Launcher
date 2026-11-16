@@ -9,6 +9,8 @@
 #include "ui/zero/shell/ShellPage.h"
 
 class QButtonGroup;
+class QCheckBox;
+class QSlider;
 class QGridLayout;
 class QLabel;
 class QMenu;
@@ -62,6 +64,7 @@ class AppearancePage : public ShellPage {
     void showThemeMenu(const QString& themeId, QWidget* anchor);
     void syncCurrent();       // current theme id changed elsewhere
     void syncMotion();        // segmented control + caption from the ZeroMotion setting
+    void syncSounds();        // switch, slider and Preview from the ZeroUiSounds / ZeroUiSoundVolume settings
     void refreshApplyButton();
     QString currentThemeId() const;
 
@@ -76,6 +79,13 @@ class AppearancePage : public ShellPage {
     QString m_currentId;
     QButtonGroup* m_motionGroup;
     QLabel* m_motionCaption;
+    QCheckBox* m_soundsCheck = nullptr;
+    QSlider* m_soundsVolume = nullptr;
+    QLabel* m_soundsValue = nullptr;
+    QLabel* m_soundsVolumeLabel = nullptr;
+    QLabel* m_soundsCaption = nullptr;
+    QPushButton* m_soundsPreview = nullptr;
+    bool m_syncingSounds = false;
 };
 
 }  // namespace Zero

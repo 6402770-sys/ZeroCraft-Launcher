@@ -159,11 +159,18 @@ instance the section shows an empty state with "Create instance".
   (thumbnail strip → in-page viewer), Versions (list: name, type pill, Minecraft, loader, date, size; changelog
   expands inline, loaded on demand), What's new (Technic feed / latest changelog). Mod list only when the provider
   gives one (Technic Solder builds do not; Modrinth/CurseForge packs do not expose it before download → hidden).
-- **Install** → `ModpackInstallDialog` (review): version (default = newest release), its Minecraft + loader, instance
-  name (default pack name), group, location (only with several instance dirs), icon from the pack logo. If an instance
-  already manages this pack (`getInstanceByManagedName`), a note says so: "<name> is already installed. Installing
-  creates a new instance; to update it, use Update." (Update = the provider task with the managed instance id, the
-  existing `askIfShouldUpdate` flow). The task runs through `InstanceList::wrapInstanceTask` (Milestone F moves it into
+- **Install** → `ModpackInstallDialog` (review). First decision, top of the dialog: "What do you want to do?" with two
+  radio cards, **New instance** ("A separate copy") and **Update an instance** ("One you already have"). Update is
+  disabled with an honest caption when no instance manages the pack ("None of your instances has this pack") or the
+  provider cannot update in place (Technic). When instances manage the pack Update starts selected (Discover's Update
+  passes the instance; otherwise the most recently played comes first) and "Instance to update" lists all of them (name,
+  version, last played; more than four scroll). Update shows the version, "Keep my game settings" (on by default:
+  `options.txt`, `optionsof.txt`, `optionsshaders.txt`, `servers.dat`, `config/iris.properties`, `config/oculus.properties`
+  are copied aside and put back after a successful update of that instance, `zero/content/ModpackKeep`) and the primary
+  "Update"; New shows version, instance name (default pack name), group, location (only with several instance dirs),
+  template, icon from the pack logo, and "Install". The choice is made once: the provider's own "Similar modpack was
+  found!" question never shows (`setConfirmUpdate(false)`; a New instance also sets `InstanceTask::setAlwaysCreateNew`, so
+  the provider does not look for an instance to update). MainWindow takes the pre-update copy (Undo) first. The task runs through `InstanceList::wrapInstanceTask` (Milestone F moves it into
   the Install Queue). Providers: Modrinth and CurseForge via `ResourceAPI` (`ResourceType::Modpack`), Technic via
   `TechnicMeta` + `TechnicDetailsStore`. ATLauncher, FTB, legacy FTB and FTB App import stay in the classic dialog,
   reachable from Create Instance → "More sources".

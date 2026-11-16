@@ -89,6 +89,14 @@ class ThemeEditorPanel : public QWidget {
     QLabel* iconPreview() const { return m_iconPreview; }
     Content::SegmentedControl* fontControl() const { return m_fontControl; }
     QWidget* fontBlock() const { return m_fontBlock; }
+    Content::SegmentedControl* soundStyleControl() const { return m_soundStyle; }
+    QPushButton* soundReplaceButton(const QString& event) const { return m_soundRows.value(event).replace; }
+    QPushButton* soundResetButton(const QString& event) const { return m_soundRows.value(event).reset; }
+    QToolButton* soundPlayButton(const QString& event) const { return m_soundRows.value(event).play; }
+    QLabel* soundMessage() const { return m_soundMessage; }
+    /// Uses `path` for the interface sound `event` (what the Replace… dialog does after picking): a file that is not a valid .wav shows the
+    /// inline message and changes nothing. True when it was accepted.
+    bool setEventSoundFile(const QString& event, const QString& path);
     QLabel* fontPreview() const { return m_fontPreview; }
     QPushButton* allColorsButton() const { return m_allToggle; }
     QLabel* readabilityLabel() const { return m_readability; }
@@ -141,6 +149,8 @@ class ThemeEditorPanel : public QWidget {
     void chooseVideo();
     void chooseIcon();
     void chooseFont();
+    void chooseSound(const QString& event);
+    void playSound(const QString& event);
     void previewSwatch(const QString& key, const QColor& color);
     void showMenu();
 
@@ -176,6 +186,16 @@ class ThemeEditorPanel : public QWidget {
     QWidget* m_fontBlock = nullptr;
     QLabel* m_fontPreview = nullptr;
     ElidedLabel* m_fontName = nullptr;
+    struct SoundRow {
+        QLabel* name = nullptr;
+        QLabel* file = nullptr;
+        QToolButton* play = nullptr;
+        QPushButton* replace = nullptr;
+        QPushButton* reset = nullptr;
+    };
+    Content::SegmentedControl* m_soundStyle = nullptr;
+    QHash<QString, SoundRow> m_soundRows;
+    QLabel* m_soundMessage = nullptr;
     QSlider* m_dim = nullptr;
     QSlider* m_cards = nullptr;
     QLabel* m_dimValue = nullptr;

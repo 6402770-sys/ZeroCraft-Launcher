@@ -163,6 +163,21 @@ Result<> validateIconSource(const QString& path, qint64 maxBytes)
     return {};
 }
 
+Result<> validateSoundSource(const QString& path, qint64 maxBytes)
+{
+    if (QFileInfo(path).suffix().toLower() != QLatin1String("wav"))
+        return std::unexpected{ QObject::tr("Interface sounds must be .wav files.") };
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return std::unexpected{ QObject::tr("The sound file could not be read: %1").arg(path) };
+    if (f.size() > maxBytes)
+        return std::unexpected{ QObject::tr("This sound is too big. The limit is %1 KB.").arg(maxBytes / 1024) };
+    const QByteArray head = f.read(12);
+    if (head.size() < 12 || !head.startsWith("RIFF") || head.mid(8, 4) != "WAVE")
+        return std::unexpected{ QObject::tr("This is not a valid .wav file.") };
+    return {};
+}
+
 Result<> validateFontSource(const QString& path, qint64 maxBytes)
 {
     if (fontExtension(path).isEmpty())
@@ -252,9 +267,45 @@ Result<SavedTheme> saveTheme(const QString& themesRoot, const QString& folderIn,
         def.fontFile = font.stem + ext;
     }
 
+    // ---- the new interface sounds (staged under temporary names until the JSON is safe)
+    QMap<QString, QString> stagedSounds;  // temp path -> final path
+    const auto dropStaged = [&]() {
+        for (auto it = stagedSounds.cbegin(); it != stagedSounds.cend(); ++it)
+            QFile::remove(it.key());
+    };
+    for (auto it = assets.sounds.cbegin(); it != assets.sounds.cend(); ++it) {
+        const QString name = soundFileName(it.key());
+        if (name.isEmpty() || it.value().isEmpty())
+            continue;
+        if (auto ok = validateSoundSource(it.value()); !ok) {
+            dropStaged();
+            return fail(ok.error());
+        }
+        const QString temp = dir.absoluteFilePath(QStringLiteral(".zero-snd-") + it.key() + QStringLiteral(".tmp"));
+        QFile::remove(temp);
+        if (!QFile::copy(it.value(), temp)) {
+            QFile::remove(temp);
+            dropStaged();
+            return fail(QObject::tr("Could not copy the sound into the theme."));
+        }
+        stagedSounds.insert(temp, dir.absoluteFilePath(name));
+        def.sounds.insert(it.key(), name);
+    }
+
     // ---- the definition
-    if (auto saved = saveDefinition(folder, def); !saved)
+    if (auto saved = saveDefinition(folder, def); !saved) {
+        dropStaged();
         return fail(saved.error());
+    }
+
+    // ---- the JSON is safe: put the staged sounds in place, drop the ones no longer named
+    for (auto it = stagedSounds.cbegin(); it != stagedSounds.cend(); ++it) {
+        QFile::remove(it.value());
+        QFile::rename(it.key(), it.value());
+    }
+    for (const QString& event : soundEventIds())
+        if (!def.sounds.contains(event))
+            QFile::remove(dir.absoluteFilePath(soundFileName(event)));
 
     // ---- the JSON is safe: drop what it no longer needs
     finishSlot(background, dir, def.backgroundKind == BackgroundKind::None ? QString() : def.backgroundFile);
@@ -285,6 +336,9 @@ Result<SavedTheme> duplicateTheme(const QString& themesRoot, const QString& fold
         return abort(QObject::tr("Could not copy the icon of the theme."));
     if (!copyAsset(folder, target, def.fontFile))
         return abort(QObject::tr("Could not copy the font of the theme."));
+    for (const QString& file : def.sounds)
+        if (!copyAsset(folder, target, file))
+            return abort(QObject::tr("Could not copy the sounds of the theme."));
     if (auto saved = saveDefinition(target, def); !saved)
         return abort(saved.error());
     return SavedTheme{ idForFolderName(QFileInfo(target).fileName()), QDir(target).absolutePath() };

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ModpackInstallDialog.h"
 
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -10,10 +11,12 @@
 #include <QLineEdit>
 #include <QPainter>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QStandardItemModel>
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <memory>
 
 #include "Application.h"
@@ -26,10 +29,12 @@
 #include "net/NetJob.h"
 #include "settings/SettingsObject.h"
 #include "ui/zero/PillTag.h"
+#include "ui/zero/ZeroFormat.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/content/InstallChoiceCard.h"
 #include "ui/zero/content/InstallDialogParts.h"
 #include "ui/zero/content/RemoteImageCache.h"
 #include "zero/content/CreateInstanceModel.h"
@@ -53,7 +58,7 @@ QList<InstalledPack> installedPacksFromApplication()
             continue;  // an imported pack without a provider id cannot be matched with a card
         }
         out.append({ managedKey(inst->getManagedPackType(), inst->getManagedPackID()), inst->id(), inst->name(), inst->getManagedPackVersionID(),
-                     inst->getManagedPackVersionName() });
+                     inst->getManagedPackVersionName(), inst->lastLaunch() });
     }
     return out;
 }
@@ -112,29 +117,39 @@ ModpackInstallDialog::ModpackInstallDialog(ModpackInstallEnvironment env, const 
         m_env.images = RemoteImageCache::instance();
     }
 
-    // The instance that manages this pack: the note (Install) or the target (Update).
+    // The instances that manage this pack: the targets of an Update. The one Discover passed comes first, then the most recently played.
     const QList<InstalledPack> installed = m_env.installedPacks ? m_env.installedPacks() : QList<InstalledPack>{};
+    const QString key = installedKey(*m_item);
+    for (const auto& pack : installed) {
+        if (pack.key == key) {
+            m_managed.append(pack);
+        }
+    }
     if (!updateInstanceId.isEmpty()) {
-        for (const auto& pack : installed) {
-            if (pack.instanceId == updateInstanceId) {
-                m_installed = pack;
-                m_updateMode = true;
-                break;
+        const bool listed = std::any_of(m_managed.cbegin(), m_managed.cend(),
+                                        [&updateInstanceId](const InstalledPack& p) { return p.instanceId == updateInstanceId; });
+        if (!listed) {
+            for (const auto& pack : installed) {
+                if (pack.instanceId == updateInstanceId) {
+                    m_managed.append(pack);  // Discover says this instance manages the pack even if the keys differ
+                    break;
+                }
             }
         }
     }
-    if (!m_installed) {
-        const QString key = installedKey(*m_item);
-        for (const auto& pack : installed) {
-            if (pack.key == key) {
-                m_installed = pack;
-                break;
-            }
+    std::stable_sort(m_managed.begin(), m_managed.end(), [&updateInstanceId](const InstalledPack& a, const InstalledPack& b) {
+        const bool aFirst = !updateInstanceId.isEmpty() && a.instanceId == updateInstanceId;
+        const bool bFirst = !updateInstanceId.isEmpty() && b.instanceId == updateInstanceId;
+        if (aFirst != bFirst) {
+            return aFirst;
         }
-    }
-    setWindowTitle(m_updateMode ? tr("Update %1").arg(m_item->name) : tr("Install %1").arg(m_item->name));
+        return a.lastLaunchMs > b.lastLaunchMs;
+    });
+    const bool canUpdate = canUpdateInPlace(m_item->provider) && !m_managed.isEmpty();
+    setWindowTitle(tr("Install %1").arg(m_item->name));
 
     buildUi();
+    buildInstanceRows();
 
     // group (NewInstanceDialog's rule: "" first, the initial group inserted when it is not a known one)
     QStringList groups = m_env.create.groups;
@@ -154,32 +169,23 @@ ModpackInstallDialog::ModpackInstallDialog(ModpackInstallEnvironment env, const 
     }
     const int dirIndex = m_location->findData(m_env.create.lastUsedDir);
     m_location->setCurrentIndex(dirIndex >= 0 ? dirIndex : 0);
-    m_locationColumn->setVisible(m_location->count() > 1 && !m_updateMode);
-    m_template->setVisible(m_env.create.templateAvailable && !m_updateMode);
+    m_locationColumn->setVisible(m_location->count() > 1);
     m_template->setChecked(m_env.create.templateAvailable);  // NewInstanceDialog: on whenever a template exists
-
     m_name->setText(suggestedInstanceName(*m_item));
-    if (m_updateMode) {
-        m_name->setText(m_installed->instanceName);
-        m_nameColumn->hide();
-        m_groupRow->hide();
-        if (m_env.instanceIconKey) {
-            m_iconKey = m_env.instanceIconKey(m_installed->instanceId);
-        }
-    }
 
-    if (m_installed) {
-        if (m_updateMode) {
-            m_note->setText(m_installed->versionName.isEmpty()
-                                ? tr("This updates %1. You will be asked whether to update it or to create a separate instance.")
-                                      .arg(m_installed->instanceName)
-                                : tr("This updates %1 (now %2). You will be asked whether to update it or to create a separate instance.")
-                                      .arg(m_installed->instanceName, m_installed->versionName));
-        } else {
-            m_note->setText(tr("%1 is already installed. Installing again asks whether to update it or create a separate instance.").arg(m_installed->instanceName));
-        }
+    // The first decision. Update needs an instance that manages this pack and a provider that can update it; it starts selected when it can.
+    if (!canUpdate) {
+        m_updateCard->setEnabled(false);
+        m_updateCard->setCaption(!canUpdateInPlace(m_item->provider) ? tr("Technic packs can't be updated here")
+                                                                     : tr("None of your instances has this pack"));
+        m_updateCard->setToolTip(m_updateCard->caption());
     }
-    m_noteRow->setVisible(m_installed.has_value());
+    (canUpdate ? m_updateCard : m_newCard)->setChecked(true);
+    (canUpdate ? m_updateCard : m_newCard)->setFocus();  // the focus starts on the card that is chosen, not on the first one
+    applyMode();
+
+    connect(m_newCard, &QAbstractButton::toggled, this, &ModpackInstallDialog::applyMode);
+    connect(m_updateCard, &QAbstractButton::toggled, this, &ModpackInstallDialog::applyMode);
 
     connect(m_versionBox, &QComboBox::currentIndexChanged, this, &ModpackInstallDialog::onVersionChanged);
     connect(m_name, &QLineEdit::textEdited, this, [this]() {
@@ -204,19 +210,23 @@ ModpackInstallDialog::ModpackInstallDialog(ModpackInstallEnvironment env, const 
             }
         });
     }
-    connect(&Theme::instance(), &Theme::changed, this, [this]() {
-        refreshIcons();
-        update();
-    });
+    connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
 
-    setTabOrder(m_versionBox, m_name);
+    setTabOrder(m_newCard, m_updateCard);
+    QWidget* previous = m_updateCard;
+    for (auto* row : m_instanceRows) {
+        setTabOrder(previous, row);
+        previous = row;
+    }
+    setTabOrder(previous, m_versionBox);
+    setTabOrder(m_versionBox, m_keep);
+    setTabOrder(m_keep, m_name);
     setTabOrder(m_name, m_group);
     setTabOrder(m_group, m_location);
     setTabOrder(m_location, m_template);
     setTabOrder(m_template, m_cancel);
     setTabOrder(m_cancel, m_install);
 
-    refreshIcons();
     requestVersions();
     refreshState();
 }
@@ -242,12 +252,44 @@ void ModpackInstallDialog::buildUi()
     m_headerPills = header.pills;
     column->addWidget(header.root);
 
-    // ---- note ----
-    const NoteParts note = buildNoteRow(body);
-    m_noteRow = note.row;
-    m_noteIcon = note.icon;
-    m_note = note.text;
-    column->addWidget(m_noteRow);
+    // ---- the first decision ----
+    auto* modeColumn = new QVBoxLayout;
+    modeColumn->setContentsMargins(0, 0, 0, 0);
+    modeColumn->setSpacing(Tokens::spaceXs);
+    modeColumn->addWidget(overline(tr("What do you want to do?"), body));
+    auto* modeRow = new QHBoxLayout;
+    modeRow->setContentsMargins(0, 0, 0, 0);
+    modeRow->setSpacing(Tokens::spaceMd);
+    m_newCard = new InstallChoiceCard(tr("New instance"), tr("A separate copy"), 2, body);
+    m_updateCard = new InstallChoiceCard(tr("Update an instance"), tr("One you already have"), 2, body);
+    modeRow->addWidget(m_newCard, 1);
+    modeRow->addWidget(m_updateCard, 1);
+    auto* modeGroup = new QButtonGroup(this);  // radio behaviour
+    modeGroup->addButton(m_newCard);
+    modeGroup->addButton(m_updateCard);
+    modeColumn->addLayout(modeRow);
+    column->addLayout(modeColumn);
+
+    // ---- the instance to update ----
+    m_instanceSection = new QWidget(body);
+    auto* instanceLayout = new QVBoxLayout(m_instanceSection);
+    instanceLayout->setContentsMargins(0, 0, 0, 0);
+    instanceLayout->setSpacing(Tokens::spaceXs);
+    instanceLayout->addWidget(overline(tr("Instance to update"), m_instanceSection));
+    m_instanceHost = new QWidget;
+    auto* hostLayout = new QVBoxLayout(m_instanceHost);
+    hostLayout->setContentsMargins(0, 0, 0, 0);
+    hostLayout->setSpacing(Tokens::spaceSm);
+    m_instanceScroll = new QScrollArea(m_instanceSection);
+    m_instanceScroll->setFrameShape(QFrame::NoFrame);
+    m_instanceScroll->setWidgetResizable(true);
+    m_instanceScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_instanceScroll->setWidget(m_instanceHost);
+    m_instanceScroll->setFocusPolicy(Qt::NoFocus);
+    m_instanceScroll->viewport()->setAutoFillBackground(false);
+    m_instanceHost->setAutoFillBackground(false);
+    instanceLayout->addWidget(m_instanceScroll);
+    column->addWidget(m_instanceSection);
 
     // ---- version ----
     auto* versionColumn = new QVBoxLayout;
@@ -281,6 +323,24 @@ void ModpackInstallDialog::buildUi()
     statusRow->addWidget(m_retry, 0, Qt::AlignTop);
     versionColumn->addLayout(statusRow);
     column->addLayout(versionColumn);
+
+    // ---- keep my game settings (Update) ----
+    m_keepSection = new QWidget(body);
+    auto* keepLayout = new QVBoxLayout(m_keepSection);
+    keepLayout->setContentsMargins(0, 0, 0, 0);
+    keepLayout->setSpacing(Tokens::spaceXs);
+    m_keep = new QCheckBox(tr("Keep my game settings"), m_keepSection);
+    m_keep->setAccessibleName(tr("Keep my game settings"));
+    m_keep->setChecked(true);
+    auto* keepHelp = new QLabel(tr("Your options, keybinds, resource pack choices, server list and shader choice stay as they are."), m_keepSection);
+    Style::applyRole(keepHelp, Role::Caption);
+    Style::setProperty(keepHelp, "zeroTone", "secondary");
+    keepHelp->setWordWrap(true);
+    keepHelp->setContentsMargins(Tokens::spaceXl, 0, 0, 0);
+    m_keep->setAccessibleDescription(keepHelp->text());
+    keepLayout->addWidget(m_keep);
+    keepLayout->addWidget(keepHelp);
+    column->addWidget(m_keepSection);
 
     // ---- name ----
     m_nameColumn = new QWidget(body);
@@ -347,7 +407,7 @@ void ModpackInstallDialog::buildUi()
     root->addWidget(body, 1);
 
     // ---- footer ----
-    const FooterParts footer = buildFooter(this, m_updateMode ? tr("Update") : tr("Install"));
+    const FooterParts footer = buildFooter(this, tr("Install"));
     m_footer = footer.bar;
     m_cancel = footer.cancel;
     m_install = footer.primary;
@@ -356,10 +416,56 @@ void ModpackInstallDialog::buildUi()
     setFixedWidth(kWidth);
 }
 
-void ModpackInstallDialog::refreshIcons()
+void ModpackInstallDialog::buildInstanceRows()
 {
-    const auto& t = Theme::current();
-    m_noteIcon->setPixmap(Icons::pixmap(QStringLiteral("info"), t.info, 16, devicePixelRatioF()));
+    constexpr int kVisibleRows = 4;  // more rows scroll
+    auto* layout = static_cast<QVBoxLayout*>(m_instanceHost->layout());
+    auto* rowGroup = new QButtonGroup(this);  // radio behaviour
+    for (int i = 0; i < m_managed.size(); ++i) {
+        const InstalledPack& pack = m_managed.at(i);
+        QStringList meta;
+        if (!pack.versionName.isEmpty()) {
+            meta << tr("Version %1").arg(pack.versionName);
+        }
+        meta << (pack.lastLaunchMs > 0 ? tr("Played %1").arg(Format::relativeTime(pack.lastLaunchMs)) : tr("Never played"));
+        auto* row = new InstallChoiceCard(pack.instanceName, meta.join(QStringLiteral("  ·  ")), 1, m_instanceHost);
+        row->setChecked(i == 0);
+        connect(row, &QAbstractButton::toggled, this, [this, i](bool on) {
+            if (on) {
+                m_selected = i;
+                refreshState();
+            }
+        });
+        layout->addWidget(row);
+        rowGroup->addButton(row);
+        m_instanceRows.append(row);
+    }
+    // up to kVisibleRows rows fit without a scroll bar; the 4 px of air keep the focus ring of a row inside the scroll area
+    const int shown = std::min<int>(kVisibleRows, m_instanceRows.size());
+    if (shown > 0) {
+        const int rowHeight = m_instanceRows.first()->sizeHint().height();
+        m_instanceScroll->setFixedHeight(shown * rowHeight + (shown - 1) * Tokens::spaceSm + 4);
+    }
+    m_instanceScroll->setVerticalScrollBarPolicy(m_instanceRows.size() > kVisibleRows ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    m_selected = 0;
+}
+
+/// The mode cards changed: Update shows the instance list and "Keep my game settings" and hides what only a new instance needs.
+void ModpackInstallDialog::applyMode()
+{
+    m_updateMode = m_updateCard->isChecked() && !m_managed.isEmpty();
+    m_instanceSection->setVisible(m_updateMode);
+    m_keepSection->setVisible(m_updateMode);
+    m_nameColumn->setVisible(!m_updateMode);
+    m_groupRow->setVisible(!m_updateMode);
+    m_template->setVisible(m_env.create.templateAvailable && !m_updateMode);
+    m_install->setText(m_updateMode ? tr("Update") : tr("Install"));
+    setWindowTitle(m_updateMode ? tr("Update %1").arg(m_item->name) : tr("Install %1").arg(m_item->name));
+    if (isVisible()) {
+        layout()->activate();
+        adjustSize();
+    }
+    refreshState();
 }
 
 // ---- versions ----
@@ -513,12 +619,31 @@ bool ModpackInstallDialog::copyTemplateDir() const
 
 QString ModpackInstallDialog::updateInstanceId() const
 {
-    return m_updateMode && m_installed ? m_installed->instanceId : QString();
+    return m_updateMode && m_selected >= 0 && m_selected < m_managed.size() ? m_managed.at(m_selected).instanceId : QString();
 }
 
-QString ModpackInstallDialog::noteText() const
+bool ModpackInstallDialog::keepGameSettings() const
 {
-    return m_noteRow->isVisibleTo(this) ? m_note->text() : QString();
+    return m_updateMode && m_keep->isChecked();
+}
+
+bool ModpackInstallDialog::instanceListVisible() const
+{
+    return m_instanceSection->isVisibleTo(this);
+}
+
+bool ModpackInstallDialog::keepVisible() const
+{
+    return m_keepSection->isVisibleTo(this);
+}
+
+QString ModpackInstallDialog::iconKey() const
+{
+    // An update keeps the instance's own icon.
+    if (m_updateMode && m_env.instanceIconKey) {
+        return m_env.instanceIconKey(updateInstanceId());
+    }
+    return m_iconKey;
 }
 
 QString ModpackInstallDialog::nameError() const
@@ -662,10 +787,13 @@ InstanceTask* ModpackInstallDialog::extractTask()
     request.version = *version;
     request.name = instName();
     request.iconKey = m_iconKey;
-    if (m_updateMode && m_installed) {
-        request.updateInstanceId = m_installed->instanceId;
-        request.updateVersionName = m_installed->versionName;
-        request.group = m_env.instanceGroup ? m_env.instanceGroup(m_installed->instanceId) : QString();
+    if (m_updateMode && m_selected >= 0 && m_selected < m_managed.size()) {
+        const InstalledPack& pack = m_managed.at(m_selected);
+        request.name = pack.instanceName;
+        request.iconKey = iconKey();
+        request.updateInstanceId = pack.instanceId;
+        request.updateVersionName = pack.versionName;
+        request.group = m_env.instanceGroup ? m_env.instanceGroup(pack.instanceId) : QString();
     } else {
         request.group = instGroup();
         request.targetDir = instDir();
@@ -675,7 +803,7 @@ InstanceTask* ModpackInstallDialog::extractTask()
     if (!plan) {
         return nullptr;
     }
-    // Provider tasks parent their own dialogs (askIfShouldUpdate, optional files) to this dialog: MainWindow runs the task while it lives.
+    // Provider tasks parent their own dialogs (optional files, blocked mods) to this dialog: MainWindow runs the task while it lives.
     return createInstallTask(*plan, this, m_env.network ? m_env.network() : nullptr);
 }
 

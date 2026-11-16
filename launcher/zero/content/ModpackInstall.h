@@ -4,8 +4,9 @@
 // `planInstall()` turns "this pack, this version, these instance settings" into an `InstallPlan`: exactly what Prism's classic
 // pages build (ModrinthPage / FlamePage / TechnicPage::suggestCurrent) plus what NewInstanceDialog::extractTask() sets. The
 // plan is plain data, so tests read it; `createInstallTask()` turns it into the real InstanceTask. The Update flow (an instance
-// that manages the pack) is the provider's own: the same task with `original_instance_id`, whose creation task asks
-// `askIfShouldUpdate` itself (the way ManagedPackPage starts an update).
+// that manages the pack) is the provider's own: the same task with `original_instance_id` (the way ManagedPackPage starts an
+// update). The user chose between "New instance" and "Update an instance" in the install dialog, so the provider never asks again:
+// `setConfirmUpdate(false)` on every task, and a new instance of a pack an instance already manages is told not to look for it.
 //
 // No widgets, no APPLICATION, no network in this file.
 #pragma once
@@ -39,6 +40,9 @@ struct InstallRequest {
     QString updateVersionName; ///< the managed version name of that instance (used to rename it, as ManagedPackPage does)
 };
 
+/// Update an instance in place is the provider's flow (Modrinth, CurseForge); Technic packs have none.
+bool canUpdateInPlace(Provider provider);
+
 /// The task to build and how its InstanceTask fields are set.
 struct InstallPlan {
     enum class Kind {
@@ -48,6 +52,7 @@ struct InstallPlan {
     } kind = Kind::Import;
     QUrl url;
     QMap<QString, QString> extraInfo;  ///< Import: pack_id, pack_version_id (+ original_instance_id for an update)
+    bool createNew = true;             ///< a new instance (no `original_instance_id`): the provider must not search for one to update
     QString technicSlug;
     QString technicBuild;
     QString minecraftVersion;

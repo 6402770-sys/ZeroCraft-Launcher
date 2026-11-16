@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <optional>
 
+#include "zero/content/PackRollback.h"
 #include "zero/mods/Versions.h"
 
 namespace Zero {
@@ -368,6 +369,13 @@ QList<Mods::Installed::PillSpec> pillsFor(const PackRow& row)
         made.priority = Mods::Installed::kKeepPriority;
         pills.append(made);
     }
+    if (row.brokeLastLaunch) {
+        PillSpec broke;
+        broke.text = Rollback::brokeLastLaunchText();
+        broke.tone = PillTone::Warning;
+        broke.priority = Mods::Installed::kKeepPriority;
+        pills.append(broke);
+    }
     return pills;
 }
 
@@ -383,6 +391,9 @@ QString rowToolTip(const PackRow& row)
     }
     if (row.fit.kind == FitKind::MadeFor) {
         lines.append(madeForText(row.fit.madeFor));
+    }
+    if (row.brokeLastLaunch) {
+        lines.append(Rollback::brokeLastLaunchText() + QStringLiteral(": ") + Rollback::brokeTooltip(row.brokeShader));
     }
     return lines.join(QLatin1Char('\n'));
 }

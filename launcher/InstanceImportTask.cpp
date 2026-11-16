@@ -316,6 +316,7 @@ void InstanceImportTask::processFlame()
     instCreationTask->setIcon(m_instIcon);
     instCreationTask->setGroup(m_instGroup);
     instCreationTask->setConfirmUpdate(shouldConfirmUpdate());
+    instCreationTask->setAlwaysCreateNew(shouldAlwaysCreateNew());
 
     auto weak = instCreationTask.toWeakRef();
     connect(instCreationTask.get(), &Task::succeeded, this, [this, weak] {
@@ -422,6 +423,7 @@ void InstanceImportTask::processModrinth()
     instCreationTask->setIcon(m_instIcon);
     instCreationTask->setGroup(m_instGroup);
     instCreationTask->setConfirmUpdate(shouldConfirmUpdate());
+    instCreationTask->setAlwaysCreateNew(shouldAlwaysCreateNew());
 
     auto weak = instCreationTask.toWeakRef();
     connect(instCreationTask.get(), &Task::succeeded, this, [this, weak] {

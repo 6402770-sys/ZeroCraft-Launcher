@@ -42,6 +42,9 @@ struct Definition {
     double volume = kDefaultVolume;  // 0..1, only used with sound
     QString iconFile;  // plain file name inside the theme folder ("icon.png"); empty = the ZERO mark
     QString fontFile;  // plain file name inside the theme folder ("font.ttf"); empty = the default font
+    QString soundSet;  // interface sound style: "retro" | "soft" | "none"; empty = the base theme's (Minecraft retro, Obsidian soft)
+    /// Interface sound event id -> the theme's own WAV replacing it; the value is always soundFileName(event) ("sound-click.wav").
+    QMap<QString, QString> sounds;
 
     bool operator==(const Definition& o) const = default;
 
@@ -57,6 +60,17 @@ ThemeSpec baseSpec(Base base);
 /// Extensions of the theme's own launcher icon (png svg ico) and UI font (ttf otf).
 QStringList iconExtensions();
 QStringList fontExtensions();
+
+/// The interface sound events a theme can replace ("click", "toggle-on", "toggle-off", "navigate", "success", "error", "launch"), in display order.
+QStringList soundEventIds();
+/// The sound styles a theme can choose ("retro", "soft", "none").
+QStringList soundSetIds();
+/// The file a theme folder (and an exported archive) holds for `event`: "sound-<event>.wav". Empty for an unknown event.
+QString soundFileName(const QString& event);
+/// True when `name` is soundFileName() of a known event.
+bool isSoundFileName(const QString& name);
+/// The event a sound file name belongs to (empty when `name` is none).
+QString soundEventOf(const QString& name);
 
 /// Names accepted as `overrides` keys (the ThemeSpec color members).
 QStringList overrideKeys();

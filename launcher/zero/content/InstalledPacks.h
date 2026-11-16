@@ -65,6 +65,9 @@ struct PackRow {
     // overlay of options.txt (overlayActive)
     bool active = false;   ///< `file/<fileName>` is in `resourcePacks`
     int activeIndex = -1;  ///< 0 = top (wins); -1 = not active
+    // overlay of the pack rollback marker (zero/content/PackRollback): the pack that most likely made the game turn every pack off
+    bool brokeLastLaunch = false;
+    QString brokeShader;   ///< the shader it replaces that failed to compile ("minecraft:core/entity"); may be empty
 };
 
 /// "Faithful 32x.zip" / "Faithful 32x.zip.disabled" -> "Faithful 32x"; a folder keeps its name.

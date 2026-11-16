@@ -194,6 +194,7 @@
 #include "zero/content/InstallCart.h"  // ZERO
 #include "zero/content/ModInstall.h"  // ZERO
 #include "zero/content/ModTarget.h"  // ZERO
+#include "zero/content/ModpackKeep.h"  // ZERO
 #include "zero/content/PackOrder.h"  // ZERO
 #include "InstanceDirUpdate.h"
 
@@ -1082,7 +1083,8 @@ void MainWindow::addInstanceZero(const QString& groupName, bool import)
 
 // ZERO: Install / Update of a Discover modpack (docs/zero/CONTENT.md, "Modpacks" > "Install"). The review dialog builds the provider's
 // task exactly as Prism's classic pages do; like addInstanceZero() the task runs while the dialog is alive, because provider tasks
-// parent their own dialogs (askIfShouldUpdate, optional files) to it. Prism's error reporting (runModalTask) is unchanged.
+// parent their own dialogs (optional files) to it. The dialog already asked "New instance or update?", so the provider never asks.
+// Prism's error reporting (runModalTask) is unchanged.
 void MainWindow::installModpack(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& updateInstanceId)
 {
     using Zero::Content::ModpackInstallDialog;
@@ -1110,11 +1112,26 @@ void MainWindow::installModpack(const std::shared_ptr<Zero::Content::ModpackItem
         if (!saveCopyBeforeModpackUpdate(updateId, version ? version->name : QString(), &snapshotZip))
             return;
     }
+    const auto dropSnapshot = [&]() {
+        if (!snapshotZip.isEmpty())
+            Zero::Backup::Pack::removeSnapshot(snapshotZip, Zero::Backup::Pack::snapshotsDirFor(APPLICATION->dataRoot(), updateId));
+    };
+
+    // "Keep my game settings": the player's options, server list ... are copied aside now and put back after a successful update of this
+    // same instance (the pack's own copies would replace them). Failing to copy them stops the update before anything changed.
+    Zero::Content::KeptSettings kept;
+    if (update && dialog.keepGameSettings()) {
+        auto* inst = APPLICATION->instances()->getInstanceById(updateId);
+        if (!inst || !kept.isValid() || !kept.save(inst->gameRoot())) {
+            Zero::ZeroToast::show(this, tr("Could not keep your game settings, so the update did not start."), Zero::ZeroToast::Kind::Error);
+            dropSnapshot();
+            return;
+        }
+    }
 
     InstanceTask* creationTask = dialog.extractTask();
     if (!creationTask) {
-        if (!snapshotZip.isEmpty())
-            Zero::Backup::Pack::removeSnapshot(snapshotZip, Zero::Backup::Pack::snapshotsDirFor(APPLICATION->dataRoot(), updateId));
+        dropSnapshot();
         return;
     }
     const QString requestedName = dialog.instName();
@@ -1142,11 +1159,27 @@ void MainWindow::installModpack(const std::shared_ptr<Zero::Content::ModpackItem
     }
 
     if (!task->wasSuccessful())
-        return;
+        return;  // nothing is put back: the copy is dropped with `kept`, the saved copy of the instance handles the roll back
     QString name = requestedName;
     if (!createdId.isEmpty()) {
         if (auto* inst = APPLICATION->instances()->getInstanceById(createdId))
             name = inst->name();
+    }
+    // The pack's files replaced the player's: put the player's back (only when this very instance was updated).
+    bool settingsBack = true;
+    if (update && !kept.savedFiles().isEmpty() && createdId == updateId) {
+        if (auto* inst = APPLICATION->instances()->getInstanceById(updateId))
+            settingsBack = kept.restore(inst->gameRoot());
+        else
+            settingsBack = false;
+    }
+    if (!settingsBack) {
+        const QString warning = tr("Updated %1, but your game settings could not be put back").arg(name);
+        if (!snapshotZip.isEmpty())
+            Zero::ZeroToast::show(this, warning, Zero::ZeroToast::Kind::Warning, tr("Undo"), [this, updateId]() { rollBackModpackUpdate(updateId); });
+        else
+            Zero::ZeroToast::show(this, warning, Zero::ZeroToast::Kind::Warning);
+        return;
     }
     const QString text = (update ? tr("Updated %1") : tr("Installed %1")).arg(name);
     if (createdId.isEmpty())

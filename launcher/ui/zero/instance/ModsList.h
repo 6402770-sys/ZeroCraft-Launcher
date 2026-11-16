@@ -73,6 +73,8 @@ class ModDelegate : public QStyledItemDelegate {
         m_lockReason = reason;
     }
     bool locked() const { return m_locked; }
+    /// The icon of the tile of a row without a logo (default "blocks"; the Shader packs page uses "sun").
+    void setFallbackIcon(const QString& name) { m_fallbackIcon = name; }
 
     /// The painted card of a cell (the cell minus the gap below).
     static QRect cardRect(const QRect& cell);
@@ -101,6 +103,7 @@ class ModDelegate : public QStyledItemDelegate {
     QString m_mcVersion;
     bool m_locked = false;
     QString m_lockReason;
+    QString m_fallbackIcon = QStringLiteral("blocks");
 };
 
 class ModListView : public QListView {

@@ -924,12 +924,16 @@ SET(LAUNCHER_SOURCES
     zero/content/ModTarget.h
     zero/content/ModpackInstall.cpp
     zero/content/ModpackInstall.h
+    zero/content/ModpackKeep.cpp
+    zero/content/ModpackKeep.h
     zero/content/ModpackSource.cpp
     zero/content/ModpackSource.h
     zero/content/ModpackSources.cpp
     zero/content/ModpackSources.h
     zero/content/PackOrder.cpp
     zero/content/PackOrder.h
+    zero/content/PackRollback.cpp
+    zero/content/PackRollback.h
     zero/content/TechnicDetailsStore.cpp
     zero/content/TechnicDetailsStore.h
     zero/content/TechnicMeta.cpp
@@ -1010,6 +1014,10 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroIcons.h
     ui/zero/ZeroMotion.cpp
     ui/zero/ZeroMotion.h
+    ui/zero/ZeroSmoothScroll.cpp
+    ui/zero/ZeroSmoothScroll.h
+    ui/zero/ZeroSound.cpp
+    ui/zero/ZeroSound.h
     ui/zero/ZeroReveal.cpp
     ui/zero/ZeroReveal.h
     ui/zero/ZeroSkeleton.cpp
@@ -1129,6 +1137,10 @@ SET(LAUNCHER_SOURCES
     ui/zero/instance/ModDependencyPanel.h
     ui/zero/instance/ModSnapshotNotice.cpp
     ui/zero/instance/ModSnapshotNotice.h
+    ui/zero/instance/PackRollbackNotice.cpp
+    ui/zero/instance/PackRollbackNotice.h
+    ui/zero/instance/PackRollbackPrompt.cpp
+    ui/zero/instance/PackRollbackPrompt.h
     ui/zero/instance/ModsDialogs.cpp
     ui/zero/instance/ModsDialogs.h
     ui/zero/instance/ModsList.cpp
@@ -1141,6 +1153,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/instance/PackList.h
     ui/zero/instance/ResourcePacksPage.cpp
     ui/zero/instance/ResourcePacksPage.h
+    ui/zero/instance/ShaderPacksPage.cpp
+    ui/zero/instance/ShaderPacksPage.h
     ui/zero/pages/ModHealthView.cpp
     ui/zero/pages/ModHealthView.h
     ui/zero/pages/StorageView.cpp
@@ -1198,6 +1212,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/content/ModInstallDialog.h
     ui/zero/content/ShaderModNotice.cpp
     ui/zero/content/ShaderModNotice.h
+    ui/zero/content/InstallChoiceCard.cpp
+    ui/zero/content/InstallChoiceCard.h
     ui/zero/content/ModpackInstallDialog.cpp
     ui/zero/content/ModpackInstallDialog.h
     ui/zero/content/ModRows.cpp

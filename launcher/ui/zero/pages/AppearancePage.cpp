@@ -2,6 +2,7 @@
 #include "AppearancePage.h"
 
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QDebug>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -11,6 +12,7 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
+#include <QSlider>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -24,6 +26,7 @@
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroMotion.h"
+#include "ui/zero/ZeroSound.h"
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroPixelFont.h"
 #include "ui/zero/ZeroStyle.h"
@@ -494,6 +497,57 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
         syncMotion();
     });
 
+    // ----- Interface sounds -----
+    col->addWidget(makeLabel(tr("Interface sounds"), Role::Heading, column));
+    col->addSpacing(Tokens::spaceMd);
+    auto* soundsRow = new QHBoxLayout;
+    soundsRow->setContentsMargins(0, 0, 0, 0);
+    soundsRow->setSpacing(Tokens::spaceMd);
+    m_soundsCheck = new QCheckBox(tr("Interface sounds"), column);
+    m_soundsCheck->setAccessibleName(tr("Interface sounds"));
+    soundsRow->addWidget(m_soundsCheck);
+    soundsRow->addStretch(1);
+    m_soundsPreview = new QPushButton(tr("Preview"), column);
+    Style::setProperty(m_soundsPreview, "zeroVariant", "ghost");
+    m_soundsPreview->setToolTip(tr("Plays a click and a success sound with the current theme"));
+    connect(m_soundsPreview, &QPushButton::clicked, this, []() {
+        Sound::preview(Sound::Event::Click);
+        QTimer::singleShot(220, qApp, []() { Sound::preview(Sound::Event::Success); });
+    });
+    soundsRow->addWidget(m_soundsPreview);
+    col->addLayout(soundsRow);
+    col->addSpacing(Tokens::spaceSm);
+    m_soundsCaption = makeLabel(tr("Short clicks and chimes when you press buttons, switch options, change sections or finish something. "
+                                   "The style follows the theme: Minecraft plays retro 8-bit blips, the other themes play soft clicks."),
+                                Role::Caption, column, true);
+    m_soundsCaption->setWordWrap(true);
+    col->addWidget(m_soundsCaption);
+    col->addSpacing(Tokens::spaceMd);
+    auto* volumeLine = new QHBoxLayout;
+    volumeLine->setContentsMargins(0, 0, 0, 0);
+    m_soundsVolumeLabel = makeLabel(tr("Volume"), Role::Body, column);
+    volumeLine->addWidget(m_soundsVolumeLabel, 1);
+    m_soundsValue = makeLabel(QString(), Role::Caption, column);
+    volumeLine->addWidget(m_soundsValue);
+    col->addLayout(volumeLine);
+    col->addSpacing(Tokens::spaceXs);
+    m_soundsVolume = new QSlider(Qt::Horizontal, column);
+    m_soundsVolume->setRange(0, 100);
+    m_soundsVolume->setAccessibleName(tr("Interface sound volume"));
+    col->addWidget(m_soundsVolume);
+    col->addSpacing(Tokens::spaceXxl);
+
+    connect(m_soundsCheck, &QCheckBox::toggled, this, [this](bool on) {
+        if (!m_syncingSounds)
+            APPLICATION->settings()->set(Sound::kEnabledSetting, on);
+    });
+    connect(m_soundsVolume, &QSlider::valueChanged, this, [this](int v) {
+        m_soundsValue->setText(QStringLiteral("%1%").arg(v));
+        if (!m_syncingSounds)
+            APPLICATION->settings()->set(Sound::kVolumeSetting, v);
+    });
+    connect(m_soundsVolume, &QSlider::sliderReleased, this, []() { Sound::preview(Sound::Event::Click); });
+
     auto* more = new QPushButton(tr("More appearance options"), column);
     Style::setProperty(more, "zeroVariant", "ghost");
     more->setCursor(Qt::PointingHandCursor);
@@ -531,6 +585,11 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
 
     buildThemeCards();
     syncMotion();
+    syncSounds();
+    for (const char* key : { Sound::kEnabledSetting, Sound::kVolumeSetting }) {
+        if (auto setting = APPLICATION->settings()->getSetting(key))
+            connect(setting.get(), &Setting::SettingChanged, this, [this](const Setting&, const QVariant&) { syncSounds(); });
+    }
 
     // Keep in sync with the theme changing elsewhere (Prism's settings dialog, the legacy menu) and with the setting.
     connect(&Theme::instance(), &Theme::changed, this, [this]() { QTimer::singleShot(0, this, &AppearancePage::syncCurrent); });
@@ -722,6 +781,21 @@ void AppearancePage::syncCurrent()
 void AppearancePage::refreshApplyButton()
 {
     m_apply->setEnabled(!m_selectedId.isEmpty() && m_selectedId != m_currentId);
+}
+
+void AppearancePage::syncSounds()
+{
+    auto* settings = APPLICATION->settings();
+    const bool on = settings->get(Sound::kEnabledSetting).toBool();
+    const int volume = std::clamp(settings->get(Sound::kVolumeSetting).toInt(), 0, 100);
+    m_syncingSounds = true;
+    m_soundsCheck->setChecked(on);
+    m_soundsVolume->setValue(volume);
+    m_syncingSounds = false;
+    m_soundsValue->setText(QStringLiteral("%1%").arg(volume));
+    m_soundsVolume->setEnabled(on);
+    m_soundsVolumeLabel->setEnabled(on);
+    m_soundsValue->setEnabled(on);
 }
 
 void AppearancePage::syncMotion()

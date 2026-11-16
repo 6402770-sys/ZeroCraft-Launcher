@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // ZERO Launcher - the install review of Discover > Modpacks (docs/zero/CONTENT.md, "Modpacks" > "Install").
 //
-// Top to bottom: the pack header (icon, name, author, provider badge), a note when an instance already manages the pack, the
-// version (newest release preselected; type pill, Minecraft and loader of the chosen one), the instance name, group, location
-// (only with several instance folders) and the template switch, then Cancel / Install. In Update mode (an instance manages the
-// pack and the user pressed Update) only the version is asked: the name, group and icon are the instance's own.
+// Top to bottom: the pack header (icon, name, author, provider badge), the first decision "What do you want to do?" (two cards: New
+// instance / Update an instance; Update is disabled while no instance manages the pack or the provider cannot update in place),
+// the list of the instances that manage the pack (Update only), the version (newest release preselected; type pill, Minecraft and
+// loader of the chosen one), "Keep my game settings" (Update only), the instance name, group, location (only with several instance
+// folders) and the template switch (New only), then Cancel / Install (Update). In Update mode only the version is asked: the name,
+// group and icon are the chosen instance's own.
+//
+// The choice is made here, once: the provider's task never asks again (ModpackInstall.h).
 //
 // The dialog builds the provider's task through `planInstall()` / `createInstallTask()` (ModpackInstall.h), exactly as Prism's
 // classic pages do. The pack logo becomes the instance icon only when Install is pressed: nothing is downloaded or installed
@@ -26,6 +30,7 @@
 
 class InstanceTask;
 class QCheckBox;
+class QScrollArea;
 class QComboBox;
 class QHBoxLayout;
 class QLabel;
@@ -40,6 +45,7 @@ class RemoteImageCache;
 namespace Zero::Content {
 
 class PackIconWidget;
+class InstallChoiceCard;
 
 /// The instances that manage a modpack (BaseInstance::isManagedPack() with a provider id), as the installed state of the cards.
 QList<InstalledPack> installedPacksFromApplication();
@@ -71,8 +77,9 @@ class ModpackInstallDialog : public QDialog {
     static constexpr quint64 kGeneration = 0x7a65726f696e7374ULL;  ///< the generation token of this dialog's version request
     static constexpr int kLogoTimeoutMs = 8000;                    ///< Install does not wait longer than this for the logo
 
-    /// `updateInstanceId` non-empty = Update that instance (ignored when no installed pack has that id). `initialGroup` is the group a
-    /// new instance starts in (LastUsedGroupForNewInstance).
+    /// `updateInstanceId` non-empty = Update starts selected with that instance first in the list (ignored when no installed pack has
+    /// that id). Without it Update is still preselected whenever an instance manages the pack; the first row is then the one played
+    /// most recently. `initialGroup` is the group a new instance starts in (LastUsedGroupForNewInstance).
     ModpackInstallDialog(ModpackInstallEnvironment env, const ModpackItemPtr& item, const QString& updateInstanceId,
                          const QString& initialGroup, QWidget* parent = nullptr);
     ~ModpackInstallDialog() override;
@@ -83,11 +90,13 @@ class ModpackInstallDialog : public QDialog {
     QString instName() const;
     QString instGroup() const;
     QString instDir() const;
-    QString iconKey() const { return m_iconKey; }
+    QString iconKey() const;
     bool copyTemplateDir() const;
     bool isUpdate() const { return m_updateMode; }
     /// The instance an Update changes (empty for a new instance).
     QString updateInstanceId() const;
+    /// Update only: "Keep my game settings" is on (MainWindow saves and restores the files of ModpackKeep.h around the task).
+    bool keepGameSettings() const;
     /// The version chosen, empty while none is.
     std::optional<ModpackVersion> selectedVersion() const;
     /// Install can be pressed: a version that can be installed, a valid name and a location.
@@ -106,8 +115,14 @@ class ModpackInstallDialog : public QDialog {
     QPushButton* installButton() const { return m_install; }
     QPushButton* cancelButton() const { return m_cancel; }
     QPushButton* retryButton() const { return m_retry; }
-    /// The "already installed" / "updates ..." note; empty text = hidden.
-    QString noteText() const;
+    InstallChoiceCard* newCard() const { return m_newCard; }
+    InstallChoiceCard* updateCard() const { return m_updateCard; }
+    /// The rows of the instances an Update can target, in the order shown (empty when none manages the pack).
+    QList<InstallChoiceCard*> instanceRows() const { return m_instanceRows; }
+    /// The "Instance to update" list is on screen.
+    bool instanceListVisible() const;
+    QCheckBox* keepBox() const { return m_keep; }
+    bool keepVisible() const;
     QString nameError() const;
     QString versionStatus() const;
     /// Texts of the pills under the version box (type, Minecraft, loaders).
@@ -134,12 +149,14 @@ class ModpackInstallDialog : public QDialog {
     void setVersionState(VersionState state, const QString& error = {});
     void onVersionChanged();
     void refreshState();
-    void refreshIcons();
+    void applyMode();
+    void buildInstanceRows();
     void finishAccept(const QString& logoPath);
 
     ModpackInstallEnvironment m_env;
     ModpackItemPtr m_item;
-    std::optional<InstalledPack> m_installed;  ///< the instance that manages this pack (the note, Update)
+    QList<InstalledPack> m_managed;  ///< the instances that manage this pack, the one to start with first
+    int m_selected = 0;              ///< index into m_managed of the instance an Update changes
     bool m_updateMode = false;
     QString m_iconKey = QStringLiteral("default");
     QList<ModpackVersion> m_versions;
@@ -153,9 +170,14 @@ class ModpackInstallDialog : public QDialog {
     QLabel* m_packName = nullptr;
     QLabel* m_packAuthor = nullptr;
     QWidget* m_headerPills = nullptr;
-    QWidget* m_noteRow = nullptr;
-    QLabel* m_noteIcon = nullptr;
-    QLabel* m_note = nullptr;
+    InstallChoiceCard* m_newCard = nullptr;
+    InstallChoiceCard* m_updateCard = nullptr;
+    QWidget* m_instanceSection = nullptr;
+    QWidget* m_instanceHost = nullptr;
+    QScrollArea* m_instanceScroll = nullptr;
+    QList<InstallChoiceCard*> m_instanceRows;
+    QWidget* m_keepSection = nullptr;
+    QCheckBox* m_keep = nullptr;
     QComboBox* m_versionBox = nullptr;
     QWidget* m_versionPills = nullptr;
     QLabel* m_versionStatus = nullptr;

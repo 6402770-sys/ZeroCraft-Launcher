@@ -25,6 +25,7 @@ struct InstalledPack {
     QString instanceName;
     QString versionId;
     QString versionName;
+    qint64 lastLaunchMs = 0;  ///< BaseInstance::lastLaunch(); 0 = never played
 };
 
 /// Everything the section needs from the outside.

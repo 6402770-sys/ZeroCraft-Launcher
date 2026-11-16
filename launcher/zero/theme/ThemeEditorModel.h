@@ -133,6 +133,23 @@ class ThemeEditorModel : public QObject {
     bool selectCustomFont();
     void setFont(const QString& path);
 
+    // ---- interface sounds (a style and, per event, an optional own .wav; picked files are copied into the theme folder on save)
+    /// The chosen style ("retro" | "soft" | "none"); never empty: an unset style resolves to the base theme's (Minecraft retro, Obsidian soft).
+    QString soundStyle() const;
+    void setSoundStyle(const QString& style);
+    /// The event has its own file: picked in this session, or stored in the theme.
+    bool hasEventSound(const QString& event) const;
+    /// File name shown in the row ("sound-click.wav", or the picked file's name); empty without an own sound.
+    QString eventSoundName(const QString& event) const;
+    /// The file to play for the event: the picked one, else the one stored in the theme folder; empty when the event uses the style's sound.
+    QString eventSoundPath(const QString& event) const;
+    /// Uses the .wav at `path` for `event` (copied into the theme folder on save). The caller validates it (validateSoundSource).
+    void setEventSound(const QString& event, const QString& path);
+    /// Back to the style's own sound for `event`.
+    void resetEventSound(const QString& event);
+    /// Picked sound files not copied into the theme folder yet (event -> source path), for ThemeFiles::AssetSources.
+    const QMap<QString, QString>& pendingEventSounds() const { return m_pendingSounds; }
+
     // ---- results
     /// The definition to save: colors filled in, card opacity 1.0 without an image, background / icon / font files named for the picked
     /// ones (ThemeFiles::saveTheme finishes that part).
@@ -182,6 +199,7 @@ class ThemeEditorModel : public QObject {
     bool selectCustom(Asset& asset, QString Definition::* file);
     void setAsset(Asset& asset, QString Definition::* file, const QString& stem, const QString& path);
     Asset m_icon, m_font;
+    QMap<QString, QString> m_pendingSounds;  // event -> picked source file
 };
 
 }  // namespace Zero::Custom

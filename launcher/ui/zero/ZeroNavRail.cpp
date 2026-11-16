@@ -15,6 +15,7 @@
 #include "ZeroIcons.h"
 #include "ZeroMotion.h"
 #include "ZeroPaint.h"
+#include "ZeroSound.h"
 #include "ZeroStyle.h"
 #include "ZeroThemeState.h"
 
@@ -40,6 +41,7 @@ class NavItem : public QAbstractButton {
         setFocusPolicy(Qt::StrongFocus);
         setCursor(Qt::PointingHandCursor);
         setAttribute(Qt::WA_Hover, true);
+        setProperty(Sound::kEventProperty, "navigate");  // section change sound (ZeroSound)
         setProperty("zeroRipple", true);  // press ripple (see ZeroRipple), clipped to the pill
         setProperty("zeroRippleInset", kPillInset);
         setFixedHeight(Tokens::navItemHeight);

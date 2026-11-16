@@ -18,6 +18,7 @@
 #pragma once
 
 #include <QColor>
+#include <QMap>
 #include <QString>
 #include <QtGlobal>
 
@@ -220,6 +221,8 @@ struct ThemeSpec {
     double videoVolume = 0.5;   // 0..1, only meaningful with videoSound
     QString appIcon;            // absolute path of the theme's own launcher icon (window, taskbar, rail header); empty = the ZERO mark
     QString fontFile;           // absolute path of the theme's own UI font file; empty = the default font
+    QString soundSet;           // interface sound style: "retro" | "soft" | "none"; empty = by base theme (Minecraft retro, others soft)
+    QMap<QString, QString> soundFiles;  // interface sound event id ("click", ...) -> absolute path of the theme's own WAV replacing it
     QString fontFamily;         // family registered from fontFile (resolved when the theme is applied); empty = default or failed to load
 
     /// The id that picks the overlay stylesheet and the pixel-art touches (a custom theme answers with its base theme).

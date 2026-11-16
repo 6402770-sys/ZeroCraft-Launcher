@@ -98,6 +98,10 @@ void FlameCreationTask::executeTask()
     if (auto originalId = originalInstanceID(); !originalId.isEmpty()) {
         inst = instanceList->getInstanceById(originalId);
         Q_ASSERT(inst);
+    } else if (shouldAlwaysCreateNew()) {
+        // ZERO: the install dialog chose "New instance": no search for an instance of the same pack, no question.
+        createInstance();
+        return;
     } else {
         inst = instanceList->getInstanceByManagedName(originalName());
 

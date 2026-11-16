@@ -9,6 +9,7 @@
 #include <QtMath>
 #include "ZeroIcons.h"
 #include "ZeroPaint.h"
+#include "ZeroSound.h"
 #include "ZeroStyle.h"
 #include "ZeroThemeState.h"
 
@@ -58,6 +59,7 @@ ZeroPlayButton::ZeroPlayButton(QWidget* parent)
     setAttribute(Qt::WA_Hover, true);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     setCursor(Qt::PointingHandCursor);
+    setProperty(Sound::kEventProperty, "launch");  // pressing Play makes the launch sound (ZeroSound); Stop is a plain click
 
     connect(m_hover, &Motion::StateAnimator::progressChanged, this, qOverload<>(&QWidget::update));
 
@@ -220,6 +222,7 @@ void ZeroPlayButton::setState(State state)
         return;
     const State old = m_state;
     m_state = state;
+    setProperty(Sound::kEventProperty, state == State::Running ? "click" : "launch");
     if (state != State::Failed)
         m_failureHold.stop();
     if (state == State::Idle || state == State::Preparing) {

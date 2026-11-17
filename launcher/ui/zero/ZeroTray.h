@@ -18,8 +18,7 @@ namespace Zero {
 
 /// What the tray needs to know; everything is read when the menu opens (and when the tooltip is refreshed).
 struct TraySource {
-    std::function<QStringList()> favoriteIds;
-    std::function<QStringList()> recentIds;  ///< most recently played first
+    std::function<QStringList()> favoriteIds;  ///< most recently played first
     std::function<QString(const QString&)> nameOf;
     std::function<QSet<QString>()> running;
     std::function<QStringList()> playingNames;

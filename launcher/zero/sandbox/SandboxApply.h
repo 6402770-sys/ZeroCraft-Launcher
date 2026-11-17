@@ -10,7 +10,9 @@
 //  3. The copy's version of every target is copied into a staging folder `<original instance>/.zero-bringback-<ts>/new/<n>` (the original is
 //     still untouched; a failure here removes only that ZERO-owned folder).
 //  4. The swap: per target two renames, the original's file / folder to `.../old/<name>` and the new one into its place. Any failure puts every
-//     target back (reverse order) and removes the new copies.
+//     target back (reverse order) and removes the new copies. A folder of the original that the copy has too (or removed), e.g. `mods/`, is
+//     never renamed: only its differing entries are targets. Windows refuses to rename a folder while anything below it is watched or open,
+//     and the launcher's own models watch `mods/.index`.
 //  5. The replaced originals go to the Recycle Bin (Hooks::trashPath, default FS::trash and NOTHING else: never a permanent delete). One that
 //     cannot go stays in the staging folder, which is then left in place and named in the result.
 // The only things ever deleted for good are ZERO's own staging copies (`new/`) and empty staging folders.

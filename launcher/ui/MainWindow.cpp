@@ -3526,10 +3526,6 @@ void MainWindow::setupZeroShell()
             &MainWindow::rollBackModpackUpdate);
     connect(m_library, &Zero::LibraryPage::setArtworkRequested, this, &MainWindow::chooseArtworkForSelected);
     connect(m_library, &Zero::LibraryPage::removeArtworkRequested, this, &MainWindow::removeArtworkFromSelected);
-    connect(m_library, &Zero::LibraryPage::setBackgroundVideoRequested, this, &MainWindow::chooseBackgroundVideoForSelected);
-    connect(m_library, &Zero::LibraryPage::removeBackgroundVideoRequested, this, &MainWindow::removeBackgroundVideoFromSelected);
-    connect(m_home, &Zero::HomePage::heroVideoChanged, this,
-            [this](const QString& path) { m_shell->setPageVideo(QStringLiteral("home"), path); });
 
     // Worlds (read-only hub): "Show instance in Library" is the only way out
     connect(m_worlds, &Zero::WorldsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
@@ -4559,62 +4555,6 @@ void MainWindow::removeArtworkFromSelected()
 {
     if (m_selectedInstance)
         Zero::Profile::clearArtwork(m_selectedInstance);
-}
-
-void MainWindow::chooseBackgroundVideoForSelected()
-{
-    if (!m_selectedInstance)
-        return;
-    QStringList patterns;
-    for (const QString& e : Zero::Custom::videoExtensions())
-        patterns << QStringLiteral("*.") + e;
-    const QString path = QFileDialog::getOpenFileName(this, tr("Choose a background video"),
-                                                      QStandardPaths::writableLocation(QStandardPaths::MoviesLocation),
-                                                      tr("Videos (%1)").arg(patterns.join(QLatin1Char(' '))));
-    if (path.isEmpty())
-        return;
-    const QString problem = Zero::Profile::checkBackgroundVideo(path);
-    if (!problem.isEmpty()) {
-        Zero::ZeroToast::show(this, problem, Zero::ZeroToast::Kind::Error);
-        return;
-    }
-    static QSet<QString> copying;  // instance ids with a copy in flight (GUI thread only)
-    const QString id = m_selectedInstance->id();
-    if (copying.contains(id))
-        return;
-    copying.insert(id);
-    Zero::ZeroToast::show(this, tr("Copying video…"), Zero::ZeroToast::Kind::Info);
-
-    // The video can be large: copy it on a worker thread, then record it here.
-    using Result = QPair<QString, QString>;  // error, stored file name
-    auto* watcher = new QFutureWatcher<Result>(this);
-    connect(watcher, &QFutureWatcher<Result>::finished, this, [this, watcher, id]() {
-        const Result result = watcher->result();
-        watcher->deleteLater();
-        copying.remove(id);
-        auto* instance = APPLICATION->instances()->getInstanceById(id);
-        if (!result.first.isEmpty()) {
-            Zero::ZeroToast::show(this, result.first, Zero::ZeroToast::Kind::Error);
-            return;
-        }
-        if (!instance)
-            return;  // deleted while copying
-        Zero::Profile::commitBackgroundVideo(instance, result.second);
-        Zero::ZeroToast::show(this, tr("Background video set. It plays behind Home while this instance is featured."),
-                              Zero::ZeroToast::Kind::Success);
-    });
-    const QString root = m_selectedInstance->instanceRoot();
-    watcher->setFuture(QtConcurrent::run([root, path]() {
-        QString name;
-        const QString error = Zero::Profile::copyBackgroundVideo(root, path, &name);
-        return Result(error, name);
-    }));
-}
-
-void MainWindow::removeBackgroundVideoFromSelected()
-{
-    if (m_selectedInstance)
-        Zero::Profile::clearBackgroundVideo(m_selectedInstance);
 }
 
 void MainWindow::renameSelectedInstance(const QString& newName)

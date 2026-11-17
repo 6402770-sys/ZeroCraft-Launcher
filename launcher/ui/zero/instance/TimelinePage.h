@@ -65,7 +65,7 @@ class TimelinePage : public QWidget, public BasePage {
 
     QString id() const override { return QStringLiteral("timeline"); }
     QString displayName() const override { return tr("Timeline"); }
-    QIcon icon() const override { return QIcon::fromTheme("clock"); }
+    QIcon icon() const override;
     QString helpPage() const override { return QString(); }
     void openedImpl() override;
 

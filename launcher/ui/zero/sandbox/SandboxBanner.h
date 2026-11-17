@@ -44,6 +44,10 @@ class SandboxBanner : public QWidget {
 
     QString copyId() const { return m_copyId; }
     QLabel* titleLabel() const { return m_title; }
+    /// The whole title ("Test copy of X"); the compact look's label may show it elided.
+    QString titleText() const { return m_titleText; }
+    /// Compact look only: the 16 px icon left of the title (null for the card, which paints it).
+    QLabel* iconLabel() const { return m_icon; }
     QPushButton* bringBackButton() const { return m_bringBack; }
     QPushButton* keepButton() const { return m_keep; }
     QPushButton* discardButton() const { return m_discard; }
@@ -57,8 +61,12 @@ class SandboxBanner : public QWidget {
     void paintEvent(QPaintEvent*) override;
 
    private:
+    void updateIcon();
+
     Look m_look;
     QString m_copyId;
+    QString m_titleText;
+    QLabel* m_icon = nullptr;
     QLabel* m_title;
     QPushButton* m_bringBack;
     QPushButton* m_keep;

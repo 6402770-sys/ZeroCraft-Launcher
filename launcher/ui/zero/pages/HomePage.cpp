@@ -579,7 +579,6 @@ void HomePage::refresh()
     if (list->count() == 0) {
         m_stack->setCurrentIndex(0);
         m_heroId.clear();
-        emit heroVideoChanged(QString());
         m_recentSignature.clear();
         m_favSignature.clear();
         return;
@@ -826,7 +825,6 @@ void HomePage::syncLastSession()
 void HomePage::refreshHero(MinecraftInstance* hero)
 {
     m_heroId = hero->id();
-    emit heroVideoChanged(Profile::backgroundVideoPath(hero));
     m_heroIcon->setInstanceIcon(APPLICATION->icons()->getIcon(hero->iconKey()));
     const QString artwork = Profile::artworkPath(hero);
     m_heroArt->setArtwork(artwork);

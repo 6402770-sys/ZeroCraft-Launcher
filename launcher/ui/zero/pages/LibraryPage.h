@@ -85,8 +85,6 @@ class LibraryPage : public ShellPage {
     void tryCopyRequested();  // ZERO: "Try it in a copy" of the selected instance
     void setArtworkRequested();
     void removeArtworkRequested();
-    void setBackgroundVideoRequested();
-    void removeBackgroundVideoRequested();
 
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

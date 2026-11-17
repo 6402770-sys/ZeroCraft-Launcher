@@ -65,8 +65,7 @@ void ZeroTray::rebuildMenu()
 {
     m_menu->clear();
     const auto entries = Session::buildTrayMenu(m_source.favoriteIds ? m_source.favoriteIds() : QStringList(),
-                                                m_source.recentIds ? m_source.recentIds() : QStringList(), m_source.nameOf,
-                                                m_source.running ? m_source.running() : QSet<QString>(), m_source.canPlay);
+                                                m_source.nameOf, m_source.running ? m_source.running() : QSet<QString>(), m_source.canPlay);
     for (const auto& e : entries) {
         using Kind = Session::TrayEntry::Kind;
         if (e.kind == Kind::Separator) {
@@ -78,6 +77,8 @@ void ZeroTray::rebuildMenu()
         if (e.kind == Kind::Play) {
             const QString id = e.instanceId;
             connect(action, &QAction::triggered, this, [this, id]() { emit playRequested(id); });
+        } else if (e.kind == Kind::Hint) {
+            action->setEnabled(false);
         } else if (e.kind == Kind::Open) {
             connect(action, &QAction::triggered, this, &ZeroTray::openRequested);
         } else {

@@ -14,6 +14,7 @@
 #include "BaseInstance.h"
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
+#include "ui/zero/ZeroCompactButton.h"
 #include "ui/zero/ZeroEmptyState.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroStyle.h"
@@ -163,6 +164,12 @@ TimelinePage::TimelinePage(const TimelineEnvironment& env, QWidget* parent) : QW
 
 TimelinePage::~TimelinePage() = default;
 
+QIcon TimelinePage::icon() const
+{
+    // Lucide "clock" in the theme's text color, built when the section list asks for it
+    return Icons::icon(QStringLiteral("clock"), Theme::current().text);
+}
+
 void TimelinePage::build()
 {
     auto* root = new QVBoxLayout(this);
@@ -274,7 +281,7 @@ void TimelinePage::rebuild()
             line->addLayout(text, 1);
 
             if (entry.undoable) {
-                auto* undo = new QPushButton(tr("Undo"), row);
+                auto* undo = new CompactButton(tr("Undo"), row);
                 undo->setObjectName(QStringLiteral("zeroTimelineUndo"));
                 Style::setProperty(undo, "zeroVariant", "secondary");
                 Style::setProperty(undo, "zeroSize", "sm");

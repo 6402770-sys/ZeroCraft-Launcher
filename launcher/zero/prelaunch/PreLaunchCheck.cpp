@@ -147,7 +147,7 @@ bool isLaunchRelevant(const Mods::Finding& f)
     }
 }
 
-Item itemForFinding(const Mods::Finding& f)
+Item itemForFinding(const Mods::Finding& f, const QString& modsDir)
 {
     Item item;
     QStringList files = f.fileNames;
@@ -168,6 +168,19 @@ Item itemForFinding(const Mods::Finding& f)
             fix.label = QCoreApplication::translate("Zero::PreLaunch", "Disable this mod");
         }
         item.fixes.append(fix);
+        Fix recycle;
+        recycle.kind = Fix::Kind::RecycleJars;
+        for (const Mods::RepairAction& action : f.actions) {
+            recycle.targets.append(QDir(modsDir).filePath(action.fileName));
+        }
+        recycle.danger = true;
+        if (f.kind == Mods::FindingKind::DuplicateMod) {
+            recycle.label = f.actions.size() == 1 ? QCoreApplication::translate("Zero::PreLaunch", "Move the older copy to the Recycle Bin")
+                                                  : QCoreApplication::translate("Zero::PreLaunch", "Move the older copies to the Recycle Bin");
+        } else {
+            recycle.label = QCoreApplication::translate("Zero::PreLaunch", "Move to Recycle Bin");
+        }
+        item.fixes.append(recycle);
     } else {
         Fix open;
         open.kind = Fix::Kind::OpenMods;
@@ -201,7 +214,7 @@ QList<Item> modsItems(const Env& env, const RunOptions& options, bool* complete)
     const Mods::Report report = Mods::scanModsFolder(modsDir, context);
     for (const Mods::Finding& f : report.findings) {
         if (isLaunchRelevant(f)) {
-            items.append(itemForFinding(f));
+            items.append(itemForFinding(f, modsDir));
         }
     }
     cache.setModsCheck(fingerprint, items.isEmpty());
@@ -455,6 +468,25 @@ Session::FixResult Session::applyFix(const QString& itemId, int fixIndex)
                 return result;
             }
             recheck(category);
+            result.ok = true;
+            return result;
+        }
+        case Fix::Kind::RecycleJars: {
+            QString failed;
+            for (const QString& path : fix.targets) {
+                if (QFileInfo::exists(path) && !m_hooks.recycle(path)) {
+                    failed = QFileInfo(path).fileName();
+                    break;
+                }
+            }
+            recheck(category);
+            if (!failed.isEmpty()) {
+                result.error = QObject::tr("Couldn't move %1 to the Recycle Bin.").arg(failed);
+                if (Item* again = find(itemId)) {
+                    again->error = result.error;
+                }
+                return result;
+            }
             result.ok = true;
             return result;
         }

@@ -405,17 +405,6 @@ void InstanceDetailsPanel::setActions(const LibraryActions& actions)
     connect(m_removeArtwork, &QPushButton::clicked, this, &InstanceDetailsPanel::removeArtworkRequested);
     m_removeArtwork->hide();
     insert(m_removeArtwork);
-    m_setVideo = addActionButton(parent, QStringLiteral("film"), tr("Set background video…"), nullptr);
-    connect(m_setVideo, &QPushButton::clicked, this, &InstanceDetailsPanel::setBackgroundVideoRequested);
-    insert(m_setVideo);
-    m_removeVideo = addActionButton(parent, QStringLiteral("circle-x"), tr("Remove video"), nullptr);
-    connect(m_removeVideo, &QPushButton::clicked, this, &InstanceDetailsPanel::removeBackgroundVideoRequested);
-    m_removeVideo->hide();
-    insert(m_removeVideo);
-    m_videoNote = makeLabel(tr("Plays behind Home while this instance is featured."), Role::Caption, parent);
-    m_videoNote->setWordWrap(true);
-    m_videoNote->hide();
-    lay->insertWidget(i++, m_videoNote);
     insert(addActionButton(parent, QStringLiteral("copy"), tr("Copy"), actions.copy));
     m_tryCopy = addActionButton(parent, QStringLiteral("git-branch"), tr("Try it in a copy"), nullptr);  // ZERO
     m_tryCopy->setToolTip(tr("Make a test copy, change things there, then bring the changes back or discard it"));
@@ -581,11 +570,6 @@ void InstanceDetailsPanel::refreshProfile(bool reloadEditors)
     m_artHeader->art()->setArtwork(artwork);
     if (m_removeArtwork)
         m_removeArtwork->setVisible(hasArtwork);
-    const bool hasVideo = !Profile::backgroundVideoPath(m_instance).isEmpty();
-    if (m_removeVideo)
-        m_removeVideo->setVisible(hasVideo);
-    if (m_videoNote)
-        m_videoNote->setVisible(hasVideo);
 
     if (m_boost)
         m_boost->setVisible(!m_instance->isRunning());

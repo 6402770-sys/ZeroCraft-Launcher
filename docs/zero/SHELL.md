@@ -88,7 +88,7 @@ Top bar: title "Home", no subtitle, no actions. Content max width 1280, page pad
    heading "Servers" + "See all" (ghost, goes to the Servers page); one `ZeroCard` with up to 6 rows (52 px): server icon from servers.dat, name,
    address, status pill ("Checking…", "Online · 12/100 players" / "Online", "Offline"), **Join** (secondary: launches the first instance that has the
    server and is not running, with the same quick join as the Servers page). The servers are read and pinged when Home is shown, never on a timer.
-2c. **Updates** (`HomeUpdatesSection`, right below the hero; hidden entirely while there are no updates and no check runs): heading "Updates" with
+2c. **Updates** (`HomeUpdatesSection`, right below the hero; visible whenever an instance can be checked; with no updates and no check running the card holds one row: `circle-check` icon, "Your mods are up to date" + "Checked 10 minutes ago", or `refresh-cw` icon, "Check your instances for mod updates" + "Not checked yet", and a ghost "Check now" button): heading "Updates" with
    "Check again" (ghost) and "Update all" (primary, small) at the right; while a check of all instances runs a caption line with a spinner
    ("Checking Fabric Fun… (3 of 7)"; it only shows when the section is already visible, so a check that finds nothing never pops the section up);
    one `ZeroCard` with a row (56 px, same look as Recent activity) per instance that has updates: instance icon 28 px, name, caption "5 mods" (or
@@ -113,8 +113,8 @@ Top bar: title "Home", no subtitle, no actions. Content max width 1280, page pad
 ## Tray and "While playing"
 - `ZeroTray` (`QSystemTrayIcon`, only when `isSystemTrayAvailable()`) is created by `Application` and lives as long as the launcher. Icon = the themed
   app logo (`Application::logo()`, refreshed on theme change), tooltip "ZERO Launcher" / "ZERO Launcher — Playing <name>" ("and N more").
-  Click or double-click: show + raise the main window. Menu (rebuilt when it opens): up to 5 instances ("Play <name>": favorites first, then the most
-  recently played; disabled while that instance runs or cannot launch), separator, "Open ZERO Launcher", "Quit" (asks first when a game is running).
+  Click or double-click: show + raise the main window. Menu (rebuilt when it opens): up to 5 favorite instances ("Play <name>", most recently played first;
+  disabled while that instance runs or cannot launch; with no favorite one disabled line "Star an instance in the Library to see it here"), separator, "Open ZERO Launcher", "Quit" (asks first when a game is running).
 - Setting `ZeroWhilePlaying` = `tray` (default) | `open` | `close`, in Settings > General > "While playing" (radio buttons: "Hide to the tray", "Keep it
   open", "Close the launcher", each with a help tooltip). `tray`: when the first game process is up the main window and the console windows of that
   instance are hidden; when the last running instance ends the main window comes back (unless the user already brought it back); a crash brings it

@@ -89,9 +89,6 @@ class InstanceDetailsPanel : public ZeroCard {
     void favoriteToggleRequested();
     void setArtworkRequested();
     void removeArtworkRequested();
-    /// "Set background video...": choose a video that plays behind Home while the instance is featured.
-    void setBackgroundVideoRequested();
-    void removeBackgroundVideoRequested();
     /// "Check mods": open Tools > Mod Health for the shown instance (only offered for instances with a mod loader).
     void checkModsRequested();
     /// "Boost performance": the dialog for the shown instance (hidden while the instance runs).
@@ -156,9 +153,6 @@ class InstanceDetailsPanel : public ZeroCard {
     // artwork buttons
     QPushButton* m_setArtwork = nullptr;
     QPushButton* m_removeArtwork = nullptr;
-    QPushButton* m_setVideo = nullptr;
-    QPushButton* m_removeVideo = nullptr;
-    QLabel* m_videoNote = nullptr;
     QPushButton* m_checkMods = nullptr;
     QPushButton* m_boost = nullptr;
     QPushButton* m_rollback = nullptr;

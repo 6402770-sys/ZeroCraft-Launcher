@@ -158,20 +158,18 @@ class WhilePlayingTest : public QObject {
 
     // ----- tray menu model -----
 
-    void menuFavoritesFirstThenRecentUpToFive()
+    void menuShowsOnlyFavoritesInTheOrderGiven()
     {
-        const QStringList favorites{ "a", "b" };
-        const QStringList recent{ "b", "c", "d", "e", "f", "g" };
-        const auto menu = buildTrayMenu(favorites, recent, nameOf, {});
+        const auto menu = buildTrayMenu({ "b", "a", "c" }, nameOf, {});
         QStringList texts;
         for (const auto& e : menu)
             texts << (e.kind == TrayEntry::Kind::Separator ? QStringLiteral("-") : e.text);
-        QCOMPARE(texts, (QStringList{ "Play Alpha", "Play Beta", "Play Gamma", "Play Delta", "Play Epsilon", "-", "Open ZERO Launcher", "Quit" }));
+        QCOMPARE(texts, (QStringList{ "Play Beta", "Play Alpha", "Play Gamma", "-", "Open ZERO Launcher", "Quit" }));
     }
 
     void menuMoreThanFiveFavoritesAreCut()
     {
-        const auto menu = buildTrayMenu({ "a", "b", "c", "d", "e", "f", "g" }, {}, nameOf, {});
+        const auto menu = buildTrayMenu({ "a", "b", "c", "d", "e", "f", "g" }, nameOf, {});
         int plays = 0;
         for (const auto& e : menu)
             plays += e.kind == TrayEntry::Kind::Play;
@@ -180,7 +178,7 @@ class WhilePlayingTest : public QObject {
 
     void menuDisablesRunningAndUnlaunchable()
     {
-        const auto menu = buildTrayMenu({ "a", "b", "c" }, {}, nameOf, { "a" }, [](const QString& id) { return id != QLatin1String("c"); });
+        const auto menu = buildTrayMenu({ "a", "b", "c" }, nameOf, { "a" }, [](const QString& id) { return id != QLatin1String("c"); });
         QCOMPARE(menu.at(0).instanceId, QStringLiteral("a"));
         QVERIFY(!menu.at(0).enabled);  // running
         QVERIFY(menu.at(1).enabled);
@@ -190,7 +188,7 @@ class WhilePlayingTest : public QObject {
 
     void menuSkipsUnknownIdsAndDuplicates()
     {
-        const auto menu = buildTrayMenu({ "a", "gone", "a" }, { "a", "b" }, nameOf, {});
+        const auto menu = buildTrayMenu({ "a", "gone", "a", "b" }, nameOf, {});
         QStringList ids;
         for (const auto& e : menu)
             if (e.kind == TrayEntry::Kind::Play)
@@ -198,12 +196,15 @@ class WhilePlayingTest : public QObject {
         QCOMPARE(ids, (QStringList{ "a", "b" }));
     }
 
-    void menuWithoutInstancesHasNoSeparator()
+    void menuWithoutFavoritesShowsDisabledHint()
     {
-        const auto menu = buildTrayMenu({}, {}, nameOf, {});
-        QCOMPARE(menu.size(), 2);
-        QCOMPARE(menu.at(0).kind, TrayEntry::Kind::Open);
-        QCOMPARE(menu.at(1).kind, TrayEntry::Kind::Quit);
+        const auto menu = buildTrayMenu({}, nameOf, {});
+        QCOMPARE(menu.size(), 4);
+        QCOMPARE(menu.at(0).kind, TrayEntry::Kind::Hint);
+        QVERIFY(!menu.at(0).enabled);
+        QCOMPARE(menu.at(1).kind, TrayEntry::Kind::Separator);
+        QCOMPARE(menu.at(2).kind, TrayEntry::Kind::Open);
+        QCOMPARE(menu.at(3).kind, TrayEntry::Kind::Quit);
     }
 
     void tooltips()
@@ -222,20 +223,19 @@ class WhilePlayingTest : public QObject {
         QStringList playing{ "Alpha" };
         TraySource src;
         src.favoriteIds = []() { return QStringList{ "a", "b" }; };
-        src.recentIds = []() { return QStringList{ "c" }; };
         src.nameOf = nameOf;
         src.running = [&running]() { return running; };
         src.playingNames = [&playing]() { return playing; };
         ZeroTray tray(src);
         tray.rebuildMenu();
         const auto actions = tray.menu()->actions();
-        QCOMPARE(actions.size(), 6);  // 3 instances, separator, open, quit
+        QCOMPARE(actions.size(), 5);  // 2 favorites, separator, open, quit
         QCOMPARE(actions.at(0)->text(), QStringLiteral("Play Alpha"));
         QVERIFY(!actions.at(0)->isEnabled());
         QVERIFY(actions.at(1)->isEnabled());
-        QVERIFY(actions.at(3)->isSeparator());
-        QCOMPARE(actions.at(4)->text(), QStringLiteral("Open ZERO Launcher"));
-        QCOMPARE(actions.at(5)->text(), QStringLiteral("Quit"));
+        QVERIFY(actions.at(2)->isSeparator());
+        QCOMPARE(actions.at(3)->text(), QStringLiteral("Open ZERO Launcher"));
+        QCOMPARE(actions.at(4)->text(), QStringLiteral("Quit"));
         QVERIFY(tray.tooltip().endsWith(QStringLiteral("Playing Alpha")));
         playing.clear();
         QCOMPARE(tray.tooltip(), QStringLiteral("ZERO Launcher"));
@@ -244,8 +244,8 @@ class WhilePlayingTest : public QObject {
         QSignalSpy open(&tray, &ZeroTray::openRequested);
         QSignalSpy quit(&tray, &ZeroTray::quitRequested);
         actions.at(1)->trigger();
+        actions.at(3)->trigger();
         actions.at(4)->trigger();
-        actions.at(5)->trigger();
         QCOMPARE(play.count(), 1);
         QCOMPARE(play.first().first().toString(), QStringLiteral("b"));
         QCOMPARE(open.count(), 1);

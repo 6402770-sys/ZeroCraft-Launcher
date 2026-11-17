@@ -919,10 +919,19 @@ class PreLaunchCheckTest : public QObject {
         QCOMPARE(item.severity, Severity::Warn);
         QVERIFY(item.id.startsWith(S("mods:duplicate-mod:")));
         QVERIFY(!item.title.isEmpty());
-        QCOMPARE(item.fixes.size(), 1);
         QVERIFY2(item.fixes.at(0).kind == Fix::Kind::DisableJars || item.fixes.at(0).kind == Fix::Kind::OpenMods, "a fix is offered");
         if (item.fixes.at(0).kind == Fix::Kind::DisableJars) {
             QVERIFY(!item.fixes.at(0).actions.isEmpty());
+            QCOMPARE(item.fixes.size(), 2);
+            const Fix& recycle = item.fixes.at(1);
+            QCOMPARE(recycle.kind, Fix::Kind::RecycleJars);
+            QVERIFY(recycle.danger);
+            QVERIFY(!item.fixes.at(0).danger);
+            QCOMPARE(recycle.targets.size(), item.fixes.at(0).actions.size());
+            QCOMPARE(recycle.targets.at(0), QDir(l.mods).filePath(item.fixes.at(0).actions.at(0).fileName));
+            QVERIFY(recycle.label.contains(S("Recycle Bin")));
+        } else {
+            QCOMPARE(item.fixes.size(), 1);
         }
         // not asked again while the folder and the instance stay the same only when it was clean: a finding is always shown
         QCOMPARE(runChecks(env).items.size(), 1);
@@ -1128,6 +1137,57 @@ class PreLaunchCheckTest : public QObject {
         QCOMPARE(session.playLabel(), S("Play"));
         QVERIFY(session.playIsPrimary());
         QVERIFY(runChecks(env).items.isEmpty());  // the rerun no longer shows it
+    }
+
+    void sessionRecycleDuplicateJar()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const Layout l = makeLayout(tmp);
+        QVERIFY(writeCleanJar(l.mods + S("/one.jar"), S("dupe")));
+        QVERIFY(writeCleanJar(l.mods + S("/two.jar"), S("dupe"), S("2.0.0")));
+        const SignatureList list = markerList();
+        const Env env = makeEnv(l, &list, true);
+        QStringList recycled;
+        Hooks hooks;
+        hooks.recycle = [&](const QString& path) {
+            recycled.append(path);
+            return QFile::remove(path);
+        };
+        Session session(env, hooks, runChecks(env).items);
+        const Item item = session.items().at(0);
+        if (item.fixes.at(0).kind != Fix::Kind::DisableJars) {
+            QSKIP("Mod Intelligence did not name a culprit for this synthetic pair");
+        }
+        const auto r = session.applyFix(item.id, 1);
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(recycled.size(), 1);
+        QCOMPARE(QDir(l.mods).entryList({ S("*.jar") }).size(), 1);
+        QCOMPARE(QDir(l.mods).entryList({ S("*.jar.disabled") }).size(), 0);
+        QVERIFY(session.items().at(0).fixed);
+    }
+
+    void sessionRecycleJarsFailureNamesTheFile()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const Layout l = makeLayout(tmp);
+        QVERIFY(writeCleanJar(l.mods + S("/one.jar"), S("dupe")));
+        QVERIFY(writeCleanJar(l.mods + S("/two.jar"), S("dupe"), S("2.0.0")));
+        const SignatureList list = markerList();
+        const Env env = makeEnv(l, &list, true);
+        Hooks hooks;
+        hooks.recycle = [](const QString&) { return false; };
+        Session session(env, hooks, runChecks(env).items);
+        const Item item = session.items().at(0);
+        if (item.fixes.at(0).kind != Fix::Kind::DisableJars) {
+            QSKIP("Mod Intelligence did not name a culprit for this synthetic pair");
+        }
+        const auto r = session.applyFix(item.id, 1);
+        QVERIFY(!r.ok);
+        QVERIFY(r.error.contains(QFileInfo(item.fixes.at(1).targets.at(0)).fileName()));
+        QVERIFY(!session.items().at(0).fixed);
+        QCOMPARE(QDir(l.mods).entryList({ S("*.jar") }).size(), 2);
     }
 
     void sessionFailingHookSetsError()

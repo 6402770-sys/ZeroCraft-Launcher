@@ -54,7 +54,7 @@ class WhilePlaying : public QObject {
 
 /// One line of the tray menu.
 struct TrayEntry {
-    enum class Kind { Play, Separator, Open, Quit };
+    enum class Kind { Play, Hint, Separator, Open, Quit };
     Kind kind = Kind::Separator;
     QString instanceId;  ///< Play only
     QString text;
@@ -63,12 +63,11 @@ struct TrayEntry {
 
 constexpr int kTrayMaxInstances = 5;
 
-/// "Play <name>" for up to kTrayMaxInstances instances (favorites first, then the most recently played to fill; both lists in the
-/// order given, duplicates and ids without a name skipped), a separator, "Open ZERO Launcher" and "Quit". A running instance's entry is
-/// disabled; `canPlay` (optional) disables the instances that cannot be launched.
-QList<TrayEntry> buildTrayMenu(const QStringList& favoriteIds, const QStringList& recentIds,
-                               const std::function<QString(const QString&)>& nameOf, const QSet<QString>& running,
-                               const std::function<bool(const QString&)>& canPlay = {});
+/// "Play <name>" for up to kTrayMaxInstances favorites (in the order given, duplicates and ids without a name skipped), a separator,
+/// "Open ZERO Launcher" and "Quit". With no favorite a disabled hint entry takes the place of the Play entries. A running instance's
+/// entry is disabled; `canPlay` (optional) disables the instances that cannot be launched.
+QList<TrayEntry> buildTrayMenu(const QStringList& favoriteIds, const std::function<QString(const QString&)>& nameOf,
+                               const QSet<QString>& running, const std::function<bool(const QString&)>& canPlay = {});
 
 /// "ZERO Launcher", or "ZERO Launcher - Playing <name>" (several: "Playing <a> and N more").
 QString trayTooltip(const QStringList& playingNames);

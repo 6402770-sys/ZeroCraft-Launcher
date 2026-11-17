@@ -102,56 +102,6 @@ class ZeroVideoBackgroundTest : public QObject {
         QCOMPARE(plays, 2);  // exactly home and appearance with everything else clear
     }
 
-    void chooseVideoTruthTable()
-    {
-        using S = ZeroShell::VideoSource;
-        const QString clip = QStringLiteral("hero.mp4");
-        int page = 0;
-        for (const QString& current : { QStringLiteral("home"), QStringLiteral("library"), QStringLiteral("appearance"), QString() }) {
-            for (const QString& path : { clip, QString() }) {
-                for (int bits = 0; bits < 4; ++bits) {
-                    const bool motionOff = bits & 1, game = bits & 2;
-                    const bool expectPage = current == QLatin1String("home") && !path.isEmpty() && !motionOff;  // a game never changes it
-                    QCOMPARE(ZeroShell::chooseVideo(current, QStringLiteral("home"), path, motionOff, game), expectPage ? S::Page : S::Theme);
-                    page += expectPage;
-                }
-            }
-        }
-        QCOMPARE(page, 2);  // home + a video + motion on, with or without a game
-        QCOMPARE(ZeroShell::chooseVideo(QStringLiteral("home"), QString(), clip, false, false), S::Theme);  // no override page
-    }
-
-    void shellRoutesThePageVideoToItsPageOnly()
-    {
-        ThemeSpec spec = ThemeSpec::obsidian();
-        spec.reduceMotion = false;
-        Theme::setCurrent(spec);
-        auto shell = std::make_unique<ZeroShell>();
-        shell->addPage(QStringLiteral("home"), QStringLiteral("house"), QStringLiteral("Home"), new StubPage(QStringLiteral("Home")));
-        shell->addPage(QStringLiteral("library"), QStringLiteral("library-big"), QStringLiteral("Library"), new StubPage(QStringLiteral("Library")));
-        shell->finishRail();
-        shell->resize(600, 400);
-        shell->show();
-        QVERIFY(QTest::qWaitForWindowExposed(shell.get()));
-
-        shell->setCurrentPage(QStringLiteral("home"));
-        QVERIFY(!shell->pageVideoShown());  // nothing set
-        shell->setPageVideo(QStringLiteral("home"), QStringLiteral("hero.mp4"));
-        QVERIFY(shell->pageVideoShown());
-        shell->setCurrentPage(QStringLiteral("library"));
-        QVERIFY(!shell->pageVideoShown());  // other pages show the theme background
-        QVERIFY(!shell->pageVideoBackground() || !shell->pageVideoBackground()->hasPlayer());
-        shell->setCurrentPage(QStringLiteral("home"));
-        QVERIFY(shell->pageVideoShown());
-        Theme::setReduceMotion(true);
-        QVERIFY(!shell->pageVideoShown());  // reduced motion: the theme background, no extra decoder
-        Theme::setReduceMotion(false);
-        QVERIFY(shell->pageVideoShown());
-        shell->setPageVideo(QStringLiteral("home"), QString());
-        QVERIFY(!shell->pageVideoShown());
-        Theme::setCurrent(ThemeSpec::obsidian());
-    }
-
     void coverRectCropsCentered()
     {
         // wide source, tall target: crop the sides evenly

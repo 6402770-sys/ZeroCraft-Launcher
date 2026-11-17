@@ -56,8 +56,6 @@ class HomePage : public ShellPage {
     void serversRequested();
     /// A row of the Updates section was clicked: open the instance window on its mods page.
     void modsRequested(const QString& instanceId);
-    /// The featured (hero) instance's background video, empty when it has none or there is no hero; emitted on every refresh.
-    void heroVideoChanged(const QString& path);
 
    public:
     // for tests

@@ -59,34 +59,37 @@ void WhilePlaying::onGameEnded(const QString& instanceId, bool crashed)
         m_hooks.showMainWindow();
 }
 
-QList<TrayEntry> buildTrayMenu(const QStringList& favoriteIds, const QStringList& recentIds,
-                               const std::function<QString(const QString&)>& nameOf, const QSet<QString>& running,
-                               const std::function<bool(const QString&)>& canPlay)
+QList<TrayEntry> buildTrayMenu(const QStringList& favoriteIds, const std::function<QString(const QString&)>& nameOf,
+                               const QSet<QString>& running, const std::function<bool(const QString&)>& canPlay)
 {
     QList<TrayEntry> out;
     QSet<QString> seen;
     int count = 0;
-    for (const QStringList* list : { &favoriteIds, &recentIds }) {
-        for (const QString& id : *list) {
-            if (count >= kTrayMaxInstances)
-                break;
-            if (seen.contains(id))
-                continue;
-            const QString name = nameOf ? nameOf(id) : id;
-            if (name.isEmpty())
-                continue;
-            seen.insert(id);
-            TrayEntry e;
-            e.kind = TrayEntry::Kind::Play;
-            e.instanceId = id;
-            e.text = QObject::tr("Play %1").arg(name);
-            e.enabled = !running.contains(id) && (!canPlay || canPlay(id));
-            out.append(e);
-            ++count;
-        }
+    for (const QString& id : favoriteIds) {
+        if (count >= kTrayMaxInstances)
+            break;
+        if (seen.contains(id))
+            continue;
+        const QString name = nameOf ? nameOf(id) : id;
+        if (name.isEmpty())
+            continue;
+        seen.insert(id);
+        TrayEntry e;
+        e.kind = TrayEntry::Kind::Play;
+        e.instanceId = id;
+        e.text = QObject::tr("Play %1").arg(name);
+        e.enabled = !running.contains(id) && (!canPlay || canPlay(id));
+        out.append(e);
+        ++count;
     }
-    if (!out.isEmpty())
-        out.append({ TrayEntry::Kind::Separator, {}, {}, true });
+    if (out.isEmpty()) {
+        TrayEntry hint;
+        hint.kind = TrayEntry::Kind::Hint;
+        hint.text = QObject::tr("Star an instance in the Library to see it here");
+        hint.enabled = false;
+        out.append(hint);
+    }
+    out.append({ TrayEntry::Kind::Separator, {}, {}, true });
     out.append({ TrayEntry::Kind::Open, {}, QObject::tr("Open ZERO Launcher"), true });
     out.append({ TrayEntry::Kind::Quit, {}, QObject::tr("Quit"), true });
     return out;

@@ -7,11 +7,14 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QMap>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <functional>
 
+#include "minecraft/mod/ModFolderModel.h"
 #include "zero/backup/WorldBackup.h"
 #include "zero/backup/WorldBackupJobs.h"
 #include "zero/sandbox/SandboxApply.h"
@@ -198,9 +201,10 @@ class SandboxApplyTest : public QObject {
         const Result r = apply(rig.request({ Part::ResourcePacks, Part::Config }), rig.hooks());
         QVERIFY2(r.ok, qPrintable(r.error));
         QCOMPARE(r.appliedParts, (QStringList{ "config" }));
-        QCOMPARE(rig.trashed.size(), 1);  // only the old config folder
-        QVERIFY(rig.trashed.first().contains(S("config")));
+        // config only gained extra.toml: the identical keep.toml is not touched and nothing of the original is replaced
+        QVERIFY(rig.trashed.isEmpty());
         QCOMPARE(rig.o(S("minecraft/config/extra.toml")), QByteArray("extra"));
+        QCOMPARE(rig.o(S("minecraft/config/keep.toml")), QByteArray("same"));
         QCOMPARE(rig.o(S("minecraft/resourcepacks/rp.zip")), QByteArray("rp"));
     }
 
@@ -219,7 +223,7 @@ class SandboxApplyTest : public QObject {
         QVERIFY(QDir(rig.copy + S("/minecraft/resourcepacks")).removeRecursively());
         const Result r = apply(rig.request({ Part::ResourcePacks }), rig.hooks());
         QVERIFY2(r.ok, qPrintable(r.error));
-        QVERIFY(!rig.oHas(S("minecraft/resourcepacks")));
+        QVERIFY(!rig.oHas(S("minecraft/resourcepacks/rp.zip")));  // the folder itself stays, empty (a missing folder equals an empty one)
         QCOMPARE(rig.trashed.size(), 1);
         QCOMPARE(tree(rig.bin).value(S("1-resourcepacks/rp.zip")), QByteArray("rp"));
     }
@@ -257,13 +261,144 @@ class SandboxApplyTest : public QObject {
         QVERIFY(rig.trashed.isEmpty());
     }
 
+    // ---------------------------------------------------------------- the launcher watches the original's folders
+
+    // The owner's bug: with the original's Mods page open (a ModFolderModel watching mods/ and mods/.index), "Bring changes back" failed with
+    // "Could not replace mods". Windows refuses to rename a folder while a handle is open below it (a QFileSystemWatcher on a sub folder or a
+    // file, Explorer, an open file), so a folder that both instances have is never renamed: only the entries inside it move.
+    void bringsBackWhileTheLauncherWatchesTheOriginalsFolders()
+    {
+        Rig rig;
+        rig.putOrig(S("minecraft/mods/.index/a.pw.toml"), "index old");
+        rig.putCopy(S("minecraft/mods/.index/a.pw.toml"), "index NEW");
+        const QString mods = rig.orig + S("/minecraft/mods");
+        const QString config = rig.orig + S("/minecraft/config");
+        const QString patches = rig.orig + S("/patches");
+
+        ModFolderModel model(QDir(mods), nullptr, false, false);
+        {
+            QSignalSpy loaded(&model, &ResourceFolderModel::updateFinished);
+            QVERIFY(model.startWatching());
+            QVERIFY(loaded.count() || loaded.wait(10000));
+        }
+        auto names = [&model]() {
+            QStringList out;
+            for (Resource* r : model.allResources())
+                out << r->fileinfo().fileName();
+            out.sort();
+            return out;
+        };
+        QVERIFY(names().contains(S("gone.jar")));
+        QFileSystemWatcher other;  // e.g. an Explorer window or another page
+        QVERIFY(other.addPaths({ config, patches }).isEmpty());
+
+#ifdef Q_OS_WIN
+        // the cause, shown: Windows refuses to rename a folder while something below it is watched (the model watches mods/.index)
+        QVERIFY(!QDir().rename(mods, mods + S("-renamed")));
+#endif
+
+        const Result r = apply(rig.request({ Part::Mods, Part::Config, Part::GameVersion }), rig.hooks());
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QVERIFY(r.changedAnything);
+        QCOMPARE(rig.o(S("minecraft/mods/a.jar")), QByteArray("a NEW"));
+        QCOMPARE(rig.o(S("minecraft/mods/new.jar")), QByteArray("new"));
+        QVERIFY(!rig.oHas(S("minecraft/mods/gone.jar")));
+        QCOMPARE(rig.o(S("minecraft/mods/.index/a.pw.toml")), QByteArray("index NEW"));
+        QCOMPARE(rig.o(S("minecraft/config/extra.toml")), QByteArray("extra"));
+        QCOMPARE(rig.o(S("patches/new.json")), QByteArray("patch new"));
+        QVERIFY(!rig.oHas(S("patches/old.json")));
+        QVERIFY(differingParts(comparePlan(rig.original, rig.copyLayout)).size() == 1);  // only the shader packs, not chosen
+        // the replaced files still went to the Recycle Bin, as one "mods" folder
+        QCOMPARE(tree(rig.bin).value(S("1-mods/a.jar")), QByteArray("a old"));
+        QCOMPARE(tree(rig.bin).value(S("1-mods/gone.jar")), QByteArray("gone"));
+        QCOMPARE(tree(rig.bin).value(S("1-mods/.index/a.pw.toml")), QByteArray("index old"));
+        QVERIFY(rig.stagingFolders().isEmpty());
+
+        // the folders are still the watched ones: the model shows the new files by itself
+        QVERIFY(other.directories().contains(config));
+        QTRY_VERIFY_WITH_TIMEOUT(names().contains(S("new.jar")) && !names().contains(S("gone.jar")), 10000);
+        model.stopWatching();
+    }
+
+    void aWatchedFolderTheCopyRemovedIsEmptiedAndStays()
+    {
+        Rig rig;
+        QVERIFY(QDir(rig.copy + S("/minecraft/resourcepacks")).removeRecursively());
+        const QString packs = rig.orig + S("/minecraft/resourcepacks");
+        QFileSystemWatcher watcher;
+        QVERIFY(watcher.addPath(packs));
+        const Result r = apply(rig.request({ Part::ResourcePacks }), rig.hooks());
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QVERIFY(QFileInfo(packs).isDir());  // the folder stays, empty (a missing folder equals an empty one)
+        QVERIFY(QDir(packs).isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot));
+        QCOMPARE(tree(rig.bin).value(S("1-resourcepacks/rp.zip")), QByteArray("rp"));
+        QVERIFY(differingParts(comparePlan(rig.original, rig.copyLayout)).indexOf(Part::ResourcePacks) < 0);
+    }
+
+    void subFoldersBothHaveAreKeptAndOnlyTheirChangedEntriesMove()
+    {
+        Rig rig;
+        rig.putOrig(S("minecraft/config/sub/x.toml"), "x old");
+        rig.putOrig(S("minecraft/config/sub/same.toml"), "same");
+        rig.putOrig(S("minecraft/config/OnlyOrig/o.toml"), "o");
+        rig.putOrig(S("minecraft/config/Case.toml"), "case old");
+        rig.putCopy(S("minecraft/config/sub/x.toml"), "x NEW");
+        writeFile(rig.copy + S("/minecraft/config/sub/same.toml"), "same", kT1);
+        rig.putCopy(S("minecraft/config/sub/deeper/d.toml"), "d");
+        rig.putCopy(S("minecraft/config/case.toml"), "case NEW");  // renamed by case only, and changed
+        QFileSystemWatcher watcher;  // a watch inside sub/ keeps sub/ (and config/) from being renamed
+        QVERIFY(watcher.addPath(rig.orig + S("/minecraft/config/sub/same.toml")));
+        const Result r = apply(rig.request({ Part::Config }), rig.hooks());
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(rig.o(S("minecraft/config/sub/x.toml")), QByteArray("x NEW"));
+        QCOMPARE(rig.o(S("minecraft/config/sub/deeper/d.toml")), QByteArray("d"));
+        QVERIFY(!rig.oHas(S("minecraft/config/OnlyOrig")));
+        QVERIFY(QDir(rig.orig + S("/minecraft/config")).entryList(QDir::Files).contains(S("case.toml")));  // the copy's spelling
+        QCOMPARE(rig.o(S("minecraft/config/case.toml")), QByteArray("case NEW"));
+        QVERIFY(differingParts(comparePlan(rig.original, rig.copyLayout)).indexOf(Part::Config) < 0);
+        const auto bin = tree(rig.bin);
+        QCOMPARE(bin.value(S("1-config/sub/x.toml")), QByteArray("x old"));
+        QCOMPARE(bin.value(S("1-config/OnlyOrig/o.toml")), QByteArray("o"));
+        QCOMPARE(bin.value(S("1-config/Case.toml")), QByteArray("case old"));
+        QVERIFY(!bin.contains(S("1-config/sub/same.toml")));  // identical: never moved
+        QVERIFY(rig.stagingFolders().isEmpty());
+    }
+
+    void aWorldNamedLikeAPartFolderDoesNotCollideInTheStagingFolder()
+    {
+        Rig rig;
+        rig.putOrig(S("minecraft/saves/mods/level.dat"), "old world");
+        rig.putCopy(S("minecraft/saves/mods/level.dat"), "new world");
+        const Result r = apply(rig.request({ Part::Mods, Part::Worlds }), rig.hooks());
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(rig.o(S("minecraft/saves/mods/level.dat")), QByteArray("new world"));
+        QCOMPARE(rig.o(S("minecraft/mods/a.jar")), QByteArray("a NEW"));
+        QCOMPARE(rig.trashed.size(), 2);
+    }
+
+    void aFailureInsideAWatchedFolderPutsEveryEntryBack()
+    {
+        Rig rig;
+        const auto before = tree(rig.orig);
+        QFileSystemWatcher watcher;
+        QVERIFY(watcher.addPath(rig.orig + S("/minecraft/mods")));
+        // a.jar is swapped and gone.jar moved aside, then new.jar cannot be put in place
+        rig.failRename = [](const QString&, const QString& to) { return QFileInfo(to).fileName() == S("new.jar"); };
+        const Result r = apply(rig.request({ Part::Mods }), rig.hooks());
+        QVERIFY(!r.ok);
+        QVERIFY(r.restored);
+        QCOMPARE(tree(rig.orig), before);
+        QVERIFY(rig.stagingFolders().isEmpty());
+        QVERIFY(rig.trashed.isEmpty());
+    }
+
     // ---------------------------------------------------------------- failures: everything goes back
 
     void aFailedCopyChangesNothing()
     {
         Rig rig;
         const auto before = tree(rig.orig);
-        rig.failCopy = [](const QString& from) { return from.endsWith(S("patches")); };  // the second thing to copy
+        rig.failCopy = [](const QString& from) { return from.endsWith(S("patches/new.json")); };  // the last thing to copy
         const Result r = apply(rig.request({ Part::Mods, Part::GameVersion }), rig.hooks());
         QVERIFY(!r.ok);
         QVERIFY(r.restored);
@@ -277,8 +412,8 @@ class SandboxApplyTest : public QObject {
     {
         Rig rig;
         const auto before = tree(rig.orig);
-        // mods and the old mmc-pack.json move fine; replacing patches fails
-        rig.failRename = [](const QString& from, const QString&) { return QFileInfo(from).fileName() == S("patches"); };
+        // the mods and the old mmc-pack.json move fine; replacing the patches fails
+        rig.failRename = [](const QString& from, const QString&) { return QFileInfo(from).fileName() == S("old.json"); };
         const Result r = apply(rig.request({ Part::Mods, Part::GameVersion }), rig.hooks());
         QVERIFY(!r.ok);
         QVERIFY(r.restored);
@@ -292,8 +427,8 @@ class SandboxApplyTest : public QObject {
     {
         Rig rig;
         const auto before = tree(rig.orig);
-        // the original's mods folder moves aside, but the new one cannot be put in its place
-        rig.failRename = [&](const QString& from, const QString& to) { return from.contains(S("/new/")) && QFileInfo(to).fileName() == S("mods"); };
+        // the original's a.jar moves aside, but the new one cannot be put in its place
+        rig.failRename = [&](const QString& from, const QString& to) { return from.contains(S("/new/")) && QFileInfo(to).fileName() == S("a.jar"); };
         const Result r = apply(rig.request({ Part::Mods }), rig.hooks());
         QVERIFY(!r.ok);
         QVERIFY(r.restored);

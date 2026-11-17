@@ -176,9 +176,6 @@ inline constexpr AccentPreset accentPresets[] = {
 constexpr double bevelLightAlpha = 0.07;
 // Size of the square step cut into each corner of a Notched panel (px).
 constexpr int notchStep = 2;
-// Smallest scrim (alpha of the theme background color) over an instance's Home video, so the Home text stays readable
-// even when the theme asks for no dim.
-constexpr double pageVideoMinDim = 0.55;
 
 } // namespace Tokens
 

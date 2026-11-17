@@ -12,13 +12,11 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSaveFile>
-#include <QUuid>
 #include <algorithm>
 #include "BaseInstance.h"
 #include "minecraft/MinecraftInstance.h"
 #include "settings/SettingsObject.h"
 #include "ui/zero/pages/InstanceInfo.h"
-#include "zero/theme/ThemeFiles.h"
 
 namespace Zero {
 namespace Profile {
@@ -28,12 +26,11 @@ namespace {
 constexpr const char* kFavoriteKey = "ZeroFavorite";
 constexpr const char* kTagsKey = "ZeroTags";
 constexpr const char* kArtworkKey = "ZeroArtwork";
-constexpr const char* kVideoKey = "ZeroBackgroundVideo";
 
-void changed(BaseInstance* instance, bool artwork = false, bool video = false)
+void changed(BaseInstance* instance, bool artwork = false)
 {
     emit instance->propertiesChanged();
-    Notifier::instance()->notify(instance->id(), artwork, video);
+    Notifier::instance()->notify(instance->id(), artwork);
 }
 
 QString artworkFile(BaseInstance* instance)
@@ -238,110 +235,6 @@ void clearArtwork(BaseInstance* instance)
         instance->settings()->set(kArtworkKey, QString());
     }
     changed(instance, true);
-}
-
-// ----- background video -----
-
-QString backgroundVideoBaseName()
-{
-    return QStringLiteral(".zero/background");
-}
-
-QString backgroundVideoPath(BaseInstance* instance)
-{
-    if (!instance)
-        return {};
-    const QString name = instance->settings()->get(kVideoKey).toString();
-    // Only a plain file name of a supported type inside `.zero`: never a path that leaves the instance folder.
-    if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\')) || name.contains(QStringLiteral("..")) ||
-        Custom::videoExtension(name).isEmpty())
-        return {};
-    const QString root = QDir::cleanPath(QDir(instance->instanceRoot()).absolutePath());
-    const QString path = QDir::cleanPath(QDir(root + QStringLiteral("/.zero")).absoluteFilePath(name));
-    if (!path.startsWith(root + QLatin1Char('/')) || !QFileInfo(path).isFile())
-        return {};
-    return path;
-}
-
-QString checkBackgroundVideo(const QString& sourcePath, qint64 maxBytes)
-{
-    if (maxBytes < 0)
-        maxBytes = Custom::kMaxBackgroundBytes;
-    if (Custom::videoExtension(sourcePath).isEmpty())
-        return QCoreApplication::translate("Zero::Profile", "ZERO can use mp4, webm, mkv or mov videos as a background.");
-    const QFileInfo info(sourcePath);
-    if (!info.isFile())
-        return QCoreApplication::translate("Zero::Profile", "The video could not be found.");
-    if (info.size() > maxBytes)
-        return QCoreApplication::translate("Zero::Profile", "This video is too big for a background. The limit is %1 MB.").arg(maxBytes / (1024 * 1024));
-    return {};
-}
-
-QString copyBackgroundVideo(const QString& instanceRoot, const QString& sourcePath, QString* storedName, qint64 maxBytes)
-{
-    if (const QString problem = checkBackgroundVideo(sourcePath, maxBytes); !problem.isEmpty())
-        return problem;
-    const QString ext = Custom::videoExtension(sourcePath);
-    const QString folder = QDir(instanceRoot).absoluteFilePath(QStringLiteral(".zero"));
-    if (!QDir().mkpath(folder))
-        return QCoreApplication::translate("Zero::Profile", "The video folder could not be created.");
-    const QString name = QStringLiteral("background.") + ext;
-    const QString target = folder + QLatin1Char('/') + name;
-
-    // Copy to a temporary file next to the target, then rename: the old video stays until the new one is complete.
-    const QString temp = folder + QStringLiteral("/background.") + QUuid::createUuid().toString(QUuid::Id128).left(8) + QStringLiteral(".part");
-    if (!QFile::copy(sourcePath, temp)) {
-        QFile::remove(temp);
-        return QCoreApplication::translate("Zero::Profile", "The video could not be copied.");
-    }
-    if (QFileInfo(temp).size() != QFileInfo(sourcePath).size()) {
-        QFile::remove(temp);
-        return QCoreApplication::translate("Zero::Profile", "The video could not be copied completely.");
-    }
-    QFile::remove(target);  // QFile::rename does not overwrite
-    if (!QFile::rename(temp, target)) {
-        QFile::remove(temp);
-        return QCoreApplication::translate("Zero::Profile", "The video could not be saved.");
-    }
-    for (const QString& other : Custom::videoExtensions()) {
-        if (other != ext)
-            QFile::remove(folder + QStringLiteral("/background.") + other);
-    }
-    if (storedName)
-        *storedName = name;
-    return {};
-}
-
-void commitBackgroundVideo(BaseInstance* instance, const QString& storedName)
-{
-    if (!instance)
-        return;
-    instance->settings()->set(kVideoKey, storedName);
-    changed(instance, false, true);
-}
-
-QString setBackgroundVideo(BaseInstance* instance, const QString& sourcePath, qint64 maxBytes)
-{
-    if (!instance)
-        return QCoreApplication::translate("Zero::Profile", "No instance.");
-    QString name;
-    const QString error = copyBackgroundVideo(instance->instanceRoot(), sourcePath, &name, maxBytes);
-    if (!error.isEmpty())
-        return error;
-    commitBackgroundVideo(instance, name);
-    return {};
-}
-
-void clearBackgroundVideo(BaseInstance* instance)
-{
-    if (!instance)
-        return;
-    const QString path = backgroundVideoPath(instance);
-    if (!path.isEmpty())
-        QFile::remove(path);
-    if (!instance->settings()->get(kVideoKey).toString().isEmpty())
-        instance->settings()->set(kVideoKey, QString());
-    changed(instance, false, true);
 }
 
 // ----- mods -----

@@ -154,25 +154,60 @@ class ZeroHomeUpdatesSectionTest : public QObject {
         Theme::setReduceMotion(true);
     }
 
-    void hiddenWhileThereIsNothingToShow()
+    void neverCheckedOffersTheFirstCheck()
     {
         Rig rig;
         auto section = sectionFor(rig);
-        QVERIFY(section->isHidden());
+        section->show();
+        QVERIFY(!section->isHidden());
         QCOMPARE(section->rowCount(), 0);
+        QCOMPARE(section->idleTitle(), S("Check your instances for mod updates"));
+        QCOMPARE(section->idleCaption(), S("Not checked yet"));
         QVERIFY(section->checkingText().isEmpty());
+        QVERIFY(section->updateAllButton()->isHidden());
+        QVERIFY(section->checkAgainButton()->isHidden());
 
-        // a check that runs and finds nothing does not make the section pop up
+        QSignalSpy started(rig.sweep.get(), &UpdateSweep::started);
+        QTest::mouseClick(section->idleButton(), Qt::LeftButton);
+        QCOMPARE(started.size(), 1);
+    }
+
+    void aCheckThatFindsNothingSaysUpToDate()
+    {
+        Rig rig;
         for (auto& b : rig.behavior) {
             b.mods = {};
         }
+        auto section = sectionFor(rig);
+        section->show();
         QSignalSpy finished(rig.sweep.get(), &UpdateSweep::finished);
         rig.sweep->checkNow();
         section->refresh();
-        QVERIFY(section->isHidden());
+        QVERIFY(!section->isHidden());
+        QVERIFY(section->idleTitle().isEmpty());  // the checking line replaces the row
+        QVERIFY(!section->checkingText().isEmpty());
         QTRY_COMPARE(finished.size(), 1);
         section->refresh();
+        QVERIFY(!section->isHidden());
+        QCOMPARE(section->idleTitle(), S("Your mods are up to date"));
+        QVERIFY(section->idleCaption().startsWith(S("Checked ")));
+        QVERIFY(section->idleCaption().contains(S("10 minutes ago")));
+    }
+
+    void hiddenWithoutEligibleInstances()
+    {
+        Rig rig;
+        rig.sources.clear();
+        auto section = sectionFor(rig);
         QVERIFY(section->isHidden());
+        for (const char* id : { "a", "b" }) {
+            InstanceSource source;
+            source.id = QString::fromLatin1(id);
+            source.managed = true;
+            rig.sources.append(source);
+        }
+        section->refresh();
+        QVERIFY(section->isHidden());  // only modpack instances: nothing a check could do
     }
 
     void showsOneRowPerInstanceWithItsCaption()
@@ -341,7 +376,9 @@ class ZeroHomeUpdatesSectionTest : public QObject {
         rig.applies.at(2).started();
         rig.applies.at(2).done(true, QString());
         section->refresh();
-        QVERIFY(section->isHidden());  // nothing left, nothing checking
+        QVERIFY(!section->isHidden());  // nothing left: the "up to date" row takes over
+        QCOMPARE(section->rowCount(), 0);
+        QVERIFY(!section->idleTitle().isEmpty());
     }
 
     void savesScreenshots()
@@ -377,6 +414,19 @@ class ZeroHomeUpdatesSectionTest : public QObject {
         {
             HomeUpdatesSection section(rig.sweep.get(), &iconFor);
             grab(section, S("updates-idle.png"));
+        }
+        {
+            Rig fresh;  // never checked
+            HomeUpdatesSection section(fresh.sweep.get(), &iconFor);
+            grab(section, S("updates-never.png"));
+        }
+        {
+            Rig clean;
+            for (auto& b : clean.behavior)
+                b.mods = {};
+            clean.fill();
+            HomeUpdatesSection section(clean.sweep.get(), &iconFor);
+            grab(section, S("updates-uptodate.png"));
         }
         {
             HomeUpdatesSection section(rig.sweep.get(), &iconFor);

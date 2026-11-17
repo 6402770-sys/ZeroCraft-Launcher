@@ -1369,14 +1369,6 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                     return ids;
                 };
                 source.favoriteIds = [sorted]() { return sorted(true); };
-                source.recentIds = [this, sorted]() {
-                    QStringList ids;
-                    for (const QString& id : sorted(false)) {
-                        if (auto* inst = m_instances->getInstanceById(id); inst && inst->lastLaunch() > 0)
-                            ids << id;
-                    }
-                    return ids;
-                };
                 source.nameOf = [this](const QString& id) {
                     auto* inst = m_instances->getInstanceById(id);
                     return inst ? inst->name() : QString();

@@ -14,6 +14,8 @@
 #include "Application.h"
 #include "ElidedLabel.h"
 #include "ui/zero/ZeroCard.h"
+#include "ui/zero/ZeroCompactButton.h"
+#include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroFormat.h"
 #include "ui/zero/ZeroSpinner.h"
 #include "ui/zero/ZeroStyle.h"
@@ -29,7 +31,8 @@ namespace {
 
 constexpr int kRowHeight = 56;
 constexpr int kIconSize = 28;
-constexpr int kButtonHeight = 28;
+constexpr int kButtonHeight = CompactButton::kCompactButtonHeight;
+constexpr int kIdleIconSize = 20;
 
 /// One clickable row of the card: `surfaceHover` background while hovered, a 1 px `border` divider at the bottom (not on the last row).
 /// Same look as the rows of "Recent activity".
@@ -163,7 +166,7 @@ HomeUpdatesSection::HomeUpdatesSection(Updates::UpdateSweep* sweep, IconProvider
         }
     });
     head->addWidget(m_checkAgain);
-    m_updateAll = new QPushButton(tr("Update all"), this);
+    m_updateAll = new CompactButton(tr("Update all"), this);
     m_updateAll->setObjectName(QStringLiteral("zeroUpdatesUpdateAll"));
     Style::setProperty(m_updateAll, "zeroVariant", "primary");
     Style::setProperty(m_updateAll, "zeroSize", "sm");
@@ -197,6 +200,45 @@ HomeUpdatesSection::HomeUpdatesSection(Updates::UpdateSweep* sweep, IconProvider
     m_rows->setContentsMargins(1, 1, 1, 1);  // inside the card's 1 px border
     m_rows->setSpacing(0);
     col->addWidget(m_card);
+
+    // the single row of "nothing to update" (sits in the card; hidden while there are rows)
+    m_idleRow = new QWidget(m_card);
+    m_idleRow->setObjectName(QStringLiteral("zeroUpdatesIdleRow"));
+    m_idleRow->setFixedHeight(kRowHeight);
+    auto* idle = new QHBoxLayout(m_idleRow);
+    idle->setContentsMargins(Tokens::spaceLg, 0, Tokens::spaceLg, 0);
+    idle->setSpacing(Tokens::spaceMd);
+    m_idleIcon = new QLabel(m_idleRow);
+    m_idleIcon->setFixedSize(kIdleIconSize, kIdleIconSize);
+    idle->addWidget(m_idleIcon);
+    auto* idleTexts = new QVBoxLayout;
+    idleTexts->setContentsMargins(0, 0, 0, 0);
+    idleTexts->setSpacing(0);
+    idleTexts->addStretch(1);
+    m_idleTitle = new QLabel(m_idleRow);
+    Style::applyRole(m_idleTitle, Role::Label);
+    idleTexts->addWidget(m_idleTitle);
+    m_idleCaption = new QLabel(m_idleRow);
+    Style::applyRole(m_idleCaption, Role::Caption);
+    Style::setProperty(m_idleCaption, "zeroTone", "secondary");
+    idleTexts->addWidget(m_idleCaption);
+    idleTexts->addStretch(1);
+    idle->addLayout(idleTexts, 1);
+    m_idleButton = new CompactButton(tr("Check now"), m_idleRow);
+    m_idleButton->setObjectName(QStringLiteral("zeroUpdatesCheckNow"));
+    Style::setProperty(m_idleButton, "zeroVariant", "ghost");
+    Style::setProperty(m_idleButton, "zeroSize", "sm");
+    m_idleButton->setFixedHeight(kButtonHeight);
+    m_idleButton->setCursor(Qt::PointingHandCursor);
+    m_idleButton->setAutoDefault(false);
+    connect(m_idleButton, &QPushButton::clicked, this, [this]() {
+        if (auto* e = engine()) {
+            e->checkNow();
+        }
+    });
+    idle->addWidget(m_idleButton);
+    m_idleRow->hide();
+    m_rows->addWidget(m_idleRow);
 
     m_checked = new QLabel(this);
     Style::applyRole(m_checked, Role::Caption);
@@ -259,9 +301,8 @@ void HomeUpdatesSection::rebuild()
     auto* sweep = engine();
     const QList<Updates::InstanceUpdates> results = sweep ? sweep->results() : QList<Updates::InstanceUpdates>();
     const bool checking = sweep && sweep->checking();
-    // Hidden until there is something to show; a check that finds nothing does not make the section pop up.
-    const bool visible = !results.isEmpty() || (checking && m_shown);
-    m_shown = visible;
+    // Visible whenever an instance can be checked (or there is something to show); the engine is the single source of truth.
+    const bool visible = !results.isEmpty() || checking || (sweep && sweep->hasEligibleInstances());
     setVisible(visible);
     if (!visible) {
         return;
@@ -276,6 +317,7 @@ void HomeUpdatesSection::rebuild()
         m_checkingLabel->setText(current.isEmpty() ? tr("Checking for updates…") : tr("Checking %1… (%2 of %3)").arg(current).arg(index).arg(total));
     }
     m_checkAgain->setEnabled(!checking);
+    m_checkAgain->setVisible(!results.isEmpty());
 
     bool anyIdle = false;
     for (int i = 0; i < results.size(); ++i) {
@@ -320,7 +362,7 @@ void HomeUpdatesSection::rebuild()
         lay->addLayout(texts, 1);
 
         const QString status = statusText(state);
-        auto* button = new QPushButton(tr("Update"), row);
+        auto* button = new CompactButton(tr("Update"), row);
         button->setObjectName(QStringLiteral("zeroUpdatesRowButton"));
         Style::setProperty(button, "zeroVariant", "secondary");
         Style::setProperty(button, "zeroSize", "sm");
@@ -356,7 +398,18 @@ void HomeUpdatesSection::rebuild()
         m_rowCaptions.append(captionText);
         m_rowStatuses.append(status);
     }
-    m_card->setVisible(!results.isEmpty());
+    // "nothing to update": one row in the card, only while no check runs
+    const bool showIdle = results.isEmpty() && !checking;
+    m_idleRow->setVisible(showIdle);
+    if (showIdle) {
+        const qint64 at = sweep->checkedAt();
+        const auto& theme = Theme::current();
+        m_idleIcon->setPixmap(Icons::pixmap(at > 0 ? QStringLiteral("circle-check") : QStringLiteral("refresh-cw"), theme.textSecondary,
+                                            kIdleIconSize, devicePixelRatioF()));
+        m_idleTitle->setText(at > 0 ? tr("Your mods are up to date") : tr("Check your instances for mod updates"));
+        m_idleCaption->setText(at > 0 ? tr("Checked %1").arg(lowerFirst(Format::relativeTime(at))) : tr("Not checked yet"));
+    }
+    m_card->setVisible(!results.isEmpty() || showIdle);
     m_updateAll->setVisible(!results.isEmpty());
     m_updateAll->setEnabled(anyIdle);
 
@@ -397,6 +450,16 @@ void HomeUpdatesSection::clickRow(int row)
 QString HomeUpdatesSection::checkingText() const
 {
     return m_checkingLine->isHidden() ? QString() : m_checkingLabel->text();
+}
+
+QString HomeUpdatesSection::idleTitle() const
+{
+    return m_idleRow->isHidden() ? QString() : m_idleTitle->text();
+}
+
+QString HomeUpdatesSection::idleCaption() const
+{
+    return m_idleRow->isHidden() ? QString() : m_idleCaption->text();
 }
 
 QString HomeUpdatesSection::checkedText() const

@@ -111,6 +111,12 @@ QList<InstanceSource> UpdateSweep::sources() const
     return m_hooks.instances ? m_hooks.instances() : QList<InstanceSource>();
 }
 
+bool UpdateSweep::hasEligibleInstances() const
+{
+    const QList<InstanceSource> all = sources();
+    return std::any_of(all.begin(), all.end(), [](const InstanceSource& source) { return !source.managed; });
+}
+
 std::optional<InstanceSource> UpdateSweep::sourceOf(const QString& id) const
 {
     for (const InstanceSource& source : sources()) {

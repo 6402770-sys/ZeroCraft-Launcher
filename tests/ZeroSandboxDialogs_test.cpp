@@ -12,9 +12,12 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QTimer>
+#include <QVBoxLayout>
 
 #include "ui/zero/ZeroTheme.h"
+#include "ui/zero/ZeroPageNav.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/ZeroTokens.h"
 #include "ui/zero/sandbox/SandboxBanner.h"
 #include "ui/zero/sandbox/SandboxDialogs.h"
 
@@ -233,6 +236,88 @@ class ZeroSandboxDialogsTest : public QObject {
         QCOMPARE(keep.first().first().toString(), S("copy-7"));
     }
 
+    // The owner's bug: in the instance window the compact title wrapped onto two lines and the icon was drawn over its first letters.
+    // Now, inside the side column (220 px, never wider): icon + one-line elided title, then the two buttons one under the other at full width.
+    void theCompactBannerFitsTheSideColumnWithoutOverlaps()
+    {
+        applySpecLive(ThemeSpec::obsidian());
+        const int column = PageNavDelegate::kWidth - 2 * Tokens::spaceLg;  // 220
+        QCOMPARE(column, 220);
+        const QString longName = S("Axas Perfect Pack With A Rather Long Name");
+        for (const QString& name : { S("Pack"), longName }) {
+            for (const bool gone : { false, true }) {
+                QWidget host;
+                auto* layout = new QVBoxLayout(&host);
+                layout->setContentsMargins(0, 0, 0, 0);
+                auto* banner = new SandboxBanner(SandboxBanner::Look::Compact);
+                layout->addWidget(banner);
+                banner->setState(S("c"), gone ? QString() : name);
+                // the banner never asks the column for more width
+                QVERIFY2(banner->minimumSizeHint().width() <= column, qPrintable(QString::number(banner->minimumSizeHint().width())));
+                QVERIFY2(banner->sizeHint().width() <= column, qPrintable(QString::number(banner->sizeHint().width())));
+                host.setFixedWidth(column);
+                host.show();
+                QVERIFY(QTest::qWaitForWindowExposed(&host));
+                QCoreApplication::processEvents();
+                QCOMPARE(banner->width(), column);
+
+                QLabel* icon = banner->iconLabel();
+                QLabel* title = banner->titleLabel();
+                QVERIFY(icon);
+                QCOMPARE(icon->size(), QSize(16, 16));
+                QVERIFY(!icon->pixmap().isNull());
+                // one line: no wrapping, as tall as one line of its font, on the icon's centre line
+                QVERIFY(!title->wordWrap());
+                QVERIFY(!title->text().contains(QLatin1Char('\n')));
+                QVERIFY(title->height() < 2 * title->fontMetrics().height());
+                const QRect iconR = icon->geometry();
+                const QRect titleR = title->geometry();
+                QVERIFY(!iconR.intersects(titleR));
+                QVERIFY(iconR.right() < titleR.left());
+                QVERIFY(qAbs(iconR.center().y() - titleR.center().y()) <= 1);
+                QVERIFY(titleR.right() < banner->width());
+                // the buttons: one under the other, full width, inside the banner, spaceSm apart, below the title row
+                QPushButton* primary = gone ? banner->keepButton() : banner->bringBackButton();
+                QPushButton* discard = banner->discardButton();
+                const QRect primaryR = primary->geometry();
+                const QRect discardR = discard->geometry();
+                const int top = qMax(iconR.bottom(), titleR.bottom());
+                QCOMPARE(primaryR.top() - top - 1, Tokens::spaceSm);
+                QCOMPARE(discardR.top() - primaryR.bottom() - 1, Tokens::spaceSm);
+                QCOMPARE(primaryR.height(), 28);
+                QCOMPARE(discardR.height(), 28);
+                QCOMPARE(primaryR.left(), iconR.left());
+                QCOMPARE(discardR.left(), primaryR.left());
+                QCOMPARE(discardR.width(), primaryR.width());
+                QVERIFY(primaryR.right() < banner->width());
+                QVERIFY(discardR.bottom() < banner->height());
+                // the button text fits the button
+                QVERIFY(primary->fontMetrics().horizontalAdvance(primary->text()) < primaryR.width());
+                // the title: whole when it fits, else elided with the whole text in the tooltip
+                const QString shown = title->text();
+                if (title->fontMetrics().horizontalAdvance(banner->titleText()) <= titleR.width()) {
+                    QCOMPARE(shown, banner->titleText());
+                } else {
+                    QVERIFY(shown.endsWith(QChar(0x2026)));
+                    QVERIFY(shown.size() > 3);
+                    QCOMPARE(title->toolTip(), banner->titleText());
+                }
+                if (name == longName && !gone)
+                    QVERIFY(shown != banner->titleText());  // this one is too long for 220 px
+            }
+        }
+    }
+
+    void theCardBannerKeepsTheIconBesideTheWrappedTitle()
+    {
+        SandboxBanner banner(SandboxBanner::Look::Card);
+        banner.setState(S("c"), S("Axas Perfect Pack"));
+        QVERIFY(!banner.iconLabel());  // the card paints its icon in the title's left margin
+        QVERIFY(banner.titleLabel()->wordWrap());
+        QCOMPARE(banner.titleLabel()->text(), S("Test copy of Axas Perfect Pack"));
+        QVERIFY(banner.titleLabel()->contentsMargins().left() >= 16 + Tokens::spaceSm);
+    }
+
     void aBusyInstanceDisablesTheButtonsAndSaysWhy()
     {
         SandboxBanner banner(SandboxBanner::Look::Card);
@@ -293,6 +378,16 @@ class ZeroSandboxDialogsTest : public QObject {
                 compact.setState(S("c"), S("Survival 1.20"));
                 compact.setFixedWidth(640);
                 shoot(compact, S("sandbox-banner-compact"));
+                compact.setState(S("c"), S("Axas Perfect Pack"));
+                compact.setFixedWidth(PageNavDelegate::kWidth - 2 * Tokens::spaceLg);  // the instance window's side column (header slot margins)
+                shoot(compact, S("sandbox-banner-compact-sidebar"));
+                compact.setState(S("c"), S("Axas Perfect Pack With A Rather Long Name"));
+                shoot(compact, S("sandbox-banner-compact-sidebar-long"));
+                compact.setMinimumWidth(0);
+                compact.setMaximumWidth(QWIDGETSIZE_MAX);
+                compact.setState(S("c"), S("Axas Perfect Pack"));
+                compact.adjustSize();
+                shoot(compact, S("sandbox-banner-compact-natural"));
             }
         }
     }

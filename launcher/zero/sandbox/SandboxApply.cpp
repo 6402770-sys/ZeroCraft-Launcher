@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QSet>
 #include <QTimeZone>
 #include <QtDebug>
 
@@ -54,26 +56,85 @@ void removeEmptyTree(const QString& path)
     QDir().rmdir(path);
 }
 
+/// A real folder (not a link / junction).
+bool realDir(const QString& path)
+{
+    const QFileInfo info(path);
+    return info.isDir() && !info.isSymLink() && !info.isJunction();
+}
+
+/// Names SandboxPlan ignores in a comparison; they stay as they are in the original.
+bool ignoredName(const QString& name)
+{
+    return name.startsWith(QLatin1String(".zero-")) || name == QLatin1String("session.lock");
+}
+
 struct Item {
     bool world = false;
-    QString key;   ///< partKey
-    QString name;  ///< last path component (the name the Recycle Bin shows)
-    QString src;   ///< in the copy
-    QString dst;   ///< in the original
+    QString key;    ///< partKey
+    QString name;   ///< last path component (shown in the messages; the Recycle Bin name of an item without a group)
+    QString src;    ///< in the copy
+    QString dst;    ///< the original's file / folder (its own spelling)
+    QString place;  ///< where the copy's version goes (= dst, or the copy's spelling of the name inside a kept folder)
     bool srcExists = false;
     bool dstExists = false;
+    int group = -1;   ///< >= 0: an entry of a kept folder (index into the groups); its old version goes below that group's old folder
+    QString rel;      ///< group items: the path below the kept folder
     QString newPath;  ///< staging/new/<n>
-    QString oldPath;  ///< staging/old/<name>
+    QString oldPath;  ///< staging/old/<name> (group items: <group's old folder>/<rel>)
     bool movedOld = false;
     bool placedNew = false;
 };
 
-QString uniqueUnder(const QString& dir, const QString& name)
+/// A folder of the original that both instances have (or that the copy removed): it is never renamed, only the entries inside it move.
+/// Windows refuses to rename a folder while anything below it is open or watched (the launcher's own models watch `mods/.index`).
+struct Group {
+    QString name;     ///< the part's folder name, e.g. "mods" (the name the Recycle Bin shows)
+    QString oldRoot;  ///< staging/old/<name>: the replaced entries, sent to the Recycle Bin as one folder
+};
+
+/// One differing entry below a kept folder.
+struct Entry {
+    QString rel;      ///< path below the kept folder (the original's spelling where it has the entry)
+    QString srcName;  ///< the copy's spelling of the last name; empty = only the original has it
+};
+
+/// The differing entries of two folders. Folders both sides have are descended into instead of being listed, so no folder that exists
+/// in both instances is ever renamed. Names compare case-insensitively (Windows); ignored names stay as they are.
+void differingEntries(const QString& dst, const QString& src, const QString& rel, QList<Entry>& out)
 {
-    QString candidate = QDir(dir).filePath(name);
-    for (int i = 2; pathExists(candidate); ++i)
-        candidate = QDir(dir).filePath(QStringLiteral("%1-%2").arg(name).arg(i));
-    return candidate;
+    const auto filter = QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot;
+    QStringList names;  // the original's spelling first
+    QSet<QString> seen;  // lower case
+    QHash<QString, QString> srcSpelling;
+    for (const QString& n : QDir(dst).entryList(filter, QDir::Name)) {
+        if (!ignoredName(n) && !seen.contains(n.toLower())) {
+            seen.insert(n.toLower());
+            names << n;
+        }
+    }
+    for (const QString& n : QDir(src).entryList(filter, QDir::Name)) {
+        if (ignoredName(n) || srcSpelling.contains(n.toLower()))
+            continue;
+        srcSpelling.insert(n.toLower(), n);
+        if (!seen.contains(n.toLower())) {
+            seen.insert(n.toLower());
+            names << n;
+        }
+    }
+    for (const QString& n : std::as_const(names)) {
+        const QString d = QDir(dst).filePath(n);
+        const QString srcName = srcSpelling.value(n.toLower());
+        const QString s = QDir(src).filePath(srcName.isEmpty() ? n : srcName);
+        const bool dExists = pathExists(d);
+        const bool sExists = !srcName.isEmpty();
+        if (dExists && sExists && realDir(d) && realDir(s)) {
+            differingEntries(d, s, rel + n + QLatin1Char('/'), out);
+            continue;
+        }
+        if (dExists != sExists || treesDiffer(d, s))
+            out.append({ rel + n, srcName });
+    }
 }
 
 }  // namespace
@@ -139,6 +200,7 @@ Result apply(const Request& request, const Hooks& hooksIn)
 
     // 1. the targets
     QList<Item> items;
+    QList<Group> groups;
     QList<Part> seen;
     for (const Part part : request.parts) {
         if (seen.contains(part))
@@ -152,6 +214,7 @@ Result apply(const Request& request, const Hooks& hooksIn)
                 item.name = name;
                 item.src = QDir(request.copy.savesDir()).filePath(name);
                 item.dst = QDir(request.original.savesDir()).filePath(name);
+                item.place = item.dst;
                 item.srcExists = true;
                 item.dstExists = pathExists(item.dst);
                 items.append(item);
@@ -159,15 +222,43 @@ Result apply(const Request& request, const Hooks& hooksIn)
             continue;
         }
         for (const Target& t : targetsOf(part, request.original, request.copy)) {
+            const bool srcExists = pathExists(t.copy);
+            const bool dstExists = pathExists(t.original);
+            if ((!srcExists && !dstExists) || !treesDiffer(t.original, t.copy))
+                continue;  // nothing to bring back
+            if (realDir(t.original) && (!srcExists || realDir(t.copy))) {
+                // a folder the original has (and the copy has too, or removed): it stays, its differing entries move
+                QList<Entry> entries;
+                differingEntries(t.original, t.copy, QString(), entries);
+                if (entries.isEmpty())
+                    continue;
+                const int group = static_cast<int>(groups.size());
+                groups.append({ QFileInfo(t.original).fileName(), QString() });
+                for (const Entry& e : std::as_const(entries)) {
+                    const int slash = static_cast<int>(e.rel.lastIndexOf(QLatin1Char('/')));
+                    const QString parentRel = slash < 0 ? QString() : e.rel.left(slash);
+                    Item item;
+                    item.key = partKey(part);
+                    item.group = group;
+                    item.rel = e.rel;
+                    item.dst = QDir(t.original).filePath(e.rel);
+                    item.name = QFileInfo(item.dst).fileName();
+                    item.dstExists = pathExists(item.dst);
+                    item.srcExists = !e.srcName.isEmpty();
+                    item.src = QDir(QDir(t.copy).filePath(parentRel)).filePath(item.srcExists ? e.srcName : item.name);
+                    item.place = QDir(QDir(t.original).filePath(parentRel)).filePath(item.srcExists ? e.srcName : item.name);
+                    items.append(item);
+                }
+                continue;
+            }
             Item item;
             item.key = partKey(part);
             item.name = QFileInfo(t.original).fileName();
             item.src = t.copy;
             item.dst = t.original;
-            item.srcExists = pathExists(t.copy);
-            item.dstExists = pathExists(t.original);
-            if ((!item.srcExists && !item.dstExists) || !treesDiffer(t.original, t.copy))
-                continue;  // nothing to bring back
+            item.place = t.original;
+            item.srcExists = srcExists;
+            item.dstExists = dstExists;
             items.append(item);
         }
     }
@@ -202,9 +293,20 @@ Result apply(const Request& request, const Hooks& hooksIn)
         QDir(newDir).removeRecursively();  // ZERO's own copies of the test copy's files
         removeEmptyTree(staging);
     };
+    // the names below old/: one per kept folder or per whole item, never twice
+    QSet<QString> usedOld;
+    auto reserveOld = [&](const QString& name) {
+        QString candidate = name;
+        for (int i = 2; usedOld.contains(candidate.toLower()); ++i)
+            candidate = QStringLiteral("%1-%2").arg(name).arg(i);
+        usedOld.insert(candidate.toLower());
+        return QDir(oldDir).filePath(candidate);
+    };
+    for (Group& group : groups)
+        group.oldRoot = reserveOld(group.name);
     for (int i = 0; i < items.size(); ++i) {
         Item& item = items[i];
-        item.oldPath = uniqueUnder(oldDir, item.name);
+        item.oldPath = item.group >= 0 ? QDir(groups.at(item.group).oldRoot).filePath(item.rel) : reserveOld(item.name);
         if (!item.srcExists)
             continue;
         item.newPath = QDir(newDir).filePath(QString::number(i));
@@ -221,10 +323,10 @@ Result apply(const Request& request, const Hooks& hooksIn)
         for (auto it = started.crbegin(); it != started.crend(); ++it) {
             Item& item = items[*it];
             if (item.placedNew) {
-                if (h.rename(item.dst, item.newPath))
+                if (h.rename(item.place, item.newPath))
                     item.placedNew = false;
                 else {
-                    stuck << item.dst;
+                    stuck << item.place;
                     continue;
                 }
             }
@@ -250,25 +352,34 @@ Result apply(const Request& request, const Hooks& hooksIn)
         Item& item = items[i];
         started << i;
         if (item.dstExists) {
+            QDir().mkpath(QFileInfo(item.oldPath).absolutePath());
             if (!h.rename(item.dst, item.oldPath))
                 return abandon(QCoreApplication::translate("Zero::Sandbox", "Could not replace %1. Is the game or another program using it?").arg(item.name));
             item.movedOld = true;
         }
         if (item.srcExists) {
-            QDir().mkpath(QFileInfo(item.dst).absolutePath());
-            if (!h.rename(item.newPath, item.dst))
+            QDir().mkpath(QFileInfo(item.place).absolutePath());
+            if (!h.rename(item.newPath, item.place))
                 return abandon(QCoreApplication::translate("Zero::Sandbox", "Could not put %1 in place.").arg(item.name));
             item.placedNew = true;
         }
     }
 
     // 5. done: the replaced originals go to the Recycle Bin
+    QSet<int> trashedGroups;
     for (const Item& item : std::as_const(items)) {
         if (!item.movedOld)
             continue;
-        if (!h.trashPath(item.oldPath)) {
-            result.leftovers << item.oldPath;
-            qWarning() << "ZERO test copy: could not move to the Recycle Bin, left in" << item.oldPath;
+        QString path = item.oldPath;
+        if (item.group >= 0) {  // the replaced entries of a kept folder go as one folder named like it
+            if (trashedGroups.contains(item.group))
+                continue;
+            trashedGroups.insert(item.group);
+            path = groups.at(item.group).oldRoot;
+        }
+        if (!h.trashPath(path)) {
+            result.leftovers << path;
+            qWarning() << "ZERO test copy: could not move to the Recycle Bin, left in" << path;
         }
     }
     removeEmptyTree(staging);  // stays when something is left in it

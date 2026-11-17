@@ -390,8 +390,6 @@ class MainWindow : public QMainWindow {
     void toggleFavorite(const QString& instanceId);
     void chooseArtworkForSelected();
     void removeArtworkFromSelected();
-    void chooseBackgroundVideoForSelected();
-    void removeBackgroundVideoFromSelected();
     void editInstance(MinecraftInstance* instance);
 
    private:

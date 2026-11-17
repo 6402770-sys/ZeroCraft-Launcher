@@ -121,6 +121,8 @@ class UpdateSweep : public QObject {
     int totalUpdates() const;
     /// When the last check of all instances ended (0 = never).
     qint64 checkedAt() const { return m_checkedAt; }
+    /// True when at least one instance can be checked (not managed by a modpack).
+    bool hasEligibleInstances() const;
     State stateOf(const QString& instanceId) const;
     /// True while a check of all instances runs (queued or running parts).
     bool checking() const { return m_sweepActive; }

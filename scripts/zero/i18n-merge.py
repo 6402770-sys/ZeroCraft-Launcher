@@ -3,6 +3,8 @@
 #
 #   python scripts/zero/i18n-merge.py check <chunk.es.json>...          validate only (placeholders, tags, mnemonics, plural forms)
 #   python scripts/zero/i18n-merge.py merge <ts file> <chunk.es.json>... validate, then fill the entries and mark them finished
+#   python scripts/zero/i18n-merge.py export <ts file> <out prefix> <n>  write the unfinished entries as n chunks <prefix>-<i>.json
+#                                                                          (same order as the .ts, no "translation" yet)
 #
 # A chunk is a JSON list of {"context", "source", ["comment"], "translation"} or, for plural entries ("numerus": true),
 # {"context", "source", ["comment"], "numerus": true, "forms": ["<one>", "<other>"]}. Run scripts/zero/i18n-update.sh afterwards so
@@ -56,9 +58,32 @@ def key(context, source, comment):
 
 
 def main():
-    if len(sys.argv) < 3 or sys.argv[1] not in ("check", "merge"):
-        print(__doc__ if __doc__ else "usage: check|merge ...")
+    if len(sys.argv) < 3 or sys.argv[1] not in ("check", "merge", "export"):
+        print(__doc__ if __doc__ else "usage: check|merge|export ...")
         return 2
+    if sys.argv[1] == "export":
+        ts_path, prefix, n = sys.argv[2], sys.argv[3], int(sys.argv[4])
+        todo = []
+        for ctx in ET.parse(ts_path).getroot().iter("context"):
+            name = ctx.find("name").text
+            for msg in ctx.iter("message"):
+                tr = msg.find("translation")
+                if tr.get("type") != "unfinished":
+                    continue
+                e = {"context": name, "source": msg.find("source").text or ""}
+                comment = msg.find("comment")
+                if comment is not None and comment.text:
+                    e["comment"] = comment.text
+                if msg.get("numerus") == "yes":
+                    e["numerus"] = True
+                todo.append(e)
+        size = -(-len(todo) // n)
+        for i in range(n):
+            part = todo[i * size:(i + 1) * size]
+            with open(f"{prefix}-{i + 1}.json", "w", encoding="utf-8") as f:
+                json.dump(part, f, ensure_ascii=False, indent=1)
+            print(f"{prefix}-{i + 1}.json: {len(part)} entries")
+        return 0
     if sys.argv[1] == "check":
         entries, bad = load(sys.argv[2:])
         print(f"{len(entries)} entries, {bad} with problems")

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // ZERO Launcher - the "Updates" section of Home (docs/zero/SHELL.md, "Home > Updates"): the instances with mod updates the last check
-// found (Zero::Updates::UpdateSweep), one row each with an "Update" button, plus "Check again" and "Update all". Hidden while there is
-// nothing to show: no updates and no check running. While a check runs, a line with a spinner says which instance is being checked.
+// found (Zero::Updates::UpdateSweep), one row each with an "Update" button, plus "Check again" and "Update all". Visible whenever an
+// instance can be checked; with no updates and no check running the card holds one row ("Your mods are up to date" / "Check your instances
+// for mod updates") with a "Check now" button. While a check runs, a line with a spinner says which instance is being checked.
 #pragma once
 
 #include <QIcon>
@@ -48,6 +49,9 @@ class HomeUpdatesSection : public QWidget {
     void clickRow(int row);
     QString checkingText() const;  ///< "" while no check line is shown
     QString checkedText() const;   ///< "" while the caption under the card is hidden
+    QString idleTitle() const;     ///< "" while the single row of "nothing to update" is hidden
+    QString idleCaption() const;   ///< "" while that row is hidden
+    QPushButton* idleButton() const { return m_idleButton; }
     QPushButton* updateAllButton() const { return m_updateAll; }
     QPushButton* checkAgainButton() const { return m_checkAgain; }
 
@@ -73,6 +77,11 @@ class HomeUpdatesSection : public QWidget {
     ZeroCard* m_card;
     QVBoxLayout* m_rows;
     QLabel* m_checked;
+    QWidget* m_idleRow;
+    QLabel* m_idleIcon;
+    QLabel* m_idleTitle;
+    QLabel* m_idleCaption;
+    QPushButton* m_idleButton;
 
     QStringList m_rowIds;
     QStringList m_rowNames;
@@ -80,7 +89,6 @@ class HomeUpdatesSection : public QWidget {
     QStringList m_rowStatuses;
     QList<QPushButton*> m_rowButtons;
     QList<QWidget*> m_rowWidgets;
-    bool m_shown = false;
 };
 
 }  // namespace Zero

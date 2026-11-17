@@ -37,6 +37,7 @@ struct Fix {
         ShowFile,       ///< targets[0] = path: shown in Explorer
         OpenUrl,        ///< targets[0] = the page
         DisableJars,    ///< `actions` (ModRepair): rename to `.jar.disabled`
+        RecycleJars,    ///< targets = absolute paths of the jars `DisableJars` would touch: each to the Recycle Bin
         OpenMods,       ///< leaves the check: the instance's Mods page opens and the launch is cancelled
         RestorePacks,   ///< put the resource packs back (PackRollback)
         KeepPacksOff,   ///< play without them; the marker is not asked about again

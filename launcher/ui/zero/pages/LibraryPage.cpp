@@ -200,8 +200,6 @@ LibraryPage::LibraryPage(InstanceView* grid, InstanceProxyModel* proxy, QWidget*
     connect(m_details, &InstanceDetailsPanel::rollbackRequested, this, &LibraryPage::rollbackRequested);
     connect(m_details, &InstanceDetailsPanel::tryCopyRequested, this, &LibraryPage::tryCopyRequested);
     connect(m_details, &InstanceDetailsPanel::removeArtworkRequested, this, &LibraryPage::removeArtworkRequested);
-    connect(m_details, &InstanceDetailsPanel::setBackgroundVideoRequested, this, &LibraryPage::setBackgroundVideoRequested);
-    connect(m_details, &InstanceDetailsPanel::removeBackgroundVideoRequested, this, &LibraryPage::removeBackgroundVideoRequested);
 
     auto* collectionRow = new QWidget(this);
     auto* row = new QHBoxLayout(collectionRow);

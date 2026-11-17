@@ -91,6 +91,8 @@ class LauncherPage : public QWidget, public BasePage {
     QRadioButton* m_whileClose = nullptr;
     // ZERO: "Before you play" (ZeroPreLaunchCheck; the instances' ZeroSkipPreLaunchCheck)
     QCheckBox* m_checkMods = nullptr;
+    // ZERO: "Updates" (ZeroAutoCheckUpdates)
+    QCheckBox* m_autoCheckUpdates = nullptr;
     QWidget* m_skipRow = nullptr;
     QLabel* m_skipLabel = nullptr;
     void refreshSkippedInstances();

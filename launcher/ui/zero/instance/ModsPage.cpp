@@ -76,7 +76,9 @@ ModsPageEnvironment environmentFor(MinecraftInstance* inst)
     };
     env.context = [guarded]() { return guarded ? Mods::readInstanceContext(guarded->instanceRoot()) : Mods::InstanceContext(); };
     env.checkUpdates = prismUpdateCheckFactory(inst, inst->loaderModList());
-    env.applyUpdates = applyUpdatesWithPrism;
+    env.applyUpdates = [id](QWidget* parent, const QList<ModUpdate>& updates, std::function<void(bool)> done) {
+        applyUpdatesInBackground(id, parent, updates, std::move(done));
+    };
     env.snapshotsDir = [id]() { return Mods::Snapshot::snapshotsDirFor(APPLICATION->dataRoot(), id); };
     env.curseForgeAvailable = []() { return APPLICATION->capabilities().testFlag(Application::SupportsFlame); };
     env.openClassic = [guarded](QWidget* parent) {
@@ -1314,7 +1316,7 @@ void ModsPage::applyKeys(const QStringList& keys)
         names.append(update.name.isEmpty() ? update.key : update.name);
     }
 
-    // A blocking dialog runs here: nothing else changes a mod meanwhile, and the page may be gone when it returns.
+    // The page is locked until the update ended (m_applying), and it may be gone when that happens.
     QPointer<ModsPage> self(this);
     m_applying = true;
     syncLock();
@@ -1350,56 +1352,58 @@ void ModsPage::applyKeys(const QStringList& keys)
         before = created.before;
     }
 
-    const bool ok = m_env.applyUpdates(window(), chosen);
-    if (!self) {
-        return;
-    }
-
-    // What the update did to the folder: the files that arrived, the mods that changed. An update that changed nothing leaves no snapshot.
-    Mods::Snapshot::FinalizeResult finished;
-    if (!snapshotDir.isEmpty() && m_model) {
-        const QString modsDir = m_model->dir().absolutePath();
-        runBlocking([&]() { finished = Mods::Snapshot::finalizeSnapshot(snapshotDir, modsDir, before, ok); });
+    // The downloads run in the background (Downloads center): the page stays locked (m_applying) until they ended and may be gone by
+    // then. What does not need the page (the snapshot's closing) runs either way.
+    const QString modsDir = m_model->dir().absolutePath();
+    m_env.applyUpdates(window(), chosen, [self, chosen, applied, names, snapshotDir, before, modsDir](bool ok) {
+        // What the update did to the folder: the files that arrived, the mods that changed. An update that changed nothing leaves no snapshot.
+        Mods::Snapshot::FinalizeResult finished;
+        if (!snapshotDir.isEmpty()) {
+            if (self) {
+                self->runBlocking([&]() { finished = Mods::Snapshot::finalizeSnapshot(snapshotDir, modsDir, before, ok); });
+            } else {
+                finished = Mods::Snapshot::finalizeSnapshot(snapshotDir, modsDir, before, ok);
+            }
+        }
         if (!self) {
             return;
         }
-    }
 
-    m_applying = false;
-    // The downloads were used up (also after a failure): their entries leave the results. What really arrived shows up when the
-    // folder is read again; for the rest, check again.
-    dropEntries(m_results, applied);
-    for (const QString& key : applied) {
-        m_updates.remove(key);
-    }
-    refreshRunning();
-    syncLock();
-    if (m_model) {
-        m_model->update();
-    }
-    rebuildNow();
-    refreshSnapshot();
+        self->m_applying = false;
+        // The downloads were used up (also after a failure): their entries leave the results. What really arrived shows up when the
+        // folder is read again; for the rest, check again.
+        dropEntries(self->m_results, applied);
+        for (const QString& key : applied) {
+            self->m_updates.remove(key);
+        }
+        self->refreshRunning();
+        self->syncLock();
+        if (self->m_model) {
+            self->m_model->update();
+        }
+        self->rebuildNow();
+        self->refreshSnapshot();
 
-    if (finished.ok && !finished.pruned && finished.changedMods > 0) {
-        // Updated (all of them, or some of them): the toast offers the way back.
-        QString version;
-        if (finished.changedNames.size() == 1) {
-            for (const ModUpdate& update : std::as_const(chosen)) {
-                if ((update.name.isEmpty() ? update.key : update.name) == finished.changedNames.first()) {
-                    version = update.newVersion;
+        if (finished.ok && !finished.pruned && finished.changedMods > 0) {
+            // Updated (all of them, or some of them): the toast offers the way back.
+            QString version;
+            if (finished.changedNames.size() == 1) {
+                for (const ModUpdate& update : std::as_const(chosen)) {
+                    if ((update.name.isEmpty() ? update.key : update.name) == finished.changedNames.first()) {
+                        version = update.newVersion;
+                    }
                 }
             }
+            ZeroToast::show(self->window(), updatedText(finished.changedNames, version), ok ? ZeroToast::Kind::Success : ZeroToast::Kind::Warning,
+                            tr("Undo"), [self, snapshotDir]() {
+                                if (self) {
+                                    self->requestRollback(snapshotDir);
+                                }
+                            });
+        } else if (ok) {
+            self->toast(updatedText(names, chosen.size() == 1 ? chosen.first().newVersion : QString()), ZeroToast::Kind::Success);
         }
-        const QPointer<ModsPage> guard(this);
-        ZeroToast::show(window(), updatedText(finished.changedNames, version), ok ? ZeroToast::Kind::Success : ZeroToast::Kind::Warning, tr("Undo"),
-                        [guard, snapshotDir]() {
-                            if (guard) {
-                                guard->requestRollback(snapshotDir);
-                            }
-                        });
-    } else if (ok) {
-        toast(updatedText(names, chosen.size() == 1 ? chosen.first().newVersion : QString()), ZeroToast::Kind::Success);
-    }
+    });
 }
 
 // ---- safe update: the snapshot and the roll back ---------------------------------------------------------------------------------

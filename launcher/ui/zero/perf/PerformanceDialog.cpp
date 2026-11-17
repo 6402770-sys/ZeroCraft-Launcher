@@ -188,7 +188,7 @@ class InstalledReader : public QObject {
 }  // namespace
 
 PerformanceEnvironment PerformanceEnvironment::fromApplication(const QString& instanceId,
-                                                               std::function<InstallResult(const Zero::Content::CartInstallPlan&)> install)
+                                                               std::function<void(const Zero::Content::CartInstallPlan&)> install)
 {
     PerformanceEnvironment env;
     auto* inst = APPLICATION->instances()->getInstanceById(instanceId);
@@ -1079,19 +1079,13 @@ void PerformanceDialog::accept()
         m_resolver->cancel();
     }
     const CartInstallPlan toInstall = plan();
-    bool downloadFailed = false;
     if (!toInstall.isEmpty()) {
         if (!m_env.install) {
             return;
         }
-        const InstallResult result = m_env.install(toInstall);
-        m_outcome.modsAdded = result.installed;
-        downloadFailed = result.failedAsWhole;
-    }
-    if (downloadFailed) {
-        // Prism's error box said why; nothing else is changed and the dialog stays for another try.
-        refreshSummary();
-        return;
+        // Background job: the call returns at once. Memory and Java arguments do not depend on the mods.
+        m_env.install(toInstall);
+        m_outcome.modsQueued = toInstall.count();
     }
     if (const auto memory = memoryToWrite(); memory && m_env.writeMemory) {
         m_env.writeMemory(memory->recommendedMaxMb, memory->recommendedMinMb);
@@ -1101,7 +1095,7 @@ void PerformanceDialog::accept()
         m_outcome.previousJvmArgs = m_env.writeJvmArgs(jvm->argsString());
         m_outcome.javaArgsWritten = true;
     }
-    m_outcome.applied = m_outcome.modsAdded > 0 || m_outcome.memoryWritten || m_outcome.javaArgsWritten;
+    m_outcome.applied = m_outcome.modsQueued > 0 || m_outcome.memoryWritten || m_outcome.javaArgsWritten;
     QDialog::accept();
 }
 

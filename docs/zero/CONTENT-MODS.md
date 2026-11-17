@@ -72,10 +72,10 @@ folds them in. Prism engine facts with file:line: `.claude/zero-briefs/research-
   "No other mods needed". Failure → inline "Couldn't check dependencies: <reason>" + Retry + checkbox "Add without
   dependencies" (unchecked). Footer: Cancel ghost, primary "Add mod" / "Add 3 mods" (disabled until the check settled).
 - Install = `ResourceDownloadTask(pack, version, inst->loaderModList(), isIndexed, "standalone" | "dependency",
-  requiredById)` per mod, all in one `ConcurrentTask` (`NumberOfConcurrentDownloads`), run like `ModFolderPage` does
-  (ProgressDialog is allowed until Milestone F's Install Queue), then `loaderModList()->update()`. Never use
+  requiredById)` per mod, all in one `ConcurrentTask` (`NumberOfConcurrentDownloads`), run as a background job of the Downloads center
+  (ARCHITECTURE.md, "Downloads center"; no modal dialog), then `loaderModList()->update()` when it ended. Never use
   `ResourceDownloadDialog` / `ResourceUpdateDialog` (their modal boxes). Success → toast "Added <name> to <instance>" (+
-  " and N dependencies"); failure → Prism's error reporting.
+  " and N dependencies"); failure → Error toast "Couldn't download <name>" with the action Downloads.
 - Update from the details panel = the same dialog in Update mode (version list, the dependency check of the new version);
   `ResourceDownloadTask` replaces the old file after success (Prism behaviour).
 - Refused while the target instance runs: the primary button is disabled with the note "Close <instance> to add mods".
@@ -110,7 +110,7 @@ started it). Never call `ModFolderModel::setResourceEnabled` (modal) or `deleteR
   WITH metadata (copy the `Resource*` list and the version vector; pause toggles/remove/refresh while checking; caption
   "Checking 41 mods…"); results → "Update → <version>" pills + Updates filter; "7 mods have no provider info and can't be
   checked" caption; failures per mod in the row tooltip. Update one / Update all N → the `Update::download`
-  `ResourceDownloadTask`s in a `ConcurrentTask` + ProgressDialog like `MainWindow::installMod`, then `update()` + toast.
+  `ResourceDownloadTask`s in a `ConcurrentTask` as a background Downloads-center job (kind Update), then `update()` + toast.
   Then Discover › Mods may show "Update available" (share results via the target instance id; optional).
 
 ## Dependency Inspector (C6; instance Mods page) — owner approved the mockup in session 9

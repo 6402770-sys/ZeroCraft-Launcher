@@ -180,6 +180,8 @@ struct Rig {
     int applyCalls = 0;
     bool applyOk = true;
     std::function<void()> onApply;
+    bool deferApply = false;                      ///< the download runs "in the background": the test calls pendingApplyDone later
+    std::function<void(bool)> pendingApplyDone;
     // the Dependency Inspector
     bool fakeScan = false;  ///< the scan is answered by the test (scanDone), not by the thread pool
     int scanDelay = -1;     ///< ms between a reload and the scan; -1 = the page's default (300)
@@ -331,13 +333,17 @@ struct Rig {
             ++checkCalls;
             return fake;
         };
-        env.applyUpdates = [this](QWidget*, const QList<ModUpdate>& updates) {
+        env.applyUpdates = [this](QWidget*, const QList<ModUpdate>& updates, std::function<void(bool)> done) {
             applied = updates;
             ++applyCalls;
             if (onApply) {
                 onApply();
             }
-            return applyOk;
+            if (deferApply) {
+                pendingApplyDone = std::move(done);  // like the Downloads center: the call returns, the result comes later
+                return;
+            }
+            done(applyOk);
         };
         env.curseForgeAvailable = [this]() { return curseForge; };
         if (scanDelay >= 0) {
@@ -1820,6 +1826,47 @@ class ZeroModsPageTest : public QObject {
         QVERIFY(!rig.page->listView()->rowDelegate()->locked());
         QCOMPARE(toastTexts(rig.page->window()), QStringList{ S("Updated 2 mods") });
         QVERIFY(QFile::exists(rig.mods.filePath(S("alpha.jar"))));  // this page deleted nothing
+    }
+
+    void aBackgroundUpdateKeepsThePageLockedUntilItEnds()
+    {
+        Rig rig;
+        rig.addMetaMods();
+        rig.build();
+        QVERIFY(rig.open(3));
+        rig.page->startCheck();
+        rig.finishCheck({ update(S("alpha.jar"), S("Alpha"), S("0.6.14")) });
+        rig.deferApply = true;
+        rig.page->requestUpdateAll();
+        QCOMPARE(rig.applyCalls, 1);  // started, not finished: the call returned
+        QVERIFY(rig.pendingApplyDone);
+        QVERIFY(rig.page->listView()->rowDelegate()->locked());
+        QVERIFY(toastTexts(rig.page->window()).isEmpty());
+        rig.page->requestUpdateAll();  // not while the update runs
+        QCOMPARE(rig.applyCalls, 1);
+
+        QSignalSpy reads(rig.model.get(), &ResourceFolderModel::updateFinished);
+        rig.pendingApplyDone(true);
+        QVERIFY(!rig.page->listView()->rowDelegate()->locked());
+        QCOMPARE(rig.page->updateCount(), 0);
+        QVERIFY(reads.count() > 0 || reads.wait(10000));
+    }
+
+    void aFinishedBackgroundUpdateWithAClosedPageDoesNothing()
+    {
+        Rig rig;
+        rig.addMetaMods();
+        rig.build();
+        QVERIFY(rig.open(3));
+        rig.page->startCheck();
+        rig.finishCheck({ update(S("alpha.jar"), S("Alpha"), S("0.6.14")) });
+        rig.deferApply = true;
+        rig.page->requestUpdateAll();
+        QVERIFY(rig.pendingApplyDone);
+        rig.page.reset();  // the window was closed while the update ran
+        rig.pendingApplyDone(true);  // must neither crash nor touch the gone page
+        rig.pendingApplyDone = {};
+        QVERIFY(QFile::exists(rig.mods.filePath(S("alpha.jar"))));
     }
 
     void applyingOneOrASelectionAppliesOnlyThose()

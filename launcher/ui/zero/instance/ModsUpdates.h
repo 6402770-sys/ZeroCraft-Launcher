@@ -3,8 +3,8 @@
 // small seams, so a test can put fakes in their place:
 //   * ModUpdateCheck: one running check (start / abort, a signal per mod that could not be checked, one `finished`); the default is
 //     PrismModUpdateCheck, which runs Prism's ModrinthCheckUpdate and FlameCheckUpdate headless (no ResourceUpdateDialog, no message box);
-//   * UpdateApplier: runs the downloads of the chosen updates; the default is applyUpdatesWithPrism (the ConcurrentTask + ProgressDialog
-//     pattern of MainWindow::installMod).
+//   * UpdateApplier: starts the downloads of the chosen updates and returns at once; the default is applyUpdatesInBackground (a
+//     ConcurrentTask run as a job of the Downloads center), which calls `done(ok)` when the job ended.
 #pragma once
 
 #include <QList>
@@ -56,12 +56,16 @@ class ModUpdateCheck : public QObject {
 /// Creates a check for these mods. Every resource has metadata (the checkers dereference it). The check keeps the resources alive
 /// (shared ownership) for as long as any of its tasks exists.
 using UpdateCheckFactory = std::function<ModUpdateCheck*(const QList<Resource::Ptr>& resources, QObject* parent)>;
-/// Runs the downloads of `updates` (blocking, with a progress dialog parented to `parent`); true when all of them succeeded.
-using UpdateApplier = std::function<bool(QWidget* parent, const QList<ModUpdate>& updates)>;
+/// Starts the downloads of `updates` and returns at once. `done(ok)` is called exactly once, later on the GUI thread (also after the
+/// window of `parent` is gone, so a caller must guard what it touches): ok = every download succeeded (false after a failure or a cancel).
+/// It may also be called before the starter returned (nothing could start).
+using UpdateApplier = std::function<void(QWidget* parent, const QList<ModUpdate>& updates, std::function<void(bool ok)> done)>;
 
 /// Prism's checkers for this instance: the Minecraft version, the mod loaders and the release types are what the classic page passes.
 UpdateCheckFactory prismUpdateCheckFactory(MinecraftInstance* instance, ModFolderModel* model);
-bool applyUpdatesWithPrism(QWidget* parent, const QList<ModUpdate>& updates);
+/// The real UpdateApplier for the instance `instanceId`: one ConcurrentTask of `updates[i].download`, a Downloads-center job of kind Update
+/// ("Update 3 mods", or the mod's name for one), the instance's mod list read again when it ended. Toasts come from startFlow.
+void applyUpdatesInBackground(const QString& instanceId, QWidget* parent, const QList<ModUpdate>& updates, std::function<void(bool ok)> done);
 
 }  // namespace ModsUi
 }  // namespace Zero

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Application.h"
+#include "InstanceList.h"
 #include "Json.h"
 #include "ResourceDownloadTask.h"
 #include "Version.h"
@@ -21,7 +22,8 @@
 #include "tasks/ConcurrentTask.h"
 #include "tasks/SequentialTask.h"
 #include "ui/dialogs/CustomMessageBox.h"
-#include "ui/dialogs/ProgressDialog.h"
+#include "ui/zero/shell/DownloadFlow.h"
+#include "zero/downloads/DownloadCenter.h"
 #include "zero/mods/InstalledModsModel.h"
 
 namespace Zero {
@@ -234,29 +236,38 @@ UpdateCheckFactory prismUpdateCheckFactory(MinecraftInstance* instance, ModFolde
     };
 }
 
-bool applyUpdatesWithPrism(QWidget* parent, const QList<ModUpdate>& updates)
+void applyUpdatesInBackground(const QString& instanceId, QWidget* parent, const QList<ModUpdate>& updates, std::function<void(bool ok)> done)
 {
-    // MainWindow::installMod / ModFolderPage::updateMods: one ConcurrentTask under a ProgressDialog; Prism's own (non-blocking) error and
-    // warning boxes. ResourceDownloadTask replaces the old file only once the new one arrived and was checked.
-    ConcurrentTask tasks(QObject::tr("Update mods"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
-    QObject::connect(&tasks, &Task::failed, parent, [parent](const QString& reason) {
-        CustomMessageBox::selectable(parent, QObject::tr("Error"), reason, QMessageBox::Critical)->show();
-    });
-    QObject::connect(&tasks, &Task::succeeded, parent, [parent, &tasks]() {
-        const QStringList warnings = tasks.warnings();
-        if (warnings.count()) {
-            CustomMessageBox::selectable(parent, QObject::tr("Warnings"), warnings.join('\n'), QMessageBox::Warning)->show();
-        }
-    });
+    // MainWindow::installMod / ModFolderPage::updateMods: one ConcurrentTask; ResourceDownloadTask replaces the old file only once the
+    // new one arrived and was checked. The task is held by the job (it outlives this function).
+    auto tasks = makeShared<ConcurrentTask>(QObject::tr("Update mods"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+    QStringList names;
     for (const ModUpdate& update : updates) {
         if (update.download) {
-            tasks.addTask(update.download);
+            tasks->addTask(update.download);
+            names.append(update.name.isEmpty() ? update.key : update.name);
         }
     }
-    ProgressDialog dialog(parent);
-    dialog.showSkipButton();
-    dialog.execWithTask(&tasks);
-    return tasks.wasSuccessful();
+    Downloads::DownloadJob job;
+    job.title = Downloads::updateTitleText(names);
+    job.instanceId = instanceId;
+    if (auto* inst = APPLICATION->instances()->getInstanceById(instanceId)) {
+        job.instanceName = inst->name();
+    }
+    job.kind = Downloads::Kind::Update;
+    job.task = tasks;
+    job.onFinished = [instanceId, done](const Downloads::DownloadResult& result) {
+        // Whatever arrived (also after a failure or a cancel) is read again; the instance may be gone by now.
+        if (auto* inst = APPLICATION->instances()->getInstanceById(instanceId)) {
+            inst->loaderModList()->update();
+        }
+        if (done) {
+            done(result.state == Downloads::DownloadResult::State::Done);
+        }
+    };
+    if (Downloads::startFlow(parent, std::move(job)).isEmpty() && done) {
+        done(false);  // no Downloads center: nothing ran
+    }
 }
 
 }  // namespace ModsUi

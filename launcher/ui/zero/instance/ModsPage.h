@@ -72,7 +72,7 @@ struct ModsPageEnvironment {
     std::function<void()> addMods;                    ///< "Add mods": Discover > Mods for this instance; empty hides the button
     std::function<void(QWidget* parent)> openClassic; ///< the classic mods page in a dialog; empty hides the menu entry
     UpdateCheckFactory checkUpdates;                  ///< starts an update check; empty hides "Check for updates" (default: Prism's checkers)
-    UpdateApplier applyUpdates;                       ///< runs the downloads of chosen updates; empty = the updates cannot be applied
+    UpdateApplier applyUpdates;                       ///< starts the downloads of chosen updates in the background (done(ok) later; the page may be gone); empty = the updates cannot be applied
     std::function<bool()> curseForgeAvailable;        ///< the application can ask CurseForge; default: yes
     // The Dependency Inspector (docs/zero/CONTENT-MODS.md).
     std::function<void(const QString& query)> findMod;  ///< "Find" of a missing dependency: Discover > Mods for this instance, `query` as the search text

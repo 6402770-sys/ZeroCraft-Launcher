@@ -24,6 +24,7 @@
 #include <algorithm>
 
 #include "Application.h"
+#include "InstanceList.h"
 #include "DesktopServices.h"
 #include "FileSystem.h"
 #include "minecraft/MinecraftInstance.h"
@@ -31,7 +32,6 @@
 #include "tasks/ConcurrentTask.h"
 #include "ui/MainWindow.h"
 #include "ui/dialogs/CustomMessageBox.h"
-#include "ui/dialogs/ProgressDialog.h"
 #include "ui/dialogs/ResourceUpdateDialog.h"
 #include "ui/pages/instance/ShaderPackPage.h"
 #include "ui/zero/ZeroEmptyState.h"
@@ -40,6 +40,7 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/content/ShaderModNotice.h"
+#include "ui/zero/shell/DownloadFlow.h"
 #include "ui/zero/instance/InstancePageParts.h"
 
 namespace Zero {
@@ -142,17 +143,27 @@ ShadersPageEnvironment environmentFor(MinecraftInstance* inst)
             return;
         }
         if (dialog.exec() != 0) {
-            ConcurrentTask tasks("Download Shader Packs", APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
-            QObject::connect(&tasks, &Task::failed, parent, [parent](const QString& reason) {
-                CustomMessageBox::selectable(parent, QObject::tr("Error"), reason, QMessageBox::Critical)->show();
-            });
+            // The downloads run in the background (Downloads center); the tasks live in the job. The instance cannot be deleted meanwhile.
+            auto tasks = makeShared<ConcurrentTask>("Download Shader Packs", APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+            int count = 0;
             for (const auto& task : dialog.getTasks()) {
-                tasks.addTask(task);
+                tasks->addTask(task);
+                ++count;
             }
-            ProgressDialog loadDialog(parent);
-            loadDialog.showSkipButton();
-            loadDialog.execWithTask(&tasks);
-            model->update();
+            Downloads::DownloadJob job;
+            job.title = QObject::tr("Update %n shader pack(s)", "", count);
+            job.instanceId = guarded->id();
+            job.instanceName = guarded->name();
+            job.kind = Downloads::Kind::ShaderPack;
+            job.task = tasks;
+            const QString instanceId = guarded->id();
+            job.onFinished = [instanceId](const Downloads::DownloadResult&) {
+                // Whatever arrived (also after a failure or a cancel) is read again.
+                if (auto* inst = APPLICATION->instances()->getInstanceById(instanceId)) {
+                    inst->shaderPackList()->update();
+                }
+            };
+            Downloads::startFlow(parent, std::move(job));
         }
     };
     env.openClassic = [guarded](QWidget* parent) {

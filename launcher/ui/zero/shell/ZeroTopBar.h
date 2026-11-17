@@ -16,7 +16,12 @@ namespace Motion {
 class StateAnimator;
 }
 
+namespace Downloads {
+class DownloadCenter;
+}
+
 class AccountChip;
+class DownloadsButton;
 class ShellPage;
 class TopBarDivider;
 
@@ -85,6 +90,11 @@ class ZeroTopBar : public QWidget {
     QWidget* centerWidget() const { return m_center; }
 
     AccountChip* accountChip() const { return m_chip; }
+
+    /// Adds the Downloads button (between the page actions and the divider before the account chip), driven by `center`. It stays
+    /// hidden while the center has no running job and no history. Null removes it.
+    void attachDownloads(Downloads::DownloadCenter* center);
+    DownloadsButton* downloadsButton() const { return m_downloads; }
     ChromeTitle* titleBlock() const { return m_titleBlock; }
     QString titleText() const { return m_titleBlock->title(); }
     QString subtitleText() const { return m_titleBlock->subtitle(); }
@@ -97,6 +107,8 @@ class ZeroTopBar : public QWidget {
     void breadcrumbClicked();
     /// Global position of the chip's bottom-right corner: a popup menu should place its top-right corner just below it.
     void accountMenuRequested(const QPoint& anchor);
+    /// The Downloads button was clicked; `button` is the anchor of the panel.
+    void downloadsRequested(QWidget* button);
 
    protected:
     void paintEvent(QPaintEvent* event) override;
@@ -104,6 +116,7 @@ class ZeroTopBar : public QWidget {
    private:
     void apply(ShellPage* page);
     void releaseActions();
+    void updateDivider();
 
     QPointer<ShellPage> m_page;
     ChromeTitle* m_titleBlock;
@@ -114,6 +127,7 @@ class ZeroTopBar : public QWidget {
     QPointer<QWidget> m_actions;
     QPointer<QWidget> m_actionsOwner;
     TopBarDivider* m_divider;
+    DownloadsButton* m_downloads = nullptr;  // child of this
     AccountChip* m_chip;
 };
 

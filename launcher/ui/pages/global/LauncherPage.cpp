@@ -135,6 +135,17 @@ LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::Launch
         ui->verticalLayout_8->insertWidget(2, box);
     }
 
+    // ZERO: "Updates for everything" (zero/updates): the daily look for mod updates of all instances
+    {
+        auto* box = new QGroupBox(tr("Updates"), ui->scrollAreaWidgetContents);
+        auto* lay = new QVBoxLayout(box);
+        m_autoCheckUpdates = new QCheckBox(tr("Check for mod updates once a day"), box);
+        m_autoCheckUpdates->setToolTip(tr("While no game is running, ZERO looks for newer versions of the mods in your instances. Nothing is "
+                                          "downloaded until you press Update on Home."));
+        lay->addWidget(m_autoCheckUpdates);
+        ui->verticalLayout_8->insertWidget(3, box);
+    }
+
     loadSettings();
 
     ui->updateSettingsBox->setHidden(!APPLICATION->updater());
@@ -306,6 +317,7 @@ void LauncherPage::applySettings()
                                                                           : Zero::Session::WhilePlayingMode::Tray));
 
     s->set("ZeroPreLaunchCheck", m_checkMods->isChecked());
+    s->set("ZeroAutoCheckUpdates", m_autoCheckUpdates->isChecked());
 
     s->set("NumberOfConcurrentTasks", ui->numberOfConcurrentTasksSpinBox->value());
     s->set("NumberOfConcurrentDownloads", ui->numberOfConcurrentDownloadsSpinBox->value());
@@ -415,6 +427,7 @@ void LauncherPage::loadSettings()
     }
 
     m_checkMods->setChecked(s->get("ZeroPreLaunchCheck").toBool());
+    m_autoCheckUpdates->setChecked(s->get("ZeroAutoCheckUpdates").toBool());
     refreshSkippedInstances();
 
     ui->numberOfConcurrentTasksSpinBox->setValue(s->get("NumberOfConcurrentTasks").toInt());

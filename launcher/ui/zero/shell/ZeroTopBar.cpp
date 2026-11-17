@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <QToolTip>
 #include "AccountChip.h"
+#include "DownloadsButton.h"
 #include "ShellPage.h"
 #include "ui/zero/ZeroIcons.h"
 #include "ui/zero/ZeroMotion.h"
@@ -318,6 +319,30 @@ bool ZeroTopBar::dividerVisible() const
     return !m_divider->isHidden();
 }
 
+void ZeroTopBar::attachDownloads(Downloads::DownloadCenter* center)
+{
+    if (m_downloads) {
+        delete m_downloads;
+        m_downloads = nullptr;
+    }
+    if (!center) {
+        updateDivider();
+        return;
+    }
+    m_downloads = new DownloadsButton(center, this);
+    // between the page actions and the divider before the account chip
+    static_cast<QHBoxLayout*>(layout())->insertWidget(layout()->indexOf(m_divider), m_downloads, 0, Qt::AlignVCenter);
+    connect(m_downloads, &DownloadsButton::availabilityChanged, this, &ZeroTopBar::updateDivider);
+    connect(m_downloads, &QAbstractButton::clicked, this, [this]() { emit downloadsRequested(m_downloads); });
+    updateDivider();
+}
+
+void ZeroTopBar::updateDivider()
+{
+    // The rule separates the page's own controls (actions, Downloads) from the account chip.
+    m_divider->setVisible(m_actions != nullptr || (m_downloads && m_downloads->available()));
+}
+
 void ZeroTopBar::paintEvent(QPaintEvent*)
 {
     QPainter(this).fillRect(QRect(0, height() - 1, width(), 1), Theme::current().border);
@@ -387,7 +412,7 @@ void ZeroTopBar::apply(ShellPage* page)
         }
     }
     m_actionsHost->setVisible(m_actions != nullptr);
-    m_divider->setVisible(m_actions != nullptr);
+    updateDivider();
 }
 
 void ZeroTopBar::releaseActions()

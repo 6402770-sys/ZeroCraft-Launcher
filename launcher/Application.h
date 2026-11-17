@@ -86,6 +86,15 @@ namespace Meta {
 class Index;
 }
 
+namespace Zero {
+namespace Downloads {
+class DownloadCenter;
+}
+namespace Updates {
+class UpdateSweep;
+}
+}  // namespace Zero
+
 #if defined(APPLICATION)
 #undef APPLICATION
 #endif
@@ -210,6 +219,17 @@ class Application : public QApplication {
 
     /// ZERO: no valid account and a sign-in method exists: the Add account dialog should open (MainWindow::addAccountZero).
     bool zeroShouldAskForAccount() const;
+
+    /// ZERO: the background Downloads center (never null once the instance list is loaded). Install flows start their tasks there
+    /// instead of under a modal progress dialog; Application::launch refuses an instance while it has a running download.
+    Zero::Downloads::DownloadCenter* zeroDownloads() const { return m_zeroDownloads; }
+    /// ZERO: finds and applies the content updates of all instances ("Updates for everything"); null until the instances are loaded.
+    Zero::Updates::UpdateSweep* zeroUpdates() const { return m_zeroUpdates; }
+    /// ZERO: asks "Downloads are still running" when `zeroDownloads()` has active jobs. True = go on (nothing runs, or the user chose
+    /// "Quit anyway", which aborted every job); false = the user chose "Keep downloading".
+    bool zeroConfirmQuitWithDownloads(QWidget* parent);
+    /// ZERO: true when closing the main window now would end the process (the last window, no game running, no tray icon to keep it alive).
+    bool zeroClosingMainWindowQuits() const;
     static QString updaterBinaryName();
 
     static QUrl normalizeImportUrl(const QString& url);
@@ -336,6 +356,10 @@ class Application : public QApplication {
     QString m_zeroScreenshotPath;  // --zero-screenshot
     QString m_zeroScreenshotPage;  // --zero-page
     bool m_zeroDataImported = false;  // this run copied the data dir from Prism / PolyMC / MultiMC
+    Zero::Downloads::DownloadCenter* m_zeroDownloads = nullptr;  // owned by this (QObject parent)
+    Zero::Updates::UpdateSweep* m_zeroUpdates = nullptr;          // owned by this (QObject parent)
+    bool m_zeroQuitConfirmed = false;  // the user chose "Quit anyway": no second prompt while the windows close
+    bool m_zeroHasTray = false;  // a tray icon exists: it keeps the process alive after the last window closed while downloads run
     std::unique_ptr<QFile> logFile;
     std::unique_ptr<LogModel> logModel;
 

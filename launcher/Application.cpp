@@ -56,6 +56,9 @@
 #include "zero/auth/ElyAuth.h"  // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
+#include "zero/downloads/DownloadCenter.h"  // ZERO
+#include "zero/updates/UpdateSweep.h"       // ZERO
+#include "ui/zero/updates/UpdateSweepSetup.h"  // ZERO
 #include "zero/history/SessionHistory.h"  // ZERO
 #include "zero/session/PlayTracker.h"  // ZERO
 #include "zero/session/SessionSummary.h"  // ZERO
@@ -708,6 +711,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ZeroDiscoverShadersFilter", QString());        // FilterState JSON; shaders are grid-only too
         m_settings->registerSetting("ZeroDiscoverWorldsFilter", QString());         // FilterState JSON; worlds are grid-only too (CurseForge only)
         m_settings->registerSetting("ZeroDiscoverTarget", QString());  // instance id the mod browser installs into
+        m_settings->registerSetting("ZeroDropTarget", QString());  // instance id the last "Add to an instance" drop went to
         m_settings->registerSetting("ZeroScreenshotsSort", QString("newest"));  // Screenshots page: "newest" | "oldest" | "instance"
         m_settings->registerSetting("ZeroScreenshotsInstance", QString());  // Screenshots page: instance id filter, empty = all instances
         m_settings->registerSetting("ZeroServersSort", QString("name"));  // Servers page: "name" | "players" | "latency"
@@ -963,6 +967,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ZeroWhilePlaying", "tray");
         // ZERO: "Before you play" (zero/prelaunch): the mod and malware check when Play is pressed; false switches it all off
         m_settings->registerSetting("ZeroPreLaunchCheck", true);
+        // ZERO: "Updates for everything" (zero/updates): look for mod updates of all instances once a day while no game runs
+        m_settings->registerSetting("ZeroAutoCheckUpdates", true);
 
         m_settings->registerSetting("Env", "{}");
 
@@ -1118,6 +1124,30 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             });
             connect(this, &Application::gameStoppedUnexpectedly, history, &Zero::History::SessionHistory::onStoppedUnexpectedly);
             connect(this, &Application::launchEnded, history, &Zero::History::SessionHistory::onLaunchEnded);
+        }
+
+        // ZERO: background downloads. Install flows start their tasks here (no modal progress dialog); launch() refuses an instance
+        // while it has a running download, and the process stays alive after the last window closed until the downloads end.
+        {
+            m_zeroDownloads = new Zero::Downloads::DownloadCenter(FS::PathCombine(m_dataPath, "zero", "downloads.json"), {}, this);
+            connect(m_zeroDownloads, &Zero::Downloads::DownloadCenter::activeCountChanged, this, [this](int count) {
+                if (count != 0)
+                    return;
+                // after the finishing job's own callback ran (it may start the next step of a chain)
+                QTimer::singleShot(0, this, [this]() {
+                    if (m_zeroDownloads->activeCount() == 0 && shouldExitNow())
+                        exit(0);
+                });
+            });
+        }
+
+        // ZERO: "Updates for everything": the update check of all instances (once a day while no game runs, 30 s after start-up)
+        // and the updates through the Downloads center above. Home shows its results.
+        {
+            m_zeroUpdates = Zero::Updates::createApplicationSweep(this);
+            connect(this, &Application::launchPhaseChanged, m_zeroUpdates, [this]() { m_zeroUpdates->onGameStateChanged(); });
+            connect(this, &Application::launchEnded, m_zeroUpdates, [this]() { m_zeroUpdates->onGameStateChanged(); });
+            m_zeroUpdates->start();
         }
 
         // ZERO: Smart Backup. The job runner is app-level (Worlds page and automatic backups share it); AutoBackup backs up the
@@ -1303,12 +1333,15 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                     if (m_runningInstances > 0 &&
                         QMessageBox::question(nullptr, tr("Quit ZERO Launcher"), tr("A game is still running. Quit anyway?")) != QMessageBox::Yes)
                         return;
+                    if (!zeroConfirmQuitWithDownloads(nullptr))
+                        return;
                     closeAllWindows();
                     quit();
                 });
                 connect(tracker, &PlayTracker::runningChanged, tray, &Zero::ZeroTray::refresh);
                 connect(&Zero::Theme::instance(), &Zero::Theme::changed, tray, &Zero::ZeroTray::refresh);
                 tray->show();
+                m_zeroHasTray = true;
             }
         }
 
@@ -1940,6 +1973,11 @@ bool Application::launch(MinecraftInstance* instance,
                                  tr("A world of this instance is being backed up or restored. Try again when it finishes."));
         return false;
     }
+    if (m_zeroDownloads && m_zeroDownloads->isBusy(instance->id())) {  // ZERO: files of this instance are still being downloaded
+        QMessageBox::information(m_mainWindow, tr("Downloads in progress"),
+                                 tr("Files for this instance are still downloading. Try again when they finish."));
+        return false;
+    }
     if (m_updateRunning) {
         qDebug() << "Cannot launch instances while an update is running. Please try again when updates are completed.";
     } else if (instance->canLaunch()) {
@@ -2040,7 +2078,32 @@ void Application::subRunningInstance()
 
 bool Application::shouldExitNow() const
 {
-    return m_runningInstances == 0 && m_openWindows == 0;
+    // ZERO: running downloads keep the process alive like a running game does
+    return m_runningInstances == 0 && m_openWindows == 0 && !(m_zeroDownloads && m_zeroDownloads->activeCount() > 0);
+}
+
+bool Application::zeroConfirmQuitWithDownloads(QWidget* parent)
+{
+    const int count = m_zeroDownloads ? m_zeroDownloads->activeCount() : 0;
+    if (count == 0 || m_zeroQuitConfirmed)
+        return true;
+    QMessageBox box(QMessageBox::Warning, tr("Downloads are still running"), tr("Quitting cancels %n download(s).", nullptr, count),
+                    QMessageBox::NoButton, parent);
+    QPushButton* quitButton = box.addButton(tr("Quit anyway"), QMessageBox::DestructiveRole);
+    QPushButton* keepButton = box.addButton(tr("Keep downloading"), QMessageBox::RejectRole);
+    box.setDefaultButton(keepButton);
+    box.setEscapeButton(keepButton);
+    box.exec();
+    if (box.clickedButton() != quitButton)
+        return false;
+    m_zeroQuitConfirmed = true;  // closing the windows that follow must not ask again
+    m_zeroDownloads->cancelAll();
+    return true;
+}
+
+bool Application::zeroClosingMainWindowQuits() const
+{
+    return m_runningInstances == 0 && m_openWindows <= 1 && !m_zeroHasTray;
 }
 
 bool Application::updatesAreAllowed() const

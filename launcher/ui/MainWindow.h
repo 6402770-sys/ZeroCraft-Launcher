@@ -49,7 +49,9 @@
 #include <QTimer>
 
 #include "minecraft/auth/MinecraftAccount.h"
+#include "modplatform/ModIndex.h"
 #include "zero/content/CartInstall.h"
+#include "zero/content/DropPlan.h"
 #include "zero/servers/ServerVault.h"  // ZERO
 
 class EditableLabel;
@@ -88,6 +90,7 @@ class ZeroSettingsPage;
 class ZeroShell;
 class ZeroCommandPalette;
 class ZeroShortcutSheet;
+class DownloadsPanel;  // ZERO
 namespace Onboarding {
 class IntroOverlay;  // ZERO
 class TourOverlay;   // ZERO
@@ -123,6 +126,8 @@ class MainWindow : public QMainWindow {
     void updatesAllowedChanged(bool allowed);
 
     void processURLs(QList<QUrl> urls);
+    /// ZERO: the "Add to an instance" dialog for dropped resources; `version` carries the CurseForge metadata of a downloaded one.
+    void addDroppedResources(QList<Zero::Content::Drop::DropFile> files, ModPlatform::IndexedVersion version);
 
     /// Dev aid (`--zero-screenshot`): shows `page` ("home", "library" or "tools"), grabs the window to `path` and quits.
     void zeroScreenshot(const QString& path, const QString& page);
@@ -143,7 +148,7 @@ class MainWindow : public QMainWindow {
     /// alive (its tasks parent their own dialogs to it); a toast with "Show in Library" follows a successful install.
     void installModpack(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& updateInstanceId);
     /// ZERO: the Add / Update of a Discover mod (`installedFileId` non-empty = update that file). Shows the review dialog (version, dependencies),
-    /// downloads the chosen mods like ModFolderPage does, reads the mods folder again and toasts "Added ... to <instance>" with "Show mods".
+    /// starts the chosen mods as a background download (Downloads center), reads the mods folder again when it ended and toasts "Added ... to <instance>" with "Show mods".
     void installMod(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId, const QString& installedFileId);
     /// ZERO: the Add / Update of a Discover resource pack: the review dialog (version only), one ResourceDownloadTask into the instance's
     /// `resourcePackList()`, the folder read again, a toast "Added ... to <instance>". Packs are never turned on here (that is the packs page).
@@ -151,13 +156,13 @@ class MainWindow : public QMainWindow {
     /// ZERO: the Add / Update of a Discover shader: the same flow as a resource pack over `shaderPackList()` (no "Turn it on": the game
     /// picks the shader), toast "Added ... to <instance>" with "Show shaders".
     void installShaderPack(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId, const QString& installedFileId);
-    /// ZERO: the Add of a Discover world (CurseForge). The review dialog (file, version note), then ONE task under a ProgressDialog: a NetJob
+    /// ZERO: the Add of a Discover world (CurseForge). The review dialog (file, version note), then ONE background job (Downloads center): a NetJob
     /// downloads the zip into `<instance>/.zero/world-download/` (CurseForge's hash checked), Prism's `worldList()->createInstallWorldTask`
     /// unpacks the folder with level.dat into `saves/`; the zip is deleted whatever happens. Refused while the target runs. Toast
     /// "Added ... to <instance>" with "Show worlds".
     void installWorld(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId);
     /// ZERO: "Review and add to <instance>" of Discover's selection bar. Shows the cart review (versions, dependencies of all the mods together),
-    /// downloads everything in one task into the mods / resourcepacks / shaderpacks folders of the target, turns the resource packs on (one
+    /// downloads everything in one background job into the mods / resourcepacks / shaderpacks folders of the target, turns the resource packs on (one
     /// options.txt write) and toasts "Added 3 mods and 1 shader to <instance>" with "Show". Added entries leave the cart; failed ones stay.
     void installCart();
     /// ZERO: what runInstallPlan() did: `done` = the downloads whose task succeeded (a failed or never-run one is not in it), `packFiles` = the
@@ -167,10 +172,13 @@ class MainWindow : public QMainWindow {
         QStringList packFiles;
         bool instanceGone = false;
     };
-    /// ZERO: the download half of installCart() (one ConcurrentTask under a ProgressDialog, folders read again), shared with Boost performance.
-    PlanRun runInstallPlan(const QString& targetInstanceId, const Zero::Content::CartInstallPlan& plan);
-    /// ZERO: "Boost performance" of an instance (Library details button, command palette): the dialog, the mods through runInstallPlan(), the
-    /// memory settings, the toast "Boosted <instance>" with "Show mods"; "Fix" of its Java line opens Tools > Java Doctor.
+    /// ZERO: the download half of installCart(), shared with Boost performance: ONE ConcurrentTask as a background job of the Downloads center.
+    /// Returns at once; `done` (may be empty) runs when the job ended (folders read again), possibly after this window is gone.
+    void runInstallPlan(const QString& targetInstanceId, const Zero::Content::CartInstallPlan& plan, std::function<void(const PlanRun&)> done);
+    /// ZERO: opens the Downloads panel under the top bar button (the "Downloads" action of the install toasts).
+    void showDownloadsPanel();
+    /// ZERO: "Boost performance" of an instance (Library details button, command palette): the dialog, the mods through runInstallPlan() (a
+    /// background job, not awaited), the memory settings (written at Apply), the toast "Boosted <instance>" with "Show mods"; "Fix" of its Java line opens Tools > Java Doctor.
     void boostPerformance(const QString& instanceId);
     /// ZERO: the Library Export button. Asks Full copy / Modrinth pack / CurseForge pack, then opens that Prism export dialog.
     void exportInstanceZero(const QString& instanceId);
@@ -407,6 +415,7 @@ class MainWindow : public QMainWindow {
     Zero::AppearancePage* m_appearance = nullptr;
     Zero::ZeroSettingsPage* m_settingsPage = nullptr;
     Zero::ZeroCommandPalette* m_palette = nullptr;
+    Zero::DownloadsPanel* m_downloadsPanel = nullptr;  // ZERO: popover of the top bar Downloads button
     QPointer<Zero::Onboarding::IntroOverlay> m_intro;  // ZERO: the first-run intro while it plays
     QPointer<Zero::Onboarding::TourOverlay> m_tour;    // ZERO: the guided tour while it runs
     Zero::ZeroShortcutSheet* m_shortcutSheet = nullptr;

@@ -80,6 +80,7 @@
 #include <QToolButton>
 #include <QWidget>
 #include <QWidgetAction>
+#include <QPointer>
 #include <memory>
 
 #include <BaseInstance.h>
@@ -118,9 +119,12 @@
 #include "ui/dialogs/skins/SkinManageDialog.h"
 #include "ui/instanceview/InstanceDelegate.h"
 #include "ui/zero/ZeroToast.h"
+#include "ui/zero/shell/DownloadFlow.h"
 #include "zero/session/PlayTracker.h"  // ZERO
 #include "zero/session/SessionSummary.h"  // ZERO
 #include "zero/ZeroLanguage.h"  // ZERO
+#include "zero/downloads/DownloadCenter.h"  // ZERO
+#include "zero/updates/UpdateSweep.h"       // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/PackSnapshotTasks.h"  // ZERO
 #include "ui/zero/instance/ModsDialogs.h"  // ZERO
@@ -134,6 +138,10 @@
 #include "ui/zero/palette/ZeroCommandPalette.h"
 #include "ui/zero/palette/ZeroShortcutSheet.h"
 #include "ui/zero/pages/InstanceInfo.h"
+#include "ui/zero/content/DropAddDialog.h"
+#include "ui/zero/shell/DownloadsButton.h"
+#include "ui/zero/shell/DownloadsPanel.h"
+#include "ui/zero/shell/DropOverlay.h"
 #include "ui/zero/shell/ZeroSearchPill.h"
 #include "ui/zero/shell/ZeroTopBar.h"
 #include "ui/zero/pages/HomePage.h"
@@ -346,7 +354,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         // FIXME: This is kinda weird. and bad. We need some kind of managed shutdown.
         auto q = new QShortcut(QKeySequence::Quit, this);
-        connect(q, &QShortcut::activated, APPLICATION, &Application::quit);
+        connect(q, &QShortcut::activated, this, [this]() {
+            if (APPLICATION->zeroConfirmQuitWithDownloads(this))  // ZERO: running downloads ask first
+                APPLICATION->quit();
+        });
     }
 
     // Konami Code
@@ -1202,7 +1213,17 @@ QString packBusyReason(const QString& instanceId)
     auto* inst = APPLICATION->instances()->getInstanceById(instanceId);
     if (APPLICATION->launchPhase(instanceId) != Application::LaunchPhase::Idle || (inst && inst->isRunning()))
         return QCoreApplication::translate("MainWindow", "Close the game first.");
+    if (auto* downloads = APPLICATION->zeroDownloads(); downloads && downloads->isBusy(instanceId))
+        return Zero::Downloads::instanceBusyText();  // a background download writes into the instance folder
     return {};
+}
+
+/// The toast of a refused pack update / roll back: the downloads reason when that is what blocks it, else `closeText`.
+QString packBusyToastText(const QString& instanceId, const QString& closeText)
+{
+    if (auto* downloads = APPLICATION->zeroDownloads(); downloads && downloads->isBusy(instanceId))
+        return Zero::Downloads::instanceBusyText();
+    return closeText;
 }
 
 /// The question of the roll back (the same text in the real flow and in the screenshot aid).
@@ -1231,7 +1252,7 @@ bool MainWindow::saveCopyBeforeModpackUpdate(const QString& instanceId, const QS
     }
     const QString name = inst->name();
     if (!packBusyReason(instanceId).isEmpty()) {
-        Zero::ZeroToast::show(this, tr("Close %1 to update it").arg(name), Zero::ZeroToast::Kind::Warning);
+        Zero::ZeroToast::show(this, packBusyToastText(instanceId, tr("Close %1 to update it").arg(name)), Zero::ZeroToast::Kind::Warning);
         return false;
     }
     Zero::Backup::Pack::Meta meta;
@@ -1281,14 +1302,14 @@ void MainWindow::rollBackModpackUpdate(const QString& instanceId)
         return;
     }
     if (!packBusyReason(instanceId).isEmpty()) {
-        Zero::ZeroToast::show(this, tr("Close %1 to roll it back").arg(name), Zero::ZeroToast::Kind::Warning);
+        Zero::ZeroToast::show(this, packBusyToastText(instanceId, tr("Close %1 to roll it back").arg(name)), Zero::ZeroToast::Kind::Warning);
         return;
     }
     if (Zero::ModsUi::askWithDialog(this, rollbackPrompt(name, snapshot)) != 1)
         return;
     // the question ran an event loop: the instance may have started meanwhile
     if (!packBusyReason(instanceId).isEmpty()) {
-        Zero::ZeroToast::show(this, tr("Close %1 to roll it back").arg(name), Zero::ZeroToast::Kind::Warning);
+        Zero::ZeroToast::show(this, packBusyToastText(instanceId, tr("Close %1 to roll it back").arg(name)), Zero::ZeroToast::Kind::Warning);
         return;
     }
 
@@ -1317,7 +1338,8 @@ void MainWindow::rollBackModpackUpdate(const QString& instanceId)
 // ZERO: Add / Update of a Discover mod (docs/zero/CONTENT-MODS.md, "Mod install"). The review dialog decides what to install (the mod and
 // its dependencies); this builds one ResourceDownloadTask per mod, exactly as the classic ResourceDownloadDialog does (isIndexed =
 // packwiz metadata, the reason and the file id of the mod that requires it), and runs them like ModFolderPage::downloadDialogFinished:
-// one ConcurrentTask under a ProgressDialog, Prism's error and warning boxes (non-blocking), then the mods folder is read again.
+// one ConcurrentTask run as a background job of the Downloads center (toasts for start / failure / warnings, the history keeps the details),
+// then the mods folder is read again when the job ended.
 // ResourceDownloadDialog / ResourceUpdateDialog (their modal boxes) are never used.
 void MainWindow::installMod(const std::shared_ptr<Zero::Content::ModpackItem>& item, const QString& targetInstanceId, const QString& installedFileId)
 {
@@ -1357,35 +1379,37 @@ void MainWindow::installMod(const std::shared_ptr<Zero::Content::ModpackItem>& i
     ModFolderModel* model = inst->loaderModList();
     const bool indexed = !APPLICATION->settings()->get("ModMetadataDisabled").toBool();
 
-    ConcurrentTask tasks(tr("Add mods"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+    // The task outlives this function: the job holds it. The model stays valid because the instance cannot be deleted while it is busy.
+    auto tasks = makeShared<ConcurrentTask>(tr("Add mods"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
     for (const auto& mod : plan.mods)
-        tasks.addTask(makeShared<ResourceDownloadTask>(mod.pack, mod.version, model, indexed, mod.reason, mod.dependentOn));
-    connect(&tasks, &Task::failed, this,
-            [this](const QString& reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->show(); });
-    connect(&tasks, &Task::succeeded, this, [this, &tasks]() {
-        QStringList warnings = tasks.warnings();
-        if (warnings.count())
-            CustomMessageBox::selectable(this, tr("Warnings"), warnings.join('\n'), QMessageBox::Warning)->show();
-    });
-    ProgressDialog loadDialog(this);
-    loadDialog.showSkipButton();
-    loadDialog.execWithTask(&tasks);
+        tasks->addTask(makeShared<ResourceDownloadTask>(mod.pack, mod.version, model, indexed, mod.reason, mod.dependentOn));
 
-    // Whatever arrived (also after a failure or an abort) is read again: the Mods section's Installed / Update states follow
-    // the model's updateFinished.
-    inst = APPLICATION->instances()->getInstanceById(targetInstanceId);
-    if (!inst)
-        return;
-    inst->loaderModList()->update();
-    if (!tasks.wasSuccessful())
-        return;
-
+    // Background job (Downloads center): what used to follow the dialog runs when it ended. The window may be gone by then.
     const QString name = item->name;
-    const QString text = update ? updatedToastText(name, inst->name(), plan.dependencyCount()) : addedToastText(name, inst->name(), plan.dependencyCount());
-    Zero::ZeroToast::show(this, text, Zero::ZeroToast::Kind::Success, tr("Show mods"), [targetInstanceId]() {
-        if (auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId))
-            APPLICATION->showInstanceWindow(shown, QStringLiteral("mods"));
-    });
+    const int dependencies = plan.dependencyCount();
+    QPointer<MainWindow> self(this);
+    Zero::Downloads::DownloadJob job;
+    job.title = Zero::Downloads::modTitleText(name, dependencies);
+    job.instanceId = targetInstanceId;
+    job.instanceName = inst->name();
+    job.kind = Zero::Downloads::Kind::Mod;
+    job.task = tasks;
+    job.onFinished = [self, targetInstanceId, name, update, dependencies](const Zero::Downloads::DownloadResult& result) {
+        // Whatever arrived (also after a failure or an abort) is read again: the Mods section's Installed / Update states follow
+        // the model's updateFinished.
+        auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId);
+        if (!shown)
+            return;
+        shown->loaderModList()->update();
+        if (result.state != Zero::Downloads::DownloadResult::State::Done || !self)
+            return;
+        const QString text = update ? updatedToastText(name, shown->name(), dependencies) : addedToastText(name, shown->name(), dependencies);
+        Zero::ZeroToast::show(self, text, Zero::ZeroToast::Kind::Success, tr("Show mods"), [targetInstanceId]() {
+            if (auto* inst = APPLICATION->instances()->getInstanceById(targetInstanceId))
+                APPLICATION->showInstanceWindow(inst, QStringLiteral("mods"));
+        });
+    };
+    Zero::Downloads::startFlow(this, std::move(job));
 }
 
 // ZERO: Add / Update of a Discover resource pack or shader (docs/zero/CONTENT-PACKS.md, "D1 Discover > Resource Packs"; SHELL.md, "Discover >
@@ -1448,51 +1472,60 @@ void MainWindow::installFolderContent(Zero::Content::Kind kind, const std::share
 
     const bool turnOn = !shaders && dialog.turnItOn() && !update;
     QString addedFile;
-    ConcurrentTask tasks(shaders ? tr("Add shaders") : tr("Add resource packs"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+    auto tasks = makeShared<ConcurrentTask>(shaders ? tr("Add shaders") : tr("Add resource packs"),
+                                            APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
     for (const auto& pack : plan.mods) {
         auto download = makeShared<ResourceDownloadTask>(pack.pack, pack.version, model, indexed, pack.reason, pack.dependentOn);
         if (addedFile.isEmpty())
             addedFile = download->getFilename();
-        tasks.addTask(download);
+        tasks->addTask(download);
     }
-    connect(&tasks, &Task::failed, this,
-            [this](const QString& reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->show(); });
-    connect(&tasks, &Task::succeeded, this, [this, &tasks]() {
-        QStringList warnings = tasks.warnings();
-        if (warnings.count())
-            CustomMessageBox::selectable(this, tr("Warnings"), warnings.join('\n'), QMessageBox::Warning)->show();
-    });
-    ProgressDialog loadDialog(this);
-    loadDialog.showSkipButton();
-    loadDialog.execWithTask(&tasks);
 
-    // Whatever arrived (also after a failure or an abort) is read again: the section's Installed / Update states follow the model.
-    inst = APPLICATION->instances()->getInstanceById(targetInstanceId);
-    if (!inst)
-        return;
-    if (shaders)
-        inst->shaderPackList()->update();
-    else
-        inst->resourcePackList()->update();
-    if (!tasks.wasSuccessful())
-        return;
+    const QString name = item->name;
+    QPointer<MainWindow> self(this);
+    Zero::Downloads::DownloadJob job;
+    job.title = name;
+    job.instanceId = targetInstanceId;
+    job.instanceName = inst->name();
+    job.kind = shaders ? Zero::Downloads::Kind::ShaderPack : Zero::Downloads::Kind::ResourcePack;
+    job.task = tasks;
+    job.onFinished = [self, targetInstanceId, shaders, update, turnOn, addedFile, name](const Zero::Downloads::DownloadResult& result) {
+        // Whatever arrived (also after a failure or an abort) is read again: the section's Installed / Update states follow the model.
+        auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId);
+        if (!shown)
+            return;
+        ResourceFolderModel* model = shaders ? static_cast<ResourceFolderModel*>(shown->shaderPackList())
+                                             : static_cast<ResourceFolderModel*>(shown->resourcePackList());
+        model->update();
+        if (result.state != Zero::Downloads::DownloadResult::State::Done)
+            return;
 
-    QString text = update ? updatedToastText(item->name, inst->name(), 0) : addedToastText(item->name, inst->name(), 0);
-    if (turnOn && !addedFile.isEmpty()) {
-        // The instance may have started during the download: the write is refused then and the pack is just added.
-        MinecraftInstance* started = inst;
-        const auto turned = Zero::Content::Packs::turnOnAtTop(Zero::Content::Packs::optionsPathFor(inst->gameRoot()),
-                                                              Zero::Content::Packs::historyPathFor(inst->instanceRoot()),
-                                                              model->dir().absolutePath(), addedFile,
-                                                              [started]() { return started && started->isRunning(); });
-        if (turned.result == Zero::Content::Packs::Result::Ok || turned.result == Zero::Content::Packs::Result::NoChange)
-            text = Zero::Content::Packs::addedAndOnText(item->name, inst->name());
-    }
-    const QString page = shaders ? QStringLiteral("shaderpacks") : QStringLiteral("resourcepacks");
-    Zero::ZeroToast::show(this, text, Zero::ZeroToast::Kind::Success, shaders ? tr("Show shaders") : tr("Show packs"), [targetInstanceId, page]() {
-        if (auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId))
-            APPLICATION->showInstanceWindow(shown, page);
-    });
+        QString text = update ? updatedToastText(name, shown->name(), 0) : addedToastText(name, shown->name(), 0);
+        bool closeToTurnOn = false;
+        if (turnOn && !addedFile.isEmpty()) {
+            if (shown->isRunning()) {
+                closeToTurnOn = true;  // the write is refused while the game runs: the pack is just added
+            } else {
+                MinecraftInstance* started = shown;
+                const auto turned = Zero::Content::Packs::turnOnAtTop(Zero::Content::Packs::optionsPathFor(shown->gameRoot()),
+                                                                      Zero::Content::Packs::historyPathFor(shown->instanceRoot()),
+                                                                      model->dir().absolutePath(), addedFile,
+                                                                      [started]() { return started && started->isRunning(); });
+                if (turned.result == Zero::Content::Packs::Result::Ok || turned.result == Zero::Content::Packs::Result::NoChange)
+                    text = Zero::Content::Packs::addedAndOnText(name, shown->name());
+            }
+        }
+        if (!self)
+            return;
+        const QString page = shaders ? QStringLiteral("shaderpacks") : QStringLiteral("resourcepacks");
+        Zero::ZeroToast::show(self, text, Zero::ZeroToast::Kind::Success, shaders ? tr("Show shaders") : tr("Show packs"), [targetInstanceId, page]() {
+            if (auto* inst = APPLICATION->instances()->getInstanceById(targetInstanceId))
+                APPLICATION->showInstanceWindow(inst, page);
+        });
+        if (closeToTurnOn)
+            Zero::ZeroToast::show(self, tr("Close %1 to turn the pack on").arg(shown->name()), Zero::ZeroToast::Kind::Warning);
+    };
+    Zero::Downloads::startFlow(this, std::move(job));
 }
 
 // ZERO: the Add of a Discover world (docs/zero/SHELL.md, "Discover > Worlds - as built"). Worlds are not a ResourceFolderModel (no packwiz
@@ -1542,7 +1575,7 @@ void MainWindow::installWorld(const std::shared_ptr<Zero::Content::ModpackItem>&
     }
     const QStringList before = QDir(inst->worldDir()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
-    SequentialTask tasks(tr("Add world"));
+    auto tasks = makeShared<SequentialTask>(tr("Add world"));
     NetJob::Ptr download{ new NetJob(tr("World download"), APPLICATION->network()) };
     download->setStatus(tr("Downloading %1").arg(item->name));
     auto action = Net::ApiRequest::makeFile(QUrl(version->downloadUrl), zipPath, Net::Request::Option::NoOptions);
@@ -1568,53 +1601,62 @@ void MainWindow::installWorld(const std::shared_ptr<Zero::Content::ModpackItem>&
         }
     }
     download->addNetAction(action);
-    tasks.addTask(download);
+    tasks->addTask(download);
     Task::Ptr unpack{ inst->worldList()->createInstallWorldTask(QFileInfo(zipPath)).release() };
-    tasks.addTask(unpack);
-    connect(&tasks, &Task::failed, this,
-            [this](const QString& reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->show(); });
-    ProgressDialog loadDialog(this);
-    loadDialog.showSkipButton();
-    loadDialog.execWithTask(&tasks);
+    tasks->addTask(unpack);
 
-    // Whatever happened, the zip is not kept.
-    const bool added = tasks.wasSuccessful();
-    removeWorldDownload(zipPath, instanceRoot);
-    inst = APPLICATION->instances()->getInstanceById(targetInstanceId);
-    if (!inst)
-        return;
-    inst->worldList()->update();
-    if (!added)
-        return;
+    const QString name = item->name;
+    QPointer<MainWindow> self(this);
+    Zero::Downloads::DownloadJob job;
+    job.title = name;
+    job.instanceId = targetInstanceId;
+    job.instanceName = inst->name();
+    job.kind = Zero::Downloads::Kind::World;
+    job.task = tasks;
+    job.onFinished = [self, targetInstanceId, instanceRoot, zipPath, before, name](const Zero::Downloads::DownloadResult& result) {
+        // Whatever happened, the zip is not kept.
+        removeWorldDownload(zipPath, instanceRoot);
+        auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId);
+        if (!shown)
+            return;
+        shown->worldList()->update();
+        if (result.state != Zero::Downloads::DownloadResult::State::Done || !self)
+            return;
 
-    const QStringList after = QDir(inst->worldDir()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    const QString folder = newWorldFolder(before, after);
-    const QString key = folder.isEmpty() ? QString() : targetInstanceId + QLatin1Char('/') + folder;
-    Zero::ZeroToast::show(this, addedToastText(item->name, inst->name(), 0), Zero::ZeroToast::Kind::Success, tr("Show worlds"),
-                          [this, targetInstanceId, key]() {
-                              if (!key.isEmpty() && m_worlds) {
-                                  // The ZERO Worlds page, with the new world selected once it is listed.
-                                  m_worlds->rescan();
-                                  m_worlds->selectWorld(key);
-                                  m_shell->setCurrentPage(QStringLiteral("worlds"));
-                              } else if (auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId)) {
-                                  APPLICATION->showInstanceWindow(shown, QStringLiteral("worlds"));
-                              }
-                          });
+        const QStringList after = QDir(shown->worldDir()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        const QString folder = newWorldFolder(before, after);
+        const QString key = folder.isEmpty() ? QString() : targetInstanceId + QLatin1Char('/') + folder;
+        Zero::ZeroToast::show(self, addedToastText(name, shown->name(), 0), Zero::ZeroToast::Kind::Success, tr("Show worlds"),
+                              [self, targetInstanceId, key]() {
+                                  if (!key.isEmpty() && self && self->m_worlds) {
+                                      // The ZERO Worlds page, with the new world selected once it is listed.
+                                      self->m_worlds->rescan();
+                                      self->m_worlds->selectWorld(key);
+                                      self->m_shell->setCurrentPage(QStringLiteral("worlds"));
+                                  } else if (auto* inst = APPLICATION->instances()->getInstanceById(targetInstanceId)) {
+                                      APPLICATION->showInstanceWindow(inst, QStringLiteral("worlds"));
+                                  }
+                              });
+    };
+    if (Zero::Downloads::startFlow(this, std::move(job)).isEmpty())
+        removeWorldDownload(zipPath, instanceRoot);  // nothing ran: do not leave the zip
 }
 
 // ZERO: the download half of installCart(), shared with "Boost performance": one ResourceDownloadTask per download of `plan` (same arguments as
-// installMod / installFolderContent, into loaderModList() / resourcePackList() / shaderPackList()), run as ONE ConcurrentTask under a
-// ProgressDialog, then the touched folders are read again. Returns what arrived (`done`: the downloads whose task succeeded, a failed or
-// never-run one is not in it) and the file names of the resource packs to turn on. Error and warning boxes are Prism's, as before.
-MainWindow::PlanRun MainWindow::runInstallPlan(const QString& targetInstanceId, const Zero::Content::CartInstallPlan& plan)
+// installMod / installFolderContent, into loaderModList() / resourcePackList() / shaderPackList()), run as ONE ConcurrentTask in the background
+// (Downloads center). Returns at once; `done` (may be empty) runs when the job ended, on the GUI thread, possibly after this window is gone, and
+// gets what arrived (`done`: the downloads whose task succeeded, a failed or never-run one is not in it) and the file names of the resource
+// packs to turn on. The touched folders are read again before `done`. Errors and warnings come as toasts (startFlow) and in the history.
+void MainWindow::runInstallPlan(const QString& targetInstanceId, const Zero::Content::CartInstallPlan& plan, std::function<void(const PlanRun&)> done)
 {
     using namespace Zero::Content;
-    PlanRun run;
     auto* inst = APPLICATION->instances()->getInstanceById(targetInstanceId);
     if (!inst) {
+        PlanRun run;
         run.instanceGone = true;
-        return run;
+        if (done)
+            done(run);
+        return;
     }
     const bool indexed = !APPLICATION->settings()->get("ModMetadataDisabled").toBool();
     ResourceFolderModel* mods = inst->loaderModList();
@@ -1625,53 +1667,64 @@ MainWindow::PlanRun MainWindow::runInstallPlan(const QString& targetInstanceId, 
         CartDownload download;
         shared_qobject_ptr<ResourceDownloadTask> task;
     };
-    QList<Started> started;
-    ConcurrentTask tasks(tr("Add content"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+    auto started = std::make_shared<QList<Started>>();
+    auto tasks = makeShared<ConcurrentTask>(tr("Add content"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
     for (const CartDownload& download : plan.downloads) {
         ResourceFolderModel* model = download.kind == Kind::Mod ? mods : download.kind == Kind::ResourcePack ? packs : shaders;
         auto task = makeShared<ResourceDownloadTask>(download.mod.pack, download.mod.version, model, indexed, download.mod.reason,
                                                      download.mod.dependentOn);
-        started.append({ download, task });
-        tasks.addTask(task);
+        started->append({ download, task });
+        tasks->addTask(task);
     }
-    connect(&tasks, &Task::failed, this,
-            [this](const QString& reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->show(); });
-    connect(&tasks, &Task::succeeded, this, [this, &tasks]() {
-        QStringList warnings = tasks.warnings();
-        if (warnings.count())
-            CustomMessageBox::selectable(this, tr("Warnings"), warnings.join('\n'), QMessageBox::Warning)->show();
-    });
-    ProgressDialog loadDialog(this);
-    loadDialog.showSkipButton();
-    loadDialog.execWithTask(&tasks);
 
-    // Whatever arrived (also after a failure or an abort) is read again: the sections' Installed / Update states follow the models.
-    inst = APPLICATION->instances()->getInstanceById(targetInstanceId);
-    if (!inst) {
-        run.instanceGone = true;
-        return run;
-    }
-    if (plan.countOf(Kind::Mod) > 0)
-        inst->loaderModList()->update();
-    if (plan.countOf(Kind::ResourcePack) > 0)
-        inst->resourcePackList()->update();
-    if (plan.countOf(Kind::Shader) > 0)
-        inst->shaderPackList()->update();
+    const int modCount = plan.countOf(Kind::Mod);
+    const int packCount = plan.countOf(Kind::ResourcePack);
+    const int shaderCount = plan.countOf(Kind::Shader);
+    Zero::Downloads::DownloadJob job;
+    job.title = Zero::Downloads::contentTitleText(modCount, packCount, shaderCount);
+    job.instanceId = targetInstanceId;
+    job.instanceName = inst->name();
+    job.kind = packCount + shaderCount == 0 ? Zero::Downloads::Kind::Mod
+               : modCount + shaderCount == 0 ? Zero::Downloads::Kind::ResourcePack
+               : modCount + packCount == 0   ? Zero::Downloads::Kind::ShaderPack
+                                             : Zero::Downloads::Kind::Mixed;
+    job.task = tasks;
+    job.onFinished = [targetInstanceId, started, modCount, packCount, shaderCount, done](const Zero::Downloads::DownloadResult&) {
+        PlanRun run;
+        // Whatever arrived (also after a failure or an abort) is read again: the sections' Installed / Update states follow the models.
+        auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId);
+        if (!shown) {
+            run.instanceGone = true;
+            if (done)
+                done(run);
+            return;
+        }
+        if (modCount > 0)
+            shown->loaderModList()->update();
+        if (packCount > 0)
+            shown->resourcePackList()->update();
+        if (shaderCount > 0)
+            shown->shaderPackList()->update();
 
-    for (const Started& one : started) {
-        if (!one.task->wasSuccessful())
-            continue;
-        run.done.downloads.append(one.download);
-        if (one.download.turnOn)
-            run.packFiles.append(one.task->getFilename());
+        for (const Started& one : *started) {
+            if (!one.task->wasSuccessful())
+                continue;
+            run.done.downloads.append(one.download);
+            if (one.download.turnOn)
+                run.packFiles.append(one.task->getFilename());
+        }
+        if (done)
+            done(run);
+    };
+    if (Zero::Downloads::startFlow(this, std::move(job)).isEmpty() && done) {
+        done(PlanRun());  // no Downloads center: nothing ran, nothing arrived
     }
-    return run;
 }
 
 // ZERO: the combined install of Discover's install cart (docs/zero/SHELL.md, "Discover > Install cart"). The review dialog decides WHAT to
 // install (every cart entry with its version, plus the dependencies of all the mods); this builds one ResourceDownloadTask per download
 // exactly like installMod / installFolderContent (same arguments, into loaderModList() / resourcePackList() / shaderPackList()), runs them as
-// ONE ConcurrentTask under a ProgressDialog, reads the touched folders again, puts the new resource packs on top of the game's list with ONE
+// ONE background job (Downloads center), reads the touched folders again when it ended, puts the new resource packs on top of the game's list with ONE
 // options.txt write (Packs::turnOnManyAtTop: one history entry, Undo works) and toasts what arrived. A download that succeeded takes its
 // entry out of the cart; one that failed (or never ran) stays, and so does an entry the review skipped. The single-item flows are untouched.
 void MainWindow::installCart()
@@ -1732,40 +1785,51 @@ void MainWindow::installCart()
                               inst ? Zero::ZeroToast::Kind::Warning : Zero::ZeroToast::Kind::Error);
         return;
     }
-    // What succeeded leaves the cart; what failed stays (the error box above says why).
-    const PlanRun run = runInstallPlan(targetInstanceId, plan);
-    if (run.instanceGone)
-        return;
-    inst = APPLICATION->instances()->getInstanceById(targetInstanceId);
-    const CartInstallPlan& done = run.done;
-    const QStringList& packFiles = run.packFiles;
-    for (const CartDownload& one : done.downloads) {
-        if (!one.cartKey.isEmpty())
-            cart->remove(one.cartKey);
-    }
-    if (done.isEmpty())
-        return;
+    // What succeeded leaves the cart; what failed stays (the error toast and the Downloads panel say why). The job runs in the background:
+    // the cart, the packs and the toast are handled when it ended (the window may be gone by then).
+    QPointer<MainWindow> self(this);
+    runInstallPlan(targetInstanceId, plan, [self, targetInstanceId](const PlanRun& run) {
+        if (run.instanceGone)
+            return;
+        auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId);
+        if (!shown)
+            return;
+        const CartInstallPlan& done = run.done;
+        const QStringList& packFiles = run.packFiles;
+        if (self) {
+            if (auto* cart = self->m_discover->cart()) {
+                for (const CartDownload& one : done.downloads) {
+                    if (!one.cartKey.isEmpty())
+                        cart->remove(one.cartKey);
+                }
+            }
+        }
+        if (done.isEmpty())
+            return;
 
-    if (!packFiles.isEmpty()) {
-        // The instance may have started during the download: the write is refused then and the packs are just added.
-        MinecraftInstance* watched = inst;
-        Zero::Content::Packs::turnOnManyAtTop(Zero::Content::Packs::optionsPathFor(inst->gameRoot()),
-                                              Zero::Content::Packs::historyPathFor(inst->instanceRoot()),
-                                              inst->resourcePackList()->dir().absolutePath(), packFiles,
-                                              [watched]() { return watched && watched->isRunning(); });
-    }
-    const QString text = cartToastText(done.countOf(Kind::Mod), done.countOf(Kind::ResourcePack), done.countOf(Kind::Shader), inst->name(),
-                                       done.allUpdates());
-    const QString page = done.firstPageId();
-    Zero::ZeroToast::show(this, text, Zero::ZeroToast::Kind::Success, tr("Show"), [targetInstanceId, page]() {
-        if (auto* shown = APPLICATION->instances()->getInstanceById(targetInstanceId))
-            APPLICATION->showInstanceWindow(shown, page);
+        if (!packFiles.isEmpty()) {
+            // The instance may have started during the download: the write is refused then and the packs are just added.
+            MinecraftInstance* watched = shown;
+            Zero::Content::Packs::turnOnManyAtTop(Zero::Content::Packs::optionsPathFor(shown->gameRoot()),
+                                                  Zero::Content::Packs::historyPathFor(shown->instanceRoot()),
+                                                  shown->resourcePackList()->dir().absolutePath(), packFiles,
+                                                  [watched]() { return watched && watched->isRunning(); });
+        }
+        if (!self)
+            return;
+        const QString text = cartToastText(done.countOf(Kind::Mod), done.countOf(Kind::ResourcePack), done.countOf(Kind::Shader), shown->name(),
+                                           done.allUpdates());
+        const QString page = done.firstPageId();
+        Zero::ZeroToast::show(self, text, Zero::ZeroToast::Kind::Success, tr("Show"), [targetInstanceId, page]() {
+            if (auto* inst = APPLICATION->instances()->getInstanceById(targetInstanceId))
+                APPLICATION->showInstanceWindow(inst, page);
+        });
     });
 }
 
 // ZERO: "Boost performance" (docs/zero/SHELL.md). The dialog decides WHAT to change (the curated mods for the instance's version + loader, the
-// dependencies they need, the memory); its Apply calls the install below, which is the cart's download half (runInstallPlan: one task, one
-// ProgressDialog, Prism's own error boxes), and then writes the memory settings. Refused while the instance runs. "Fix" of the Java line closes
+// dependencies they need, the memory); its Apply hands the mods to runInstallPlan() (the cart's download half: one background job of the
+// Downloads center, not awaited) and writes the memory and Java-argument settings at once. Refused while the instance runs. "Fix" of the Java line closes
 // the dialog and opens Tools > Java Doctor.
 void MainWindow::boostPerformance(const QString& instanceId)
 {
@@ -1780,12 +1844,9 @@ void MainWindow::boostPerformance(const QString& instanceId)
         return;
     }
     const QString name = inst->name();
+    // The mods download in the background (Downloads center; a failure shows as an Error toast there); Apply does not wait for them.
     auto env = PerformanceEnvironment::fromApplication(instanceId, [this, instanceId](const Zero::Content::CartInstallPlan& plan) {
-        InstallResult result;
-        const PlanRun run = runInstallPlan(instanceId, plan);
-        result.installed = run.done.count();
-        result.failedAsWhole = run.instanceGone || run.done.isEmpty();  // nothing arrived (a failure, or the user skipped everything)
-        return result;
+        runInstallPlan(instanceId, plan, {});
     });
     PerformanceDialog dialog(std::move(env), this);
     if (m_zeroBoostHook)
@@ -1805,7 +1866,7 @@ void MainWindow::boostPerformance(const QString& instanceId)
     }
     if (!outcome.applied)
         return;
-    if (outcome.modsAdded > 0) {
+    if (outcome.modsQueued > 0) {
         Zero::ZeroToast::show(this, boostedToastText(name), Zero::ZeroToast::Kind::Success, tr("Show mods"), [instanceId]() {
             if (auto* shown = APPLICATION->instances()->getInstanceById(instanceId))
                 APPLICATION->showInstanceWindow(shown, QStringLiteral("mods"));
@@ -1822,6 +1883,15 @@ void MainWindow::boostPerformance(const QString& instanceId)
     }
 }
 
+// ZERO: opens the Downloads panel under the top bar button (the toasts' "Downloads" action; nothing while the button is hidden).
+void MainWindow::showDownloadsPanel()
+{
+    if (!m_downloadsPanel)
+        return;
+    if (auto* button = m_shell->topBar()->downloadsButton(); button && button->available())
+        m_downloadsPanel->popup(button);
+}
+
 void MainWindow::on_actionAddInstance_triggered()
 {
     addInstance();
@@ -1829,7 +1899,8 @@ void MainWindow::on_actionAddInstance_triggered()
 
 void MainWindow::processURLs(QList<QUrl> urls)
 {
-    // NOTE: This loop only processes one dropped file!
+    // ZERO: local resources are gathered over the whole drop (addDroppedResources); the rest is upstream.
+    QList<Zero::Content::Drop::DropFile> dropped;
     for (auto& url : urls) {
         if (url.isEmpty() || url.toString().trimmed().isEmpty())
             continue;
@@ -2047,49 +2118,97 @@ void MainWindow::processURLs(QList<QUrl> urls)
             continue;
         }
 
-        if (APPLICATION->instances()->count() <= 0) {
-            CustomMessageBox::selectable(this, tr("No instance!"),
-                                         tr("No instance available to add the resource to.\nPlease create a new instance before "
-                                            "attempting to install this resource again."),
-                                         QMessageBox::Critical)
-                ->show();
+        // ZERO: valid resources are collected; the "Add to an instance" dialog takes them all at once (a remote one right away).
+        Zero::Content::Drop::Kind kind;
+        if (!Zero::Content::Drop::kindFromResource(type, &kind))
             continue;
-        }
-        ImportResourceDialog dlg(localFileName, type, this);
-
-        if (dlg.exec() != QDialog::Accepted)
-            continue;
-
-        qDebug() << "Adding resource" << localFileName << "to" << dlg.selectedInstanceKey;
-
-        auto inst = APPLICATION->instances()->getInstanceById(dlg.selectedInstanceKey);
-        auto minecraftInst = inst;
-
-        switch (type) {
-            case ModPlatform::ResourceType::ResourcePack:
-                minecraftInst->resourcePackList()->installResourceWithFlameMetadata(localFileName, version);
-                break;
-            case ModPlatform::ResourceType::TexturePack:
-                minecraftInst->texturePackList()->installResourceWithFlameMetadata(localFileName, version);
-                break;
-            case ModPlatform::ResourceType::DataPack:
-                qWarning() << "Importing of Data Packs not supported at this time. Ignoring" << localFileName;
-                break;
-            case ModPlatform::ResourceType::Mod:
-                minecraftInst->loaderModList()->installResourceWithFlameMetadata(localFileName, version);
-                break;
-            case ModPlatform::ResourceType::ShaderPack:
-                minecraftInst->shaderPackList()->installResourceWithFlameMetadata(localFileName, version);
-                break;
-            case ModPlatform::ResourceType::World:
-                minecraftInst->worldList()->installWorld(localFileInfo);
-                break;
-            case ModPlatform::ResourceType::Unknown:
-            default:
-                qDebug() << "Can't Identify" << localFileName << "Ignoring it.";
-                break;
+        auto file = Zero::Content::Drop::inspectFile(localFileName, kind);
+        if (url.isLocalFile()) {
+            dropped.push_back(file);
+        } else {
+            addDroppedResources({ file }, version);
         }
     }
+    if (!dropped.isEmpty())
+        addDroppedResources(dropped, {});
+}
+
+// ZERO: smart drag and drop (docs/zero/SHELL.md, "Drag and drop"). One dialog for every resource of a drop; the install calls are Prism's.
+void MainWindow::addDroppedResources(QList<Zero::Content::Drop::DropFile> files, ModPlatform::IndexedVersion version)
+{
+    using Zero::Content::Drop::Kind;
+    Zero::Content::DropAddEnvironment env;
+    env.targets = Zero::Content::targetsFromInstanceList(APPLICATION->instances());
+    env.librarySelectedId = m_selectedInstance ? m_selectedInstance->id() : QString();
+    env.savedTargetId = APPLICATION->settings()->get("ZeroDropTarget").toString();
+    env.folderFor = [](const QString& targetId, Kind kind) -> QString {
+        auto* inst = APPLICATION->instances()->getInstanceById(targetId);
+        if (!inst)
+            return {};
+        switch (kind) {
+            case Kind::Mod:
+                return inst->modsRoot();
+            case Kind::ResourcePack:
+                return inst->resourcePacksDir();
+            case Kind::TexturePack:
+                return inst->texturePacksDir();
+            case Kind::ShaderPack:
+                return inst->shaderPacksDir();
+            case Kind::World:
+            case Kind::DataPack:
+                break;
+        }
+        return {};
+    };
+    env.install = [version](const QString& targetId, const Zero::Content::Drop::DropFile& file) mutable -> QString {
+        auto* inst = APPLICATION->instances()->getInstanceById(targetId);
+        if (!inst)
+            return QObject::tr("That instance is no longer available.");
+        const QFileInfo info(file.path);
+        if (!info.exists())
+            return QObject::tr("The file is gone.");
+        qDebug() << "Adding resource" << file.path << "to" << targetId;
+        switch (file.kind) {
+            case Kind::ResourcePack:
+                inst->resourcePackList()->installResourceWithFlameMetadata(file.path, version);
+                break;
+            case Kind::TexturePack:
+                inst->texturePackList()->installResourceWithFlameMetadata(file.path, version);
+                break;
+            case Kind::Mod:
+                inst->loaderModList()->installResourceWithFlameMetadata(file.path, version);
+                break;
+            case Kind::ShaderPack:
+                inst->shaderPackList()->installResourceWithFlameMetadata(file.path, version);
+                break;
+            case Kind::World:
+                inst->worldList()->installWorld(info);
+                break;
+            case Kind::DataPack:
+                return QObject::tr("Data packs go inside a world.");
+        }
+        return {};
+    };
+    env.createInstance = [this]() { on_actionAddInstance_triggered(); };
+
+    Zero::Content::DropAddDialog dlg(std::move(env), files, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    const QString targetId = dlg.targetId();
+    const auto added = dlg.addedFiles();
+    auto* inst = APPLICATION->instances()->getInstanceById(targetId);
+    if (!added.isEmpty()) {
+        APPLICATION->settings()->set("ZeroDropTarget", targetId);
+        const QString page = Zero::Content::Drop::openPage(added);
+        Zero::ZeroToast::show(this, Zero::Content::Drop::addedToastText(added.size(), inst ? inst->name() : QString()),
+                              Zero::ZeroToast::Kind::Success, tr("Open"), [targetId, page]() {
+                                  if (auto* shown = APPLICATION->instances()->getInstanceById(targetId))
+                                      APPLICATION->showInstanceWindow(shown, page);
+                              });
+    }
+    for (const auto& failure : dlg.failures())
+        Zero::ZeroToast::show(this, Zero::Content::Drop::failedToastText(failure.first.fileName), Zero::ZeroToast::Kind::Error);
 }
 
 void MainWindow::on_actionREDDIT_triggered()
@@ -2538,6 +2657,12 @@ void MainWindow::on_actionDeleteInstance_triggered()
             ->exec();
         return;
     }
+    if (auto* downloads = APPLICATION->zeroDownloads(); downloads && downloads->isBusy(m_selectedInstance->id())) {
+        // ZERO: a background download writes into the instance folder (and holds its models)
+        CustomMessageBox::selectable(this, tr("Downloads in progress"), Zero::Downloads::instanceBusyText(), QMessageBox::Information, QMessageBox::Ok)
+            ->exec();
+        return;
+    }
     auto id = m_selectedInstance->id();
     const QString deletedName = m_selectedInstance->name();
 
@@ -2654,6 +2779,12 @@ void MainWindow::on_actionViewSelectedInstFolder_triggered()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    // ZERO: closing the last window with no tray icon ends the process, which would drop the running downloads: ask first.
+    // (With a tray icon, other windows or a running game the process lives on and the downloads continue.)
+    if (APPLICATION->zeroClosingMainWindowQuits() && !APPLICATION->zeroConfirmQuitWithDownloads(this)) {
+        event->ignore();
+        return;
+    }
     if (m_settingsPage)
         m_settingsPage->applyAll();  // Settings saves when you leave it; quitting while it is open counts as leaving
     // Save the window state and geometry.
@@ -2917,6 +3048,7 @@ void MainWindow::setupZeroShell()
 {
     m_shell = new Zero::ZeroShell(ui->centralWidget);
     ui->horizontalLayout->addWidget(m_shell);
+    new Zero::DropOverlay(this);  // the veil of a drag over the window (smart drag and drop); owned by the window
 
     m_home = new Zero::HomePage(m_shell);
     m_library = new Zero::LibraryPage(view, proxymodel, m_shell);
@@ -3090,6 +3222,9 @@ void MainWindow::setupZeroShell()
         m_shell->setCurrentPage(QStringLiteral("screenshots"));
         m_screenshots->openViewerByPath(path);
     });
+    connect(m_home, &Zero::HomePage::modsRequested, this, [withInstance](const QString& id) {
+        withInstance(id, [](MinecraftInstance* inst) { APPLICATION->showInstanceWindow(inst, QStringLiteral("mods")); });
+    });
     connect(m_home, &Zero::HomePage::serversRequested, this, [this]() { m_shell->setCurrentPage(QStringLiteral("servers")); });
     connect(m_home, &Zero::HomePage::viewLibraryRequested, this, [this]() { m_shell->setCurrentPage(QStringLiteral("library")); });
     connect(m_home, &Zero::HomePage::newInstanceRequested, this, &MainWindow::on_actionAddInstance_triggered);
@@ -3101,6 +3236,53 @@ void MainWindow::setupZeroShell()
     connect(m_shell, &Zero::ZeroShell::accountMenuRequested, this, &MainWindow::showAccountMenu);
     connect(m_shell, &Zero::ZeroShell::moreMenuRequested, this, &MainWindow::showMoreMenu);
     connect(m_shell, &Zero::ZeroShell::settingsRequested, ui->actionSettings, &QAction::trigger);
+
+    // Downloads center: the top bar button (hidden until there is a job or history) and its panel. A finished row opens the instance.
+    if (auto* downloads = APPLICATION->zeroDownloads()) {
+        auto* topBar = m_shell->topBar();
+        topBar->attachDownloads(downloads);
+        m_downloadsPanel = new Zero::DownloadsPanel(downloads, this);
+        m_downloadsPanel->setInstanceExists([](const QString& id) { return APPLICATION->instances()->getInstanceById(id) != nullptr; });
+        connect(topBar, &Zero::ZeroTopBar::downloadsRequested, m_downloadsPanel, &Zero::DownloadsPanel::toggle);
+        connect(m_downloadsPanel, &Zero::DownloadsPanel::opened, this, [topBar]() {
+            if (auto* b = topBar->downloadsButton())
+                b->setPanelOpen(true);
+        });
+        connect(m_downloadsPanel, &Zero::DownloadsPanel::closed, this, [topBar]() {
+            if (auto* b = topBar->downloadsButton())
+                b->setPanelOpen(false);
+        });
+        connect(m_downloadsPanel, &Zero::DownloadsPanel::openInstanceRequested, this,
+                [this](const QString& id, Zero::Downloads::Kind kind) {
+                    using Kind = Zero::Downloads::Kind;
+                    auto* inst = APPLICATION->instances()->getInstanceById(id);
+                    if (!inst)
+                        return;
+                    if (kind == Kind::Modpack) {
+                        showInLibrary(id);
+                        return;
+                    }
+                    QString page;
+                    switch (kind) {
+                        case Kind::Mod:
+                        case Kind::Update:
+                            page = QStringLiteral("mods");
+                            break;
+                        case Kind::ResourcePack:
+                            page = QStringLiteral("resourcepacks");
+                            break;
+                        case Kind::ShaderPack:
+                            page = QStringLiteral("shaderpacks");
+                            break;
+                        case Kind::World:
+                            page = QStringLiteral("worlds");
+                            break;
+                        default:
+                            break;
+                    }
+                    APPLICATION->showInstanceWindow(inst, page);
+                });
+    }
     // A running game pauses the video background (updateAllowedChanged(false) = first instance started, true = last one stopped).
     m_shell->setGameRunning(!APPLICATION->updatesAreAllowed());
     connect(APPLICATION, &Application::updateAllowedChanged, m_shell, [this](bool allowed) { m_shell->setGameRunning(!allowed); });
@@ -3501,6 +3683,76 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         out.append(Zero::Palette::serverCommands(m_paletteServers->servers(), favoriteServers, [this](const QString& address, const QString& instanceId) {
             m_servers->playOn(address, instanceId);
         }));
+    }
+
+    // Downloads: only while the top bar button is shown (a running job or history).
+    if (m_downloadsPanel) {
+        if (auto* button = m_shell->topBar()->downloadsButton(); button && button->available()) {
+            PaletteCommand c;
+            c.id = QStringLiteral("action:downloads");
+            c.kind = Kind::Action;
+            c.title = tr("Downloads");
+            c.keywords = { tr("downloading"), tr("installs"), tr("progress"), tr("history"), tr("cancel") };
+            c.iconName = QStringLiteral("download");
+            c.primaryLabel = tr("Open");
+            c.run = [this]() {
+                // after the palette overlay closed: the panel is a popup anchored to the button
+                QTimer::singleShot(0, this, [this]() {
+                    if (auto* b = m_shell->topBar()->downloadsButton(); b && b->available())
+                        m_downloadsPanel->popup(b);
+                });
+            };
+            out.append(c);
+        }
+    }
+
+    // Updates for everything: look for mod updates of all instances / apply the ones found (Home's Updates section shows them).
+    if (auto* sweep = APPLICATION->zeroUpdates()) {
+        if (!sweep->checking()) {
+            PaletteCommand c;
+            c.id = QStringLiteral("action:check-updates");
+            c.kind = Kind::Action;
+            c.title = tr("Check for updates");
+            c.keywords = { tr("updates"), tr("mods"), tr("outdated"), tr("newer"), tr("upgrade") };
+            c.iconName = QStringLiteral("refresh-cw");
+            c.primaryLabel = tr("Check");
+            c.run = [this, sweep = QPointer<Zero::Updates::UpdateSweep>(sweep)]() {
+                if (!sweep || sweep->checking())
+                    return;
+                // the answer comes as a toast: the Updates section stays hidden when nothing was found
+                auto connection = std::make_shared<QMetaObject::Connection>();
+                *connection = connect(sweep.data(), &Zero::Updates::UpdateSweep::finished, this, [this, sweep, connection]() {
+                    QObject::disconnect(*connection);
+                    if (!sweep)
+                        return;
+                    const int total = sweep->totalUpdates();
+                    const int instances = int(sweep->results().size());
+                    const QString updates = total == 1 ? tr("1 update") : tr("%1 updates").arg(total);
+                    const QString where = instances == 1 ? tr("1 instance") : tr("%1 instances").arg(instances);
+                    Zero::ZeroToast::show(this, total == 0 ? tr("Everything is up to date.") : tr("Found %1 in %2.").arg(updates, where),
+                                          Zero::ZeroToast::Kind::Success);
+                });
+                Zero::ZeroToast::show(this, tr("Checking for updates…"), Zero::ZeroToast::Kind::Info);
+                sweep->checkNow();
+            };
+            out.append(c);
+        }
+        if (sweep->totalUpdates() > 0) {
+            PaletteCommand c;
+            c.id = QStringLiteral("action:update-all");
+            c.kind = Kind::Action;
+            c.title = tr("Update all");
+            c.keywords = { tr("updates"), tr("mods"), tr("upgrade"), tr("everything"), tr("instances") };
+            c.iconName = QStringLiteral("download");
+            c.primaryLabel = tr("Update");
+            c.run = [this, sweep = QPointer<Zero::Updates::UpdateSweep>(sweep)]() {
+                if (!sweep)
+                    return;
+                sweep->updateAll();
+                Zero::ZeroToast::show(this, tr("Updating the mods of every instance with updates…"), Zero::ZeroToast::Kind::Info);
+            };
+            out.append(c);
+        }
     }
 
     // Navigation.

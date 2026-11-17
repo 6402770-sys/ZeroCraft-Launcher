@@ -916,6 +916,8 @@ SET(LAUNCHER_SOURCES
     zero/content/ModDependencies.h
     zero/content/ModInstall.cpp
     zero/content/ModInstall.h
+    zero/content/DropPlan.cpp
+    zero/content/DropPlan.h
     zero/content/ModTarget.cpp
     zero/content/ShaderMod.cpp
     zero/content/ShaderMod.h
@@ -943,6 +945,10 @@ SET(LAUNCHER_SOURCES
     zero/diagnostics/CrashReportCollector.cpp
     zero/diagnostics/CrashReportCollector.h
     zero/diagnostics/DiagnosticsTypes.h
+    zero/downloads/DownloadCenter.cpp
+    zero/downloads/DownloadCenter.h
+    zero/downloads/DownloadText.cpp
+    zero/downloads/DownloadText.h
     zero/history/SessionHistory.cpp
     zero/history/SessionHistory.h
     zero/session/PlayTracker.cpp
@@ -955,6 +961,12 @@ SET(LAUNCHER_SOURCES
     zero/session/ProcessMemory.h
     zero/servers/HomeServers.cpp
     zero/servers/HomeServers.h
+    zero/updates/UpdateSweep.cpp
+    zero/updates/UpdateSweep.h
+    ui/zero/updates/UpdateSweepSetup.cpp
+    ui/zero/updates/UpdateSweepSetup.h
+    ui/zero/pages/HomeUpdatesSection.cpp
+    ui/zero/pages/HomeUpdatesSection.h
     ui/zero/ZeroTray.cpp
     ui/zero/ZeroTray.h
     ui/zero/pages/NowPlayingCard.cpp
@@ -1258,6 +1270,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/content/SelectionBar.h
     ui/zero/content/RemoteImageCache.cpp
     ui/zero/content/RemoteImageCache.h
+    ui/zero/content/DropAddDialog.cpp
+    ui/zero/content/DropAddDialog.h
     ui/zero/content/TargetInstanceButton.cpp
     ui/zero/content/TargetInstanceButton.h
     ui/zero/prelaunch/PreLaunchDialog.cpp
@@ -1283,6 +1297,14 @@ SET(LAUNCHER_SOURCES
     ui/zero/shell/ZeroSearchPill.h
     ui/zero/shell/ZeroShell.cpp
     ui/zero/shell/ZeroShell.h
+    ui/zero/shell/DownloadFlow.cpp
+    ui/zero/shell/DownloadFlow.h
+    ui/zero/shell/DownloadsButton.cpp
+    ui/zero/shell/DownloadsButton.h
+    ui/zero/shell/DownloadsPanel.cpp
+    ui/zero/shell/DownloadsPanel.h
+    ui/zero/shell/DropOverlay.cpp
+    ui/zero/shell/DropOverlay.h
     ui/zero/shell/ZeroTopBar.cpp
     ui/zero/shell/ZeroTopBar.h
     ui/zero/shell/ZeroVideoBackground.cpp

@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-16 (session 16: Mission 004 B2 done and committed — resume at "Mission 004" › 🔴 RESUME HERE (B3). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-16 (session 16: Mission 004 B2 + B3 done and committed — resume at "Mission 004" › 🔴 RESUME HERE (B4). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -728,8 +728,26 @@ Status per batch is logged below as it lands.
   Limits / open: only jars directly in `mods/` are scanned (no version subfolders); a fix's recheck runs on the UI thread (brief freeze on
   huge packs); a scan whose dialog was cancelled keeps running and the next Play of that instance waits for it; Minecraft theme look and
   the real Play path not driven by hand (owner QA below). Docs: `docs/zero/ARCHITECTURE.md` "Before you play".
-- 🔴 **RESUME HERE: B3** (updates for everything, Downloads center, smart drag & drop), then B4 → B5. Discord Application ID still to
-  come from the owner (feature hidden until then).
+- ✅ **B3 done** (session 16; 98/98 + FileSystem 25/25; dev build starts clean). Owner chose **real background downloads**.
+  **Drag & drop**: `ui/zero/shell/DropOverlay` (whole-window "Drop to add"), all local files of one drop → one "Add N files" dialog
+  (`ui/zero/content/DropAddDialog`, pure `zero/content/DropPlan`: kind, fit captions from jar metadata, replace caption, data packs not
+  installable); modpack archives and remote links keep the upstream path; setting `ZeroDropTarget`. **Downloads center**:
+  `zero/downloads/DownloadCenter` (`APPLICATION->zeroDownloads()`, history `<data>/zero/downloads.json`, 100 max), top-bar
+  `DownloadsButton` (hidden until a job/history exists; ring + count) + `DownloadsPanel`, palette "Downloads", `ui/zero/shell/DownloadFlow`
+  (`startFlow`: start/failed/warnings toasts). Background now: installMod, resource packs/shaders, worlds, Discover cart, Boost (memory/Java
+  args written at Apply, mods in background), Mods page updates (snapshot kept for Undo), Shader Packs page updates. Still modal (by design):
+  modpack install/update/rollback, `runModalTask`, upstream remote-link downloads. Guards while an instance is busy: launch, delete, folder
+  rename (name only), modpack update/rollback; quit asks "Downloads are still running"; the process outlives the last window until jobs end.
+  **Updates for everything**: `zero/updates/UpdateSweep` (`APPLICATION->zeroUpdates()`, sequential checks, skips running/busy/managed
+  modpack instances, 24 h auto check 30 s after start while no game runs, `ZeroAutoCheckUpdates`, `<data>/zero/updates.json`), real hooks
+  `ui/zero/updates/UpdateSweepSetup` (fresh check at Update, snapshot → background job → finalize), Home `HomeUpdatesSection`, palette
+  "Check for updates" / "Update all", Settings › Launcher "Updates". **Mods only**: resource/shader packs have no headless checker
+  (Prism's ResourceUpdateDialog is modal). Orchestrator fixes: drop dialog "To For …" label; updates' task list is moved (not copied) to the
+  GUI thread so Prism tasks are never destroyed on a pool thread. Not driven by hand: real drops, real installs/updates in the background,
+  Minecraft theme look (owner QA below). Tests: DropPlan, ZeroDropAddDialog, DownloadCenter, ZeroDownloadsPanel, UpdateSweep,
+  ZeroHomeUpdatesSection (PNG env vars `ZERO_DROP_SHOTS`, `ZERO_DOWNLOADS_SHOTS`, `ZERO_UPDATES_SHOTS`).
+- 🔴 **RESUME HERE: B4** (playtime stats, scheduled backups + cloud folder, "Try it in a copy", change timeline with undo, per-instance
+  video background), then B5. Discord Application ID still to come from the owner (feature hidden until then).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
@@ -790,6 +808,10 @@ Status per batch is logged below as it lands.
 
 ## Manual QA checklist (owner, real input needed)
 Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On** (Windows animation effects are off here).
+- [ ] **B3**: drag 2 mods + 1 resource pack from Explorer onto the window → "Drop to add" overlay → "Add 3 files" → Add → toast "Open".
+      Discover: add a mod → toast "Downloading…", top-bar download button with ring → panel shows progress/speed, Cancel works; while
+      it downloads, Play of that instance says "Downloads in progress"; close the launcher → "Downloads are still running". Home › Updates
+      (needs an instance with outdated Modrinth mods): Check again → Update → Mods page offers Undo.
 - [ ] **Before you play** (B2): put a harmless copy of a mod in an instance's `mods` twice (`a.jar`, `b.jar`) → Play shows "Before you play"
       with "Two copies of the same mod" → disable one → Play. Play again: no dialog, no delay. Tick "Don't check this instance again" → Play →
       Settings › Launcher shows "1 instance skips…" → "Check them again". Minecraft theme look. Boost performance: "Use recommended Java

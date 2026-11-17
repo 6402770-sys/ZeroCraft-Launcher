@@ -2,8 +2,8 @@
 // ZERO Launcher - tests of the "Boost performance" dialog (docs/zero/SHELL.md): vanilla, every row state (installed, OptiFine conflict,
 // unavailable), loading -> error -> retry with stale answers dropped, the dependency check (one run for the ticked set, debounced, stale
 // answers dropped, failure with Retry), the memory section (the rule, "fine", the toggle), the Java line and its Fix, the summary, and Apply:
-// the install seam gets the ticked projects plus the dependencies, the memory is written, a running instance is refused, a failed download
-// writes nothing. Offscreen-style with fakes for the catalog, the resolver and every seam: no network, no instances, no APPLICATION.
+// the install seam gets the ticked projects plus the dependencies and is not awaited, the memory is written at once, a running instance is refused.
+// Offscreen-style with fakes for the catalog, the resolver and every seam: no network, no instances, no APPLICATION.
 #include <QApplication>
 #include <QCheckBox>
 #include <QPushButton>
@@ -167,7 +167,6 @@ struct Rig {
     FakeCatalog* catalog = nullptr;
     FakeResolver* resolver = nullptr;
     QList<Content::CartInstallPlan> installs;
-    InstallResult installResult{ false, 1 };
     QList<QPair<int, int>> memoryWrites;
     int javaMajor = 0;  // 0 = unknown: no Java arguments section
     int cores = 8;
@@ -202,8 +201,7 @@ struct Rig {
         env.checkJava = [this](QObject*, std::function<void(const std::optional<QString>&)> done) { done(javaProblem); };
         env.isRunning = [this]() { return running; };
         env.install = [this](const Content::CartInstallPlan& plan) {
-            installs.append(plan);
-            return installResult;
+            installs.append(plan);  // returns at once, like the Downloads center: nothing is awaited
         };
         env.writeMemory = [this](int maxMb, int minMb) { memoryWrites.append({ maxMb, minMb }); };
         env.javaMajor = [this]() { return javaMajor; };
@@ -277,7 +275,7 @@ class ZeroPerformanceDialogTest : public QObject {
         QCOMPARE(rig.memoryWrites.first(), qMakePair(3 * kGb, 1 * kGb));
         QVERIFY(dialog->outcome().applied);
         QVERIFY(dialog->outcome().memoryWritten);
-        QCOMPARE(dialog->outcome().modsAdded, 0);
+        QCOMPARE(dialog->outcome().modsQueued, 0);
     }
 
     void vanillaWithEnoughMemoryHasNothingToApply()
@@ -699,8 +697,6 @@ class ZeroPerformanceDialogTest : public QObject {
         QCOMPARE(rig.resolver->requests.last().second.all().size(), 5);
         rig.resolver->answer({ depOf(S("FAPI"), S("Fabric API"), S("Sodium")) });
         QCOMPARE(dialog->summaryText(), S("Adds 5 mods (+1 they need)") + kDot + S("Memory 2 ") + kArrow + S(" 5 GB"));
-        rig.installResult = { false, 6 };
-
         dialog->applyButton()->click();
 
         QCOMPARE(dialog->result(), int(QDialog::Accepted));
@@ -722,7 +718,7 @@ class ZeroPerformanceDialogTest : public QObject {
         QCOMPARE(rig.memoryWrites.size(), 1);
         QCOMPARE(rig.memoryWrites.first(), qMakePair(5 * kGb, 1 * kGb));
         QVERIFY(dialog->outcome().applied);
-        QCOMPARE(dialog->outcome().modsAdded, 6);
+        QCOMPARE(dialog->outcome().modsQueued, 6);
         QVERIFY(dialog->outcome().memoryWritten);
         QVERIFY(!dialog->outcome().refusedRunning);
     }
@@ -742,36 +738,36 @@ class ZeroPerformanceDialogTest : public QObject {
         QVERIFY(rig.memoryWrites.isEmpty());
     }
 
-    void aFailedDownloadWritesNoMemoryAndKeepsTheDialogOpen()
+    void applyWritesTheMemoryWithoutWaitingForTheDownloads()
     {
+        // The seam only queues the job (nothing is awaited): the memory is written and the dialog closes whatever the downloads do later.
         Rig rig;
         auto dialog = rig.openReady();
         QTRY_COMPARE(rig.resolver->requests.size(), 1);
         rig.resolver->answer({});
-        rig.installResult = { true, 0 };
         dialog->applyButton()->click();
         QCOMPARE(rig.installs.size(), 1);
-        QVERIFY(rig.memoryWrites.isEmpty());
-        QVERIFY(!dialog->outcome().applied);
-        QVERIFY(dialog->result() != int(QDialog::Accepted));
-        // a second try works
-        rig.installResult = { false, 6 };
-        dialog->applyButton()->click();
-        QCOMPARE(rig.installs.size(), 2);
         QCOMPARE(rig.memoryWrites.size(), 1);
         QCOMPARE(dialog->result(), int(QDialog::Accepted));
+        QVERIFY(dialog->outcome().applied);
+        QVERIFY(dialog->outcome().modsQueued > 0);
     }
 
-    void aPartialDownloadStillWritesTheMemory()
+    void applyWithoutModsStillWritesTheMemory()
     {
         Rig rig;
         auto dialog = rig.openReady();
         QTRY_COMPARE(rig.resolver->requests.size(), 1);
         rig.resolver->answer({});
-        rig.installResult = { false, 4 };  // some arrived: Prism's error box told about the rest
+        for (const QString& slug : dialog->rowSlugs()) {
+            if (auto* check = dialog->rowCheck(slug); check && check->isEnabled() && check->isChecked())
+                check->click();
+        }
+        QTRY_VERIFY(dialog->applyButton()->isEnabled());  // the memory is still worth applying
         dialog->applyButton()->click();
+        QVERIFY(rig.installs.isEmpty());
         QCOMPARE(rig.memoryWrites.size(), 1);
-        QCOMPARE(dialog->outcome().modsAdded, 4);
+        QCOMPARE(dialog->outcome().modsQueued, 0);
         QVERIFY(dialog->outcome().applied);
     }
 
@@ -954,17 +950,18 @@ class ZeroPerformanceDialogTest : public QObject {
         QVERIFY(!dialog->outcome().javaArgsWritten);
     }
 
-    void aFailedDownloadWritesNoJavaArguments()
+    void javaArgumentsAreWrittenAtApplyWithoutWaitingForTheDownloads()
     {
         Rig rig;
         rig.javaMajor = 21;
         auto dialog = rig.openReady();
         QTRY_COMPARE(rig.resolver->requests.size(), 1);
         rig.resolver->answer({});
-        rig.installResult = { true, 0 };
         dialog->applyButton()->click();
-        QVERIFY(rig.jvmWrites.isEmpty());
-        QVERIFY(dialog->result() != int(QDialog::Accepted));
+        QCOMPARE(rig.installs.size(), 1);
+        QCOMPARE(rig.jvmWrites.size(), 1);
+        QVERIFY(dialog->outcome().javaArgsWritten);
+        QCOMPARE(dialog->result(), int(QDialog::Accepted));
     }
 
     void closingTheDialogCancelsTheRuns()

@@ -39,6 +39,7 @@
 #include "zero/session/ProcessMemory.h"
 #include "zero/session/SessionSummary.h"
 #include "HomeServersSection.h"
+#include "HomeUpdatesSection.h"
 #include "LastSessionCard.h"
 #include "NowPlayingCard.h"
 #include "minecraft/launch/MinecraftTarget.h"
@@ -396,6 +397,11 @@ HomePage::HomePage(QWidget* parent) : ShellPage(parent), m_refreshTimer(new QTim
     heroRow->addLayout(heroText, 1);
     col->addWidget(m_hero);
 
+    // ----- updates (mod updates of all instances; hides itself when there are none) -----
+    m_updates = new HomeUpdatesSection(nullptr, {}, column);
+    connect(m_updates, &HomeUpdatesSection::openInstanceRequested, this, &HomePage::modsRequested);
+    col->addWidget(m_updates);
+
     // ----- favorites -----
     m_favSection = new QWidget(column);
     auto* favCol = new QVBoxLayout(m_favSection);
@@ -552,6 +558,7 @@ void HomePage::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
     refresh();  // relative times ("2 hours ago") age while the page is hidden
+    m_updates->refresh();
     m_servers->activate();  // pings when the page is shown, never on a timer
 }
 

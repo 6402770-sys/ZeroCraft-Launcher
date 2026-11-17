@@ -40,6 +40,7 @@
 #include "FileSystem.h"
 
 #include "InstanceList.h"
+#include "zero/downloads/DownloadCenter.h"  // ZERO
 #include "ui/dialogs/CustomMessageBox.h"
 
 QString askToUpdateInstanceDirName(BaseInstance* instance, const QString& oldName, const QString& newName, QWidget* parent)
@@ -63,6 +64,14 @@ QString askToUpdateInstanceDirName(BaseInstance* instance, const QString& oldNam
     if (QDir(newRoot).exists()) {
         QMessageBox::warning(parent, QObject::tr("Cannot rename instance"),
                              QObject::tr("New instance root (%1) already exists. <br />Only the metadata will be renamed.").arg(newRoot));
+        return QString();
+    }
+
+    // ZERO: a background download writes into the folder: it cannot move meanwhile (the name changes, the folder keeps its name)
+    if (auto* downloads = APPLICATION->zeroDownloads(); downloads && downloads->isBusy(instance->id())) {
+        QMessageBox::warning(parent, QObject::tr("Cannot rename instance folder"),
+                             QObject::tr("Files for this instance are still downloading, so its folder cannot be renamed.\n\n"
+                                         "Only the instance name will be changed. The folder will keep its current name."));
         return QString();
     }
 

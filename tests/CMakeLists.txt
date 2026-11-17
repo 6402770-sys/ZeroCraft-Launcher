@@ -93,6 +93,12 @@ set(TEST_SOURCES
     ZeroElyAuth_test.cpp
     ZeroPerformanceDialog_test.cpp
     ZeroPreLaunchDialog_test.cpp
+    DropPlan_test.cpp
+    ZeroDropAddDialog_test.cpp
+    DownloadCenter_test.cpp
+    ZeroDownloadsPanel_test.cpp
+    UpdateSweep_test.cpp
+    ZeroHomeUpdatesSection_test.cpp
     ZeroAddAccount_test.cpp
     ZeroIntro_test.cpp
     ZeroTour_test.cpp

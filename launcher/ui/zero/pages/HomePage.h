@@ -26,6 +26,7 @@ class ZeroCard;
 class NowPlayingCard;
 class LastSessionCard;
 class HomeServersSection;
+class HomeUpdatesSection;
 
 class HomePage : public ShellPage {
     Q_OBJECT
@@ -53,6 +54,8 @@ class HomePage : public ShellPage {
     /// A thumbnail of the Last session card: open this screenshot in the viewer.
     void screenshotRequested(const QString& path);
     void serversRequested();
+    /// A row of the Updates section was clicked: open the instance window on its mods page.
+    void modsRequested(const QString& instanceId);
 
    public:
     // for tests
@@ -60,6 +63,7 @@ class HomePage : public ShellPage {
     int nowPlayingCount() const { return int(m_nowCards.size()); }
     LastSessionCard* lastSessionCard() const { return m_lastCard; }
     HomeServersSection* serversSection() const { return m_servers; }
+    HomeUpdatesSection* updatesSection() const { return m_updates; }
     /// Re-reads the running sessions and the last session now (normally done by their signals).
     void syncSessionCards();
 
@@ -88,6 +92,9 @@ class HomePage : public ShellPage {
     QPushButton* m_heroEdit;
     QPushButton* m_heroFolder;
     QString m_heroId;
+
+    // mod updates of all instances (below the hero; hides itself when there are none)
+    HomeUpdatesSection* m_updates;
 
     // favorites (above recent, hidden when there are none)
     QWidget* m_favSection;

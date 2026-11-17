@@ -9,8 +9,9 @@
 // footer: the summary ("Adds 4 mods (+1 they need) . Memory 2 -> 6 GB"), Cancel, Apply.
 //
 // The dependencies of the ticked mods are resolved in ONE `DependencyResolver` run, 300 ms after the last tick (generation token: a stale answer is
-// dropped) so the summary's "+N they need" is real; Apply stays disabled until it finished. Apply runs the install seam for the ticked mods and
-// their dependencies, then writes the memory settings - unless the download step failed as a whole. Nothing changes without Apply.
+// dropped) so the summary's "+N they need" is real; Apply stays disabled until it finished. Apply hands the ticked mods and their
+// dependencies to the install seam (a background job of the Downloads center: not awaited) and writes the memory and Java-argument settings at
+// once, whatever the downloads do. Nothing changes without Apply.
 //
 // Everything the dialog needs from the application comes through `PerformanceEnvironment`, so tests build it without APPLICATION or network.
 #pragma once
@@ -53,13 +54,6 @@ class PackIconWidget;
 
 namespace Zero::Perf {
 
-/// What the install seam reports: `failedAsWhole` = the download step failed (nothing arrived, or it was aborted); `installed` = the downloads
-/// that arrived.
-struct InstallResult {
-    bool failedAsWhole = false;
-    int installed = 0;
-};
-
 struct PerformanceEnvironment {
     Zero::Content::TargetInstance target;  ///< name, Minecraft version, loaders (mod-ready or not)
     bool managedPack = false;              ///< the instance belongs to a modpack (Modrinth / CurseForge / Technic)
@@ -88,8 +82,9 @@ struct PerformanceEnvironment {
     std::function<JvmArgsPrevious(const QString& args)> writeJvmArgs;
     /// Whether the instance runs right now; null = TargetInstance::running.
     std::function<bool()> isRunning;
-    /// Downloads and installs `plan` (modal, like the cart's install); null = nothing can be installed.
-    std::function<InstallResult(const Zero::Content::CartInstallPlan& plan)> install;
+    /// Hands `plan` to the background Downloads center and returns at once (the downloads are not awaited: Apply writes memory and Java
+    /// arguments straight away, a failed download is reported by the seam's owner). Null = nothing can be installed.
+    std::function<void(const Zero::Content::CartInstallPlan& plan)> install;
     /// Writes OverrideMemory = true, MaxMemAlloc and MinMemAlloc to the instance.
     std::function<void(int maxMb, int minMb)> writeMemory;
     /// The wait after a change of the ticks before the dependencies are asked again.
@@ -98,7 +93,7 @@ struct PerformanceEnvironment {
     /// The real thing for the instance `instanceId`: Modrinth catalog, GetModDependenciesTask, the mods folder model, HardwareInfo, Java Doctor's
     /// diagnosis, runInstallPlan() through `install`. `install` is the main window's.
     static PerformanceEnvironment fromApplication(const QString& instanceId,
-                                                  std::function<InstallResult(const Zero::Content::CartInstallPlan&)> install);
+                                                  std::function<void(const Zero::Content::CartInstallPlan&)> install);
 };
 
 class PerformanceDialog : public QDialog {
@@ -111,8 +106,8 @@ class PerformanceDialog : public QDialog {
 
     /// What Apply did (read after exec()).
     struct Outcome {
-        bool applied = false;        ///< something was changed (mods added or memory written)
-        int modsAdded = 0;           ///< downloads that arrived (mods and dependencies)
+        bool applied = false;        ///< something was changed (mods handed to the Downloads center or memory / Java arguments written)
+        int modsQueued = 0;          ///< downloads handed to the install seam (mods and dependencies); they arrive later, in the background
         bool memoryWritten = false;
         bool refusedRunning = false; ///< Apply was pressed while the instance runs: nothing was changed
         bool javaArgsWritten = false;      ///< the recommended Java arguments were written (an override of this instance)

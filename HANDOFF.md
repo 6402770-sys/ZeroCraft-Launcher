@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-16 (session 16 ended: Mission 004 B2 + B3 committed, B4 task 1 (Playtime) committed `d83115e72` — resume at "Mission 004" › 🔴 RESUME HERE (B4). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-17 (session 17: Mission 004 **B4 done and committed** (scheduled backups + cloud folder, test copies, change timeline, per-instance Home video) — resume at "Mission 004" › 🔴 RESUME HERE (B5). Session 16: B2 + B3 + B4 task 1 (Playtime). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -746,28 +746,27 @@ Status per batch is logged below as it lands.
   GUI thread so Prism tasks are never destroyed on a pool thread. Not driven by hand: real drops, real installs/updates in the background,
   Minecraft theme look (owner QA below). Tests: DropPlan, ZeroDropAddDialog, DownloadCenter, ZeroDownloadsPanel, UpdateSweep,
   ZeroHomeUpdatesSection (PNG env vars `ZERO_DROP_SHOTS`, `ZERO_DOWNLOADS_SHOTS`, `ZERO_UPDATES_SHOTS`).
-- 🔴 **RESUME HERE: B4, start at task 2**. Commits so far: `94378325e` (B2), `8894f9a2d` (B3), `d83115e72` (B4 task 1 Playtime, checkpoint). Session 16 ended here by the owner: tree clean, no worker running. B4 plan, one worker at a time, decided designs:
+- ✅ **B4 done** (session 17; 109/109 + FileSystem 25/25; one local commit for tasks 2-5). Commits: `94378325e` (B2), `8894f9a2d` (B3), `d83115e72` (B4 task 1 Playtime), then the B4 commit. Orchestrator fix in review: the test-copy banner buttons (card = full-width md buttons, instance window = one row with 28 px sm buttons). `ZeroModsPage` was seen failing once under `-j4` load and passing on rerun (flaky, cause unknown). B4 items as planned and done:
   1. ✅ **Playtime stats** (done + reviewed, checkpoint commit; 100/100 + 25/25): pure `zero/history/PlaytimeStats` + Tools › Playtime
      `ui/zero/pages/PlaytimeView` (tiles, 14-day chart, by instance), palette "Playtime", tests `PlaytimeStats_test`,
      `ZeroPlaytimeView_test` (`ZERO_PLAYTIME_SHOTS`). Notes: other-day bars = accent at 55% (no subtle-accent token); "Last played" uses
      `lastLaunch()` (Prism's `lastTimePlayed()` is a duration); "Show all" has no collapse. NEXT = task 2.
-  2. **Scheduled backups + cloud folder** (savvy-careful): setting for a backup root (empty = `<data>/zero/backups`; quick choices
+  2. ✅ **Scheduled backups + cloud folder** (session 17, done + reviewed, 103/103 + 25/25; uncommitted until the B4 commit): pure `zero/backup/BackupDestination` (cloud detection OneDrive/Google Drive/Dropbox, probe, fallback, `KnownRoots` `<data>/zero/backup-roots.json`), `zero/backup/ScheduledBackup` (`<data>/zero/backup-schedule.json`, 2 min catch-up then hourly), WorldBackupJobs `Destination` (lists/restores/deletes across every known root), Settings › Launcher "World backups" group, settings `ZeroBackupRoot` / `ZeroBackupSchedule`. Not run by hand: the Settings group, a real cloud folder, a real scheduled run. Original plan: setting for a backup root (empty = `<data>/zero/backups`; quick choices
      OneDrive / Google Drive / Dropbox when detected + "Choose folder…", writes under `<chosen>/ZERO Backups/<instanceId>/<world>`, checked
      writable, failure = warn + fall back to default, never silent); listing must show backups from the old AND new roots; schedule
      Off / Every day / Every week for worlds changed since their last backup, only while no game runs, catch-up ~2 min after start;
      UI in Settings › Launcher "World backups" group (After playing checkbox synced with `WorldBackupsSection`, schedule, destination).
      Facts: `zero/backup/WorldBackup.h` (`backupsRoot`, `backupDirFor`, `listBackups`, `applyRetention`), `AutoBackup` built in
      Application.cpp ~1157 with `ZeroAutoBackupWorlds`.
-  3. **Try it in a copy** (careful): Prism copy of the instance marked `ZeroSandboxOf=<id>`; banner in its Library details / instance
+  3. ✅ **Try it in a copy** (session 17, done, 107/107 + 25/25; uncommitted until the B4 commit; the MainWindow orchestration is not covered by tests nor run in the real app yet, so click-QA it): see ARCHITECTURE.md "Test copies" (`zero/sandbox/*`, `ui/zero/sandbox/*`, `ZeroSandboxOf` key, `PackSnapshot` meta `kind`/`label`, Undo = `rollBackModpackUpdate`). Original brief:
+     Prism copy of the instance marked `ZeroSandboxOf=<id>`; banner in its Library details / instance
      window "Test copy of X — Bring changes back / Discard"; bring back mods/config/resourcepacks/shaderpacks (worlds optional) after a
      full copy of the original first (reuse `saveCopyBeforeModpackUpdate` / `rollBackModpackUpdate` = Undo).
-  4. **Change timeline with undo** (careful): per-instance "Timeline" page aggregating existing histories (mod snapshots
+  4. ✅ **Change timeline with undo** (session 17, done; uncommitted until the B4 commit; the real-app flows are not click-tested yet, so QA them): per-instance "Timeline" page (`ui/zero/instance/TimelinePage`, after Version) over the model `zero/history/ChangeTimeline` (pure; see ARCHITECTURE.md "Change timeline"). It lists mod updates, modpack updates / "bring changes back", resource pack order changes, installs and play sessions in day groups, newest first (100, then "Show more"). Undo only on the newest active entry of each mechanism and it calls the EXISTING flows: `ModsPage::requestRollback`, `ResourcePacksPage::undo`, `MainWindow::rollBackModpackUpdate` (signal hub `TimelineUi::Requests`). Boost / Java-argument changes have no stored history, so they are not listed. Original brief: per-instance "Timeline" page aggregating existing histories (mod snapshots
      `zero/mods/ModSnapshot`, pack order history, pack snapshots, Boost/Java args, Downloads history entries) with Undo where a mechanism
      already exists.
-  5. **Per-instance video background** (medium): instance profile "Background video" (copied to `<instanceRoot>/.zero/`), played through
-     the existing `ui/zero/shell/ZeroVideoBackground` pipeline while that instance is the Home hero / selected in Library; theme background
-     otherwise; respects reduce motion and the existing shouldPlay rules.
-  Then a local B4 commit (owner: one per batch, never push), then B5 (Discord RPC hidden until the owner sends the Application ID; full
+  5. ✅ **Per-instance video background** (session 17, done; uncommitted until the B4 commit; click-QA it, the real playback was not watched by hand): Library details panel "Set background video..." / "Remove video" (+ caption), file copied to `<instanceRoot>/.zero/background.<ext>` off the GUI thread (toast "Copying video..."), plays muted behind **Home only** while that instance is the Home hero (last played); every other page keeps the theme background; reduced motion = theme background (no decode); game running / minimized = paused still. Pure rule `ZeroShell::chooseVideo`, second player in ZeroShell, theme video paused meanwhile. Scrim = max(theme dim, new token `Tokens::pageVideoMinDim` 0.55). New `film.svg` icon. See ARCHITECTURE.md "Background video".
+- 🔴 **RESUME HERE: B5** (tree clean after the B4 commit). Then B5 (Discord RPC hidden until the owner sends the Application ID; full
   Spanish translation + language picker). Discord Application ID still to come from the owner (feature hidden until then).
 
 ## Build & test
@@ -828,6 +827,7 @@ Status per batch is logged below as it lands.
 | **Page frame** (`PageContainer`) | ✅ ZERO side list (icon, name, two-line summary), title + explanation, option help strip (tooltip → group text), Cascade between sections; instance window header card + Play/Stop | live hover check in instance Settings |
 
 ## Manual QA checklist (owner, real input needed)
+- **B4 (session 17)**: Settings › Launcher › World backups (schedule, "Save backups to" with OneDrive/Google Drive/Dropbox, a folder you then disconnect → warning + backup in the ZERO folder; old backups still listed in Worlds); Library › "Try it in a copy" → change mods in the copy → "Bring changes back" (with and without Worlds) → Undo toast; "Discard copy"; instance window › Timeline (Undo of a mod update, a pack order change, a modpack update); Library › "Set background video…" → Home plays it muted behind the hero (legibility of the 0.55 scrim), stops when leaving Home / while playing / with reduced motion.
 Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On** (Windows animation effects are off here).
 - [ ] **B3**: drag 2 mods + 1 resource pack from Explorer onto the window → "Drop to add" overlay → "Add 3 files" → Add → toast "Open".
       Discover: add a mod → toast "Downloading…", top-bar download button with ring → panel shows progress/speed, Cancel works; while

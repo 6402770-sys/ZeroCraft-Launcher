@@ -43,6 +43,7 @@
 #include <QFileDialog>
 #include <QMenuBar>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -57,6 +58,7 @@
 #include "BuildConfig.h"
 #include "DesktopServices.h"
 #include "Json.h"
+#include "settings/Setting.h"
 #include "settings/SettingsObject.h"
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
@@ -64,6 +66,9 @@
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
 #include "ui/zero/ZeroStyle.h"
+#include "zero/backup/BackupDestination.h"
+#include "zero/backup/ScheduledBackup.h"
+#include "zero/backup/WorldBackupJobs.h"
 #include "zero/session/WhilePlaying.h"
 
 #include <QApplication>
@@ -144,6 +149,71 @@ LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::Launch
                                           "downloaded until you press Update on Home."));
         lay->addWidget(m_autoCheckUpdates);
         ui->verticalLayout_8->insertWidget(3, box);
+    }
+
+    // ZERO: "World backups" (zero/backup): automatic backups after playing, the schedule and where the backups are saved
+    {
+        auto* box = new QGroupBox(tr("World backups"), ui->scrollAreaWidgetContents);
+        auto* lay = new QVBoxLayout(box);
+        auto caption = [box](const QString& text, const char* tone = "secondary") {
+            auto* label = new QLabel(text, box);
+            label->setWordWrap(true);
+            Zero::Style::applyRole(label, Zero::Role::Caption);
+            Zero::Style::setProperty(label, "zeroTone", tone);
+            return label;
+        };
+
+        m_backupAfterPlay = new QCheckBox(tr("Back up worlds after playing"), box);
+        m_backupAfterPlay->setToolTip(tr("Applies to all instances. Backs up the worlds you played when the game closes and keeps the 5 newest "
+                                         "automatic backups per world. Worlds over 2 GB are skipped."));
+        lay->addWidget(m_backupAfterPlay);
+
+        auto* scheduleRow = new QHBoxLayout();
+        scheduleRow->addWidget(new QLabel(tr("Scheduled backups"), box));
+        m_backupSchedule = new QComboBox(box);
+        m_backupSchedule->addItem(tr("Off"), QStringLiteral("off"));
+        m_backupSchedule->addItem(tr("Every day"), QStringLiteral("daily"));
+        m_backupSchedule->addItem(tr("Every week"), QStringLiteral("weekly"));
+        scheduleRow->addWidget(m_backupSchedule);
+        scheduleRow->addStretch(1);
+        lay->addLayout(scheduleRow);
+        lay->addWidget(caption(tr("Backs up worlds that changed since their last backup, only while no game is running.")));
+
+        auto* destRow = new QHBoxLayout();
+        destRow->addWidget(new QLabel(tr("Save backups to"), box));
+        m_backupDestination = new QComboBox(box);
+        m_backupDestination->addItem(tr("ZERO data folder (default)"), QString());
+        for (const auto& cloud : Zero::Backup::detectCloudFolders(Zero::Backup::systemEnvironment()))
+            m_backupDestination->addItem(cloud.label, cloud.path);
+        destRow->addWidget(m_backupDestination, 1);
+        auto* choose = new QPushButton(tr("Choose folder..."), box);
+        Zero::Style::setProperty(choose, "zeroVariant", "secondary");
+        Zero::Style::setProperty(choose, "zeroSize", "sm");
+        choose->setAutoDefault(false);
+        destRow->addWidget(choose);
+        lay->addLayout(destRow);
+        m_backupPath = caption(QString());
+        m_backupPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        lay->addWidget(m_backupPath);
+        m_backupWarning = caption(QString(), "warning");
+        lay->addWidget(m_backupWarning);
+
+        connect(m_backupDestination, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() { refreshBackupDestination(); });
+        connect(choose, &QPushButton::clicked, this, [this]() {
+            QString start = m_backupDestination->currentData().toString();
+            if (start.isEmpty())
+                start = QDir::homePath();
+            const QString dir = QFileDialog::getExistingDirectory(this, tr("Choose where to save backups"), start);
+            if (!dir.isEmpty())
+                selectBackupFolder(dir);
+        });
+        // the same checkbox lives on the Worlds page: follow it
+        connect(APPLICATION->settings()->getSetting("ZeroAutoBackupWorlds").get(), &Setting::SettingChanged, m_backupAfterPlay, [this]() {
+            const bool on = APPLICATION->settings()->get("ZeroAutoBackupWorlds").toBool();
+            if (m_backupAfterPlay->isChecked() != on)
+                m_backupAfterPlay->setChecked(on);
+        });
+        ui->verticalLayout_8->insertWidget(4, box);
     }
 
     loadSettings();
@@ -300,6 +370,47 @@ void LauncherPage::on_metadataEnableBtn_clicked()
     ui->metadataWarningLabel->setHidden(ui->metadataEnableBtn->isChecked());
 }
 
+// ZERO: selects `folder` in the "Save backups to" list (a detected cloud folder or the default when it is one, else a custom item)
+void LauncherPage::selectBackupFolder(const QString& folder)
+{
+    const QString cleaned = folder.trimmed().isEmpty() ? QString() : QDir::cleanPath(folder.trimmed());
+    int index = -1;
+    for (int i = 0; i < m_backupDestination->count(); ++i) {
+        if (m_backupDestination->itemData(i).toString().compare(cleaned, Qt::CaseInsensitive) == 0) {
+            index = i;
+            break;
+        }
+    }
+    if (index < 0) {
+        if (m_backupCustomIndex < 0) {
+            m_backupDestination->addItem(QString(), cleaned);
+            m_backupCustomIndex = m_backupDestination->count() - 1;
+        }
+        index = m_backupCustomIndex;
+        m_backupDestination->setItemText(index, QDir::toNativeSeparators(cleaned));
+        m_backupDestination->setItemData(index, cleaned);
+    }
+    if (m_backupDestination->currentIndex() == index)
+        refreshBackupDestination();
+    else
+        m_backupDestination->setCurrentIndex(index);
+}
+
+// ZERO: shows where the selected choice saves to, and a warning when that folder cannot be written
+void LauncherPage::refreshBackupDestination()
+{
+    const QString folder = m_backupDestination->currentData().toString();
+    if (folder.isEmpty()) {
+        m_backupPath->setText(tr("Saved in %1").arg(QDir::toNativeSeparators(Zero::Backup::backupsRoot(APPLICATION->dataRoot()))));
+        m_backupWarning->hide();
+        return;
+    }
+    m_backupPath->setText(tr("Saved in %1").arg(QDir::toNativeSeparators(Zero::Backup::rootInFolder(folder))));
+    const Zero::Backup::Probe probe = Zero::Backup::probeFolder(folder);
+    m_backupWarning->setText(tr("%1 Backups go to the ZERO data folder until this works.").arg(probe.error));
+    m_backupWarning->setVisible(!probe.ok);
+}
+
 void LauncherPage::applySettings()
 {
     auto* s = APPLICATION->settings();
@@ -318,6 +429,18 @@ void LauncherPage::applySettings()
 
     s->set("ZeroPreLaunchCheck", m_checkMods->isChecked());
     s->set("ZeroAutoCheckUpdates", m_autoCheckUpdates->isChecked());
+
+    s->set("ZeroAutoBackupWorlds", m_backupAfterPlay->isChecked());
+    s->set("ZeroBackupSchedule", m_backupSchedule->currentData().toString());
+    {
+        const QString folder = m_backupDestination->currentData().toString();
+        s->set("ZeroBackupRoot", folder);
+        // a new destination: its old and new backups are listed from now on
+        if (!folder.isEmpty()) {
+            if (auto* jobs = Zero::Backup::WorldBackupJobs::global())
+                jobs->rememberRoot(Zero::Backup::rootInFolder(folder));
+        }
+    }
 
     s->set("NumberOfConcurrentTasks", ui->numberOfConcurrentTasksSpinBox->value());
     s->set("NumberOfConcurrentDownloads", ui->numberOfConcurrentDownloadsSpinBox->value());
@@ -428,6 +551,10 @@ void LauncherPage::loadSettings()
 
     m_checkMods->setChecked(s->get("ZeroPreLaunchCheck").toBool());
     m_autoCheckUpdates->setChecked(s->get("ZeroAutoCheckUpdates").toBool());
+    m_backupAfterPlay->setChecked(s->get("ZeroAutoBackupWorlds").toBool());
+    m_backupSchedule->setCurrentIndex(qMax(0, m_backupSchedule->findData(Zero::Backup::scheduleToString(
+                                                      Zero::Backup::scheduleFromString(s->get("ZeroBackupSchedule").toString())))));
+    selectBackupFolder(s->get("ZeroBackupRoot").toString());
     refreshSkippedInstances();
 
     ui->numberOfConcurrentTasksSpinBox->setValue(s->get("NumberOfConcurrentTasks").toInt());

@@ -46,6 +46,11 @@
 #include "ui_MainWindow.h"
 
 #include <QColorDialog>
+#include <QFutureWatcher>
+#include <QSet>
+#include <QStandardPaths>
+#include <QtConcurrent/QtConcurrentRun>
+#include "zero/theme/ThemeFiles.h"
 #include <QComboBox>
 #include <QScreen>
 #include <QDir>
@@ -126,9 +131,18 @@
 #include "zero/downloads/DownloadCenter.h"  // ZERO
 #include "zero/updates/UpdateSweep.h"       // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
+#include "zero/backup/BackupDestination.h"  // ZERO
+#include "zero/backup/ScheduledBackup.h"  // ZERO
+#include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/backup/PackSnapshotTasks.h"  // ZERO
 #include "ui/zero/instance/ModsDialogs.h"  // ZERO
 #include "zero/backup/WorldBackup.h"  // ZERO
+#include "ui/zero/sandbox/SandboxBanner.h"  // ZERO
+#include "ui/zero/instance/TimelinePage.h"  // ZERO
+#include "ui/zero/sandbox/SandboxDialogs.h"  // ZERO
+#include "zero/sandbox/Sandbox.h"  // ZERO
+#include "zero/worlds/WorldScanner.h"  // ZERO
+#include "zero/sandbox/SandboxTasks.h"  // ZERO
 #include "ui/zero/ZeroNavRail.h"
 #include "ui/zero/ZeroTheme.h"
 #include "ui/zero/pages/ZeroSettingsPage.h"
@@ -606,6 +620,10 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
     showInstanceContextMenuAt(view->mapToGlobal(pos), onInstance, onInstance ? QString() : view->groupNameAt(pos));
 }
 
+namespace {
+QString packBusyReason(const QString& instanceId);  // ZERO: defined with the modpack update helpers below
+}
+
 void MainWindow::showInstanceContextMenuAt(const QPoint& globalPos, bool onInstance, const QString& group)
 {
     auto* menu = new QMenu(this);
@@ -623,6 +641,18 @@ void MainWindow::showInstanceContextMenuAt(const QPoint& globalPos, bool onInsta
         actions.removeFirst();
         actions.removeLast();
         actions.removeLast();
+
+        // ZERO: "Try it in a copy" right after Copy (not on a test copy; off while the instance is busy)
+        if (!Zero::Sandbox::isTestCopy(m_selectedInstance)) {
+            const QString id = m_selectedInstance->id();
+            auto* actionTryCopy = new QAction(tr("Try it in a copy"), menu);
+            const QString busy = packBusyReason(id);
+            actionTryCopy->setEnabled(busy.isEmpty());
+            actionTryCopy->setToolTip(busy);
+            connect(actionTryCopy, &QAction::triggered, this, [this, id]() { tryInCopy(id); });
+            const int at = actions.indexOf(ui->actionCopyInstance);
+            actions.insert(at >= 0 ? at + 1 : actions.size(), actionTryCopy);
+        }
 
         actions.prepend(ui->actionChangeInstIcon);
         actions.prepend(ui->actionRenameInstance);
@@ -1231,6 +1261,17 @@ QString packBusyToastText(const QString& instanceId, const QString& closeText)
 Zero::ModsUi::ChoicePrompt rollbackPrompt(const QString& name, const Zero::Backup::Pack::Info& snapshot)
 {
     Zero::ModsUi::ChoicePrompt ask;
+    if (snapshot.meta.kind == QLatin1String(Zero::Backup::Pack::kKindBringBack)) {  // ZERO: the copy taken before "Bring changes back"
+        ask.title = QCoreApplication::translate("MainWindow", "Undo bringing changes back to %1?").arg(name);
+        ask.body = QCoreApplication::translate("MainWindow",
+                                               "Mods, config and settings go back to how they were. Your worlds, screenshots and play time stay. "
+                                               "The files that were brought back go to the Recycle Bin.");
+        ask.note = QCoreApplication::translate("MainWindow", "If worlds were brought back too, restore the old ones from their backups in Worlds.");
+        ask.buttons = { { QCoreApplication::translate("MainWindow", "Cancel"), Zero::ModsUi::ChoiceButton::Kind::Ghost },
+                        { QCoreApplication::translate("MainWindow", "Undo"), Zero::ModsUi::ChoiceButton::Kind::Primary } };
+        ask.defaultButton = 0;
+        return ask;
+    }
     const QString back =
         snapshot.meta.oldVersion.isEmpty() ? QCoreApplication::translate("MainWindow", "the previous version") : snapshot.meta.oldVersion;
     ask.title = QCoreApplication::translate("MainWindow", "Roll back %1 to %2?").arg(name, back);
@@ -1241,6 +1282,303 @@ Zero::ModsUi::ChoicePrompt rollbackPrompt(const QString& name, const Zero::Backu
     return ask;
 }
 }  // namespace
+
+// ---------------------------------------------------------------- ZERO: "Try it in a copy" (docs/zero/ARCHITECTURE.md, "Test copies")
+
+namespace {
+/// The toast text of an instance that is busy (empty = both are free). `names` = instance id -> name.
+QString sandboxRefusal(const QStringList& ids, const QHash<QString, QString>& names)
+{
+    for (const QString& id : ids) {
+        if (!packBusyReason(id).isEmpty())
+            return packBusyToastText(id, QCoreApplication::translate("MainWindow", "Close %1 first.").arg(names.value(id)));
+    }
+    return {};
+}
+
+Zero::Sandbox::Layout sandboxLayoutOf(BaseInstance* inst)
+{
+    return { inst->instanceRoot(), inst->gameRoot() };
+}
+}  // namespace
+
+// Makes a test copy of the instance: a full, independent copy (no links), named "<X> (test copy)", with ZeroSandboxOf set by the copy task itself.
+void MainWindow::tryInCopy(const QString& instanceId)
+{
+    auto* list = APPLICATION->instances();
+    auto* inst = list->getInstanceById(instanceId);
+    if (!inst) {
+        Zero::ZeroToast::show(this, tr("That instance is no longer available."), Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    if (Zero::Sandbox::isTestCopy(inst))
+        return;  // a test copy is not copied again
+    const QString name = inst->name();
+    if (!packBusyReason(instanceId).isEmpty()) {
+        Zero::ZeroToast::show(this, packBusyToastText(instanceId, tr("Close %1 to make a test copy of it").arg(name)), Zero::ZeroToast::Kind::Warning);
+        return;
+    }
+    const Zero::SandboxUi::CheckAnswer answer = Zero::SandboxUi::askChecksWithDialog(this, Zero::SandboxUi::startPrompt(name));
+    if (answer.button != 1)
+        return;
+    // the question ran an event loop: the instance may have started or gone meanwhile
+    inst = list->getInstanceById(instanceId);
+    if (!inst || !packBusyReason(instanceId).isEmpty()) {
+        Zero::ZeroToast::show(this, packBusyToastText(instanceId, tr("Close %1 to make a test copy of it").arg(name)), Zero::ZeroToast::Kind::Warning);
+        return;
+    }
+
+    auto* copyTask = new InstanceCopyTask(inst, Zero::Sandbox::copyPrefs(answer.isChecked(QString::fromLatin1(Zero::SandboxUi::kOptionWorlds))));
+    copyTask->setName(Zero::Sandbox::testCopyName(name));
+    copyTask->setGroup(list->getInstanceGroup(instanceId));
+    copyTask->setIcon(inst->iconKey());
+    copyTask->setZeroSandboxOf(instanceId);
+
+    QString createdId;
+    const auto connection = connect(list, &InstanceList::instanceSelectRequest, this, [&createdId](const QString& id) { createdId = id; });
+    unique_qobject_ptr<Task> task(list->wrapInstanceTask(copyTask));
+    runModalTask(task.get());
+    disconnect(connection);
+    if (!task->wasSuccessful() || createdId.isEmpty())
+        return;  // Prism's error dialog already told why
+    showInLibrary(createdId);
+    Zero::ZeroToast::show(this, tr("Test copy of %1 ready").arg(name), Zero::ZeroToast::Kind::Success);
+}
+
+// Bring changes back: compare, ask, safety copy of the original, apply (BringBackTask), reload, maybe discard the copy.
+void MainWindow::bringChangesBack(const QString& copyId)
+{
+    using namespace Zero::Sandbox;
+    using Zero::Sandbox::Hooks;
+    using Zero::Sandbox::Request;
+    using Zero::Sandbox::Result;
+    auto* list = APPLICATION->instances();
+    auto* copy = list->getInstanceById(copyId);
+    if (!copy) {
+        Zero::ZeroToast::show(this, tr("That instance is no longer available."), Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    const QString originalId = sandboxOf(copy);
+    auto* original = list->getInstanceById(originalId);
+    if (!original) {
+        Zero::ZeroToast::show(this, tr("The original instance is gone."), Zero::ZeroToast::Kind::Warning);
+        m_library->detailsPanel()->refreshRollback();
+        return;
+    }
+    // everything below the dialogs runs from copies of the facts: the instances may change under an event loop
+    const QString copyName = copy->name();
+    const QString originalName = original->name();
+    const QHash<QString, QString> names{ { copyId, copyName }, { originalId, originalName } };
+    const QStringList ids{ copyId, originalId };
+    const Layout copyLayout = sandboxLayoutOf(copy);
+    const Layout originalLayout = sandboxLayoutOf(original);
+    const QString originalRoot = original->instanceRoot();
+    if (const QString why = sandboxRefusal(ids, names); !why.isEmpty()) {
+        Zero::ZeroToast::show(this, why, Zero::ZeroToast::Kind::Warning);
+        return;
+    }
+
+    // 1. what differs
+    QList<PartChange> plan;
+    {
+        unique_qobject_ptr<CompareTask> compare(new CompareTask(originalLayout, copyLayout));
+        ProgressDialog dialog(this);
+        dialog.showSkipButton(tr("Cancel"));
+        dialog.execWithTask(compare.get());
+        if (compare->getState() == Task::State::AbortedByUser)
+            return;
+        if (!compare->wasSuccessful()) {
+            Zero::ZeroToast::show(this, tr("Could not compare the test copy with %1.").arg(originalName), Zero::ZeroToast::Kind::Error);
+            return;
+        }
+        plan = compare->plan();
+    }
+
+    // 2. the question
+    const Zero::SandboxUi::CheckPrompt prompt = Zero::SandboxUi::bringBackPrompt(originalName, plan);
+    const Zero::SandboxUi::CheckAnswer answer = Zero::SandboxUi::askChecksWithDialog(this, prompt);
+    if (prompt.options.isEmpty()) {  // nothing differs: Close / Discard copy
+        if (answer.button == 1)
+            discardTestCopy(copyId);
+        return;
+    }
+    if (answer.button != 1)
+        return;
+    const QList<Part> parts = Zero::SandboxUi::chosenParts(answer);
+    const bool discardAfterwards = answer.isChecked(QString::fromLatin1(Zero::SandboxUi::kOptionDiscard));
+    if (parts.isEmpty()) {
+        Zero::ZeroToast::show(this, tr("Nothing was chosen to bring back."), Zero::ZeroToast::Kind::Info);
+        return;
+    }
+    // the question ran an event loop
+    copy = list->getInstanceById(copyId);
+    original = list->getInstanceById(originalId);
+    if (!copy || !original) {
+        Zero::ZeroToast::show(this, tr("That instance is no longer available."), Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    if (const QString why = sandboxRefusal(ids, names); !why.isEmpty()) {
+        Zero::ZeroToast::show(this, why, Zero::ZeroToast::Kind::Warning);
+        return;
+    }
+
+    // 3. a copy of the original first, so that this can be undone (nothing is touched when it fails or is cancelled)
+    const QString snapshotsDir = Zero::Backup::Pack::snapshotsDirFor(APPLICATION->dataRoot(), originalId);
+    const auto busy = [ids]() {
+        for (const QString& id : ids) {
+            if (const QString why = packBusyReason(id); !why.isEmpty())
+                return why;
+        }
+        return QString();
+    };
+    Zero::Backup::Pack::Meta meta;
+    meta.instanceId = originalId;
+    meta.instanceName = originalName;
+    meta.packId = original->getManagedPackID();
+    meta.packName = originalName;
+    meta.kind = QString::fromLatin1(Zero::Backup::Pack::kKindBringBack);
+    meta.label = tr("Before bringing back changes from %1").arg(copyName);
+    meta.gameDir = Zero::Backup::Pack::relativeGameDir(original->instanceRoot(), original->gameRoot());
+    QString snapshotZip;
+    {
+        unique_qobject_ptr<Zero::Backup::PackSnapshotTask> snapshot(new Zero::Backup::PackSnapshotTask(originalRoot, snapshotsDir, meta, {}, busy));
+        ProgressDialog dialog(this);
+        dialog.showSkipButton(tr("Cancel"));
+        dialog.execWithTask(snapshot.get());
+        if (!snapshot->wasSuccessful()) {
+            if (snapshot->getState() == Task::State::AbortedByUser)
+                Zero::ZeroToast::show(this, tr("Cancelled. %1 was not changed.").arg(originalName), Zero::ZeroToast::Kind::Info);
+            else
+                Zero::ZeroToast::show(this, tr("Could not save a copy of %1 first, so nothing was changed: %2").arg(originalName, snapshot->failReason()),
+                                      Zero::ZeroToast::Kind::Error);
+            return;
+        }
+        snapshotZip = snapshot->zipPath();
+    }
+
+    // 4. the changes
+    Request request;
+    request.original = originalLayout;
+    request.copy = copyLayout;
+    request.parts = parts;
+    Hooks hooks;
+    if (parts.contains(Part::Worlds)) {
+        // the backup folder of every world of the original, in the place the user chose for backups (looked up here, on the GUI thread)
+        QHash<QString, QString> backupDirs;
+        for (const QString& folder : worldFolders(originalLayout.savesDir())) {
+            Zero::Worlds::WorldEntry entry;
+            entry.instanceId = originalId;
+            entry.instanceName = originalName;
+            entry.folderName = folder;
+            backupDirs.insert(folder, Zero::Backup::WorldBackupJobs::global()->backupDir(entry));
+        }
+        hooks.backupWorld = safetyBackupHook(originalId, originalName, [backupDirs](const QString& folder) { return backupDirs.value(folder); });
+    }
+    unique_qobject_ptr<BringBackTask> work(new BringBackTask(originalId, copyId, request, hooks, busy));
+    {
+        ProgressDialog dialog(this);
+        dialog.execWithTask(work.get());
+    }
+    const Result result = work->result();
+    if (!work->wasSuccessful()) {
+        // everything is where it was: the copy of the original is not an undo point then
+        if (result.restored)
+            Zero::Backup::Pack::removeSnapshot(snapshotZip, snapshotsDir);
+        else
+            Zero::Backup::Pack::markOutcome(snapshotZip, QString::fromLatin1(Zero::Backup::Pack::kOutcomeFailed));
+        m_library->detailsPanel()->refreshRollback();
+        Zero::ZeroToast::show(this, tr("Could not bring the changes back to %1: %2").arg(originalName, work->failReason()), Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    if (result.changedAnything)
+        Zero::Backup::Pack::markOutcome(snapshotZip, QString::fromLatin1(Zero::Backup::Pack::kOutcomeOk));
+    else
+        Zero::Backup::Pack::removeSnapshot(snapshotZip, snapshotsDir);  // nothing changed: nothing to undo
+
+    // the files of the original changed on disk: the instance in memory is stale
+    list->reloadInstance(originalId);
+    m_library->detailsPanel()->refreshRollback();
+
+    // 5. the test copy goes to the Recycle Bin when asked
+    bool copyDiscarded = false;
+    if (discardAfterwards) {
+        copyDiscarded = list->trashInstance(copyId);
+        if (copyDiscarded) {
+            ui->actionUndoTrashInstance->setEnabled(list->trashedSomething());
+            showInLibrary(originalId);
+        }
+    }
+
+    QString text = result.changedAnything ? tr("Brought changes back to %1").arg(originalName) : tr("%1 already had those changes").arg(originalName);
+    if (!result.replacedWorlds.isEmpty())
+        text += QLatin1Char(' ') + tr("Old worlds are saved as backups in Worlds.");
+    if (discardAfterwards && !copyDiscarded)
+        text += QLatin1Char(' ') + tr("The test copy could not go to the Recycle Bin, it is still in the Library.");
+    if (!result.leftovers.isEmpty())
+        text += QLatin1Char(' ') + tr("Some replaced files could not go to the Recycle Bin, they are in %1")
+                                       .arg(QDir::toNativeSeparators(QFileInfo(result.leftovers.first()).absolutePath()));
+    const bool warn = !result.leftovers.isEmpty() || (discardAfterwards && !copyDiscarded);
+    const auto kind = warn ? Zero::ZeroToast::Kind::Warning : Zero::ZeroToast::Kind::Success;
+    if (result.changedAnything)
+        Zero::ZeroToast::show(this, text, kind, tr("Undo"), [this, originalId]() { rollBackModpackUpdate(originalId); });
+    else
+        Zero::ZeroToast::show(this, text, kind);
+}
+
+// Discard copy: the test copy goes to the Recycle Bin after a question.
+void MainWindow::discardTestCopy(const QString& copyId)
+{
+    auto* list = APPLICATION->instances();
+    auto* copy = list->getInstanceById(copyId);
+    if (!copy) {
+        Zero::ZeroToast::show(this, tr("That instance is no longer available."), Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    const QString name = copy->name();
+    const QString originalId = Zero::Sandbox::sandboxOf(copy);
+    if (!packBusyReason(copyId).isEmpty()) {
+        Zero::ZeroToast::show(this, packBusyToastText(copyId, tr("Close %1 to discard it").arg(name)), Zero::ZeroToast::Kind::Warning);
+        return;
+    }
+    Zero::ModsUi::ChoicePrompt ask;
+    ask.title = tr("Discard %1?").arg(name);
+    ask.body = tr("It goes to the Recycle Bin.");
+    ask.buttons = { { tr("Cancel"), Zero::ModsUi::ChoiceButton::Kind::Ghost }, { tr("Discard copy"), Zero::ModsUi::ChoiceButton::Kind::Danger } };
+    ask.defaultButton = 0;  // Enter cancels
+    if (Zero::ModsUi::askWithDialog(this, ask) != 1)
+        return;
+    // the question ran an event loop
+    if (!list->getInstanceById(copyId))
+        return;
+    if (!packBusyReason(copyId).isEmpty()) {
+        Zero::ZeroToast::show(this, packBusyToastText(copyId, tr("Close %1 to discard it").arg(name)), Zero::ZeroToast::Kind::Warning);
+        return;
+    }
+    if (!list->trashInstance(copyId)) {  // never a permanent delete here
+        Zero::ZeroToast::show(this, tr("Could not move %1 to the Recycle Bin.").arg(name), Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    ui->actionUndoTrashInstance->setEnabled(list->trashedSomething());
+    if (!originalId.isEmpty() && list->getInstanceById(originalId)) {
+        showInLibrary(originalId);
+    } else {
+        APPLICATION->settings()->set("SelectedInstance", QString());
+        selectionBad();
+    }
+    Zero::ZeroToast::show(this, tr("Discarded \"%1\"").arg(name), Zero::ZeroToast::Kind::Info, tr("Undo"), [this]() { undoTrashInstance(); });
+}
+
+// Keep as a normal instance: only used when the original is gone; the link is cleared.
+void MainWindow::keepTestCopy(const QString& copyId)
+{
+    auto* copy = APPLICATION->instances()->getInstanceById(copyId);
+    if (!copy) {
+        Zero::ZeroToast::show(this, tr("That instance is no longer available."), Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    Zero::Sandbox::setSandboxOf(copy, QString());
+    Zero::ZeroToast::show(this, tr("%1 is a normal instance now").arg(copy->name()), Zero::ZeroToast::Kind::Success);
+}
 
 // ZERO: the copy of the instance before a modpack update, under a modal progress. Cancelling it cancels the update. True = the copy exists
 // (`zipPath`); false = nothing was changed and the reason was shown.
@@ -1318,8 +1656,10 @@ void MainWindow::rollBackModpackUpdate(const QString& instanceId)
         root, snapshot.zipPath, dir, packId, {}, [instanceId]() { return packBusyReason(instanceId); }));
     ProgressDialog dialog(this);
     dialog.execWithTask(task.get());
+    const bool bringBackKind = snapshot.meta.kind == QLatin1String(Zero::Backup::Pack::kKindBringBack);  // ZERO: wording only
     if (!task->wasSuccessful()) {
-        Zero::ZeroToast::show(this, tr("Could not roll back %1: %2").arg(name, task->failReason()), Zero::ZeroToast::Kind::Error);
+        Zero::ZeroToast::show(this, (bringBackKind ? tr("Could not undo the changes in %1: %2") : tr("Could not roll back %1: %2")).arg(name, task->failReason()),
+                              Zero::ZeroToast::Kind::Error);
         m_library->detailsPanel()->refreshRollback();
         return;
     }
@@ -1328,7 +1668,7 @@ void MainWindow::rollBackModpackUpdate(const QString& instanceId)
     m_library->detailsPanel()->refreshRollback();
     const QString leftover = task->result().leftoverPath;
     if (leftover.isEmpty())
-        Zero::ZeroToast::show(this, tr("Rolled back %1").arg(name), Zero::ZeroToast::Kind::Success);
+        Zero::ZeroToast::show(this, (bringBackKind ? tr("Undid the changes brought back to %1") : tr("Rolled back %1")).arg(name), Zero::ZeroToast::Kind::Success);
     else
         Zero::ZeroToast::show(this,
                               tr("Rolled back %1. The updated files could not go to the Recycle Bin, they are in %2")
@@ -3170,8 +3510,27 @@ void MainWindow::setupZeroShell()
         if (m_selectedInstance)
             rollBackModpackUpdate(m_selectedInstance->id());
     });
+    // ZERO: "Try it in a copy": the Library button and the banners of a test copy (Library and instance window)
+    m_library->detailsPanel()->setBusyReason([](const QString& id) { return packBusyReason(id); });
+    connect(m_library, &Zero::LibraryPage::tryCopyRequested, this, [this]() {
+        if (m_selectedInstance)
+            tryInCopy(m_selectedInstance->id());
+    });
+    {
+        auto* requests = Zero::SandboxUi::Requests::instance();
+        connect(requests, &Zero::SandboxUi::Requests::bringBackRequested, this, &MainWindow::bringChangesBack);
+        connect(requests, &Zero::SandboxUi::Requests::discardRequested, this, &MainWindow::discardTestCopy);
+        connect(requests, &Zero::SandboxUi::Requests::keepRequested, this, &MainWindow::keepTestCopy);
+    }
+    // ZERO: "Undo" of a modpack update on the instance Timeline page (the same flow as the Library details and the update toast)
+    connect(Zero::TimelineUi::Requests::instance(), &Zero::TimelineUi::Requests::undoModpackRequested, this,
+            &MainWindow::rollBackModpackUpdate);
     connect(m_library, &Zero::LibraryPage::setArtworkRequested, this, &MainWindow::chooseArtworkForSelected);
     connect(m_library, &Zero::LibraryPage::removeArtworkRequested, this, &MainWindow::removeArtworkFromSelected);
+    connect(m_library, &Zero::LibraryPage::setBackgroundVideoRequested, this, &MainWindow::chooseBackgroundVideoForSelected);
+    connect(m_library, &Zero::LibraryPage::removeBackgroundVideoRequested, this, &MainWindow::removeBackgroundVideoFromSelected);
+    connect(m_home, &Zero::HomePage::heroVideoChanged, this,
+            [this](const QString& path) { m_shell->setPageVideo(QStringLiteral("home"), path); });
 
     // Worlds (read-only hub): "Show instance in Library" is the only way out
     connect(m_worlds, &Zero::WorldsPage::showInstanceRequested, this, &MainWindow::showInLibrary);
@@ -3317,7 +3676,9 @@ void MainWindow::setupZeroShell()
     if (auto* autoBackup = Zero::Backup::AutoBackup::global()) {
         connect(autoBackup, &Zero::Backup::AutoBackup::finished, this,
                 [this](const QString&, const QString& instanceName, int backedUp, const QStringList& tooLarge, int failed,
-                       const QString& firstError) {
+                       const QString& firstError, const QString& fallbackFrom) {
+                    if (!fallbackFrom.isEmpty() && (backedUp > 0 || failed > 0))
+                        Zero::ZeroToast::show(this, Zero::Backup::fallbackMessage(fallbackFrom), Zero::ZeroToast::Kind::Warning);
                     if (backedUp > 0)
                         Zero::ZeroToast::show(this, (backedUp == 1 ? tr("Backed up 1 world of %1").arg(instanceName) : tr("Backed up %1 worlds of %2").arg(backedUp).arg(instanceName)),
                                               Zero::ZeroToast::Kind::Success);
@@ -3329,6 +3690,19 @@ void MainWindow::setupZeroShell()
                                               tr("%1 is too large for automatic backups. Back it up manually from Worlds.")
                                                   .arg(tooLarge.join(QStringLiteral(", "))),
                                               Zero::ZeroToast::Kind::Warning);
+                });
+    }
+    // Scheduled world backups: one summary toast when a run backed up or failed something.
+    if (auto* scheduled = Zero::Backup::ScheduledBackup::global()) {
+        connect(scheduled, &Zero::Backup::ScheduledBackup::finished, this,
+                [this](int backedUp, int failed, int tooLarge, const QString& firstError, const QString& fallbackFrom) {
+                    const QString text = Zero::Backup::summaryText(backedUp, failed, tooLarge, firstError, fallbackFrom);
+                    if (text.isEmpty())
+                        return;
+                    Zero::ZeroToast::show(this, text,
+                                          failed > 0                  ? Zero::ZeroToast::Kind::Error
+                                          : !fallbackFrom.isEmpty()   ? Zero::ZeroToast::Kind::Warning
+                                                                      : Zero::ZeroToast::Kind::Success);
                 });
     }
     // Crash hook: the game ended abnormally (crash / non-zero exit, not a user kill) -> offer a diagnosis.
@@ -4191,6 +4565,62 @@ void MainWindow::removeArtworkFromSelected()
         Zero::Profile::clearArtwork(m_selectedInstance);
 }
 
+void MainWindow::chooseBackgroundVideoForSelected()
+{
+    if (!m_selectedInstance)
+        return;
+    QStringList patterns;
+    for (const QString& e : Zero::Custom::videoExtensions())
+        patterns << QStringLiteral("*.") + e;
+    const QString path = QFileDialog::getOpenFileName(this, tr("Choose a background video"),
+                                                      QStandardPaths::writableLocation(QStandardPaths::MoviesLocation),
+                                                      tr("Videos (%1)").arg(patterns.join(QLatin1Char(' '))));
+    if (path.isEmpty())
+        return;
+    const QString problem = Zero::Profile::checkBackgroundVideo(path);
+    if (!problem.isEmpty()) {
+        Zero::ZeroToast::show(this, problem, Zero::ZeroToast::Kind::Error);
+        return;
+    }
+    static QSet<QString> copying;  // instance ids with a copy in flight (GUI thread only)
+    const QString id = m_selectedInstance->id();
+    if (copying.contains(id))
+        return;
+    copying.insert(id);
+    Zero::ZeroToast::show(this, tr("Copying video…"), Zero::ZeroToast::Kind::Info);
+
+    // The video can be large: copy it on a worker thread, then record it here.
+    using Result = QPair<QString, QString>;  // error, stored file name
+    auto* watcher = new QFutureWatcher<Result>(this);
+    connect(watcher, &QFutureWatcher<Result>::finished, this, [this, watcher, id]() {
+        const Result result = watcher->result();
+        watcher->deleteLater();
+        copying.remove(id);
+        auto* instance = APPLICATION->instances()->getInstanceById(id);
+        if (!result.first.isEmpty()) {
+            Zero::ZeroToast::show(this, result.first, Zero::ZeroToast::Kind::Error);
+            return;
+        }
+        if (!instance)
+            return;  // deleted while copying
+        Zero::Profile::commitBackgroundVideo(instance, result.second);
+        Zero::ZeroToast::show(this, tr("Background video set. It plays behind Home while this instance is featured."),
+                              Zero::ZeroToast::Kind::Success);
+    });
+    const QString root = m_selectedInstance->instanceRoot();
+    watcher->setFuture(QtConcurrent::run([root, path]() {
+        QString name;
+        const QString error = Zero::Profile::copyBackgroundVideo(root, path, &name);
+        return Result(error, name);
+    }));
+}
+
+void MainWindow::removeBackgroundVideoFromSelected()
+{
+    if (m_selectedInstance)
+        Zero::Profile::clearBackgroundVideo(m_selectedInstance);
+}
+
 void MainWindow::renameSelectedInstance(const QString& newName)
 {
     if (m_selectedInstance == nullptr)
@@ -4426,7 +4856,9 @@ void MainWindow::zeroScreenshot(const QString& path, const QString& page)
         auto* inst = slash > 0 ? APPLICATION->instances()->getInstanceById(spec.left(slash)) : nullptr;
         if (inst) {
             const QString folder = spec.mid(slash + 1);
-            const QString dir = Zero::Backup::backupDirFor(APPLICATION->dataRoot(), inst->id(), folder);
+            auto* backupJobs = Zero::Backup::WorldBackupJobs::global();
+            const QString dir = backupJobs ? Zero::Backup::worldBackupDirIn(backupJobs->activeRoot(), inst->id(), folder)
+                                           : Zero::Backup::backupDirFor(APPLICATION->dataRoot(), inst->id(), folder);
             const Zero::Backup::BackupMeta meta{ inst->id(), inst->name(), folder, folder };
             for (const auto kind : { Zero::Backup::Kind::Manual, Zero::Backup::Kind::Safety, Zero::Backup::Kind::Auto, Zero::Backup::Kind::Manual }) {
                 const auto r = Zero::Backup::createBackup(QDir(inst->worldDir()).filePath(folder), dir, kind, meta);

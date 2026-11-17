@@ -71,9 +71,10 @@ class AutoBackup : public QObject {
     bool isPending(const QString& instanceId) const { return m_runs.contains(instanceId); }
 
    signals:
-    /// The work of one instance ended. Not emitted when no world was touched. `tooLarge` holds world names.
+    /// The work of one instance ended. Not emitted when no world was touched. `tooLarge` holds world names. `fallbackFrom` is the
+    /// chosen backup folder that was not reachable (the backups went to the default folder), empty when none.
     void finished(const QString& instanceId, const QString& instanceName, int backedUp, const QStringList& tooLarge, int failed,
-                  const QString& firstError);
+                  const QString& firstError, const QString& fallbackFrom = {});
 
    private:
     struct Run {
@@ -85,6 +86,7 @@ class AutoBackup : public QObject {
         int failed = 0;
         QStringList tooLarge;
         QString firstError;
+        QString fallbackFrom;
     };
 
     void scan(const QString& instanceId, const Worlds::InstanceSource& source, qint64 sessionStartMs);
@@ -92,6 +94,7 @@ class AutoBackup : public QObject {
     void startNext(QString instanceId);
     void finishRun(QString instanceId);
     void onJobFinished(const QString& key, bool ok, const QString& message, bool automatic);
+    void onFellBack(const QString& key, const QString& chosenFolder);
     qint64 now() const;
 
     WorldBackupJobs* m_jobs;

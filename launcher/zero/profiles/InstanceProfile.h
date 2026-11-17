@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // ZERO Launcher - instance profile data (favorite, tags, description, artwork, mod count). No widgets.
-// Everything lives in the instance's own files: `instance.cfg` (ZeroFavorite, ZeroTags, ZeroArtwork, and Prism's `notes`
-// as the description) and `<instance root>/.zero/artwork.png`. See docs/zero/ARCHITECTURE.md.
+// Everything lives in the instance's own files: `instance.cfg` (ZeroFavorite, ZeroTags, ZeroArtwork, ZeroBackgroundVideo, and Prism's `notes`
+// as the description), `<instance root>/.zero/artwork.png` and the optional `<instance root>/.zero/background.<ext>` video. See docs/zero/ARCHITECTURE.md.
 #pragma once
 
 #include <QList>
@@ -67,6 +67,30 @@ QString setArtwork(BaseInstance* instance, const QString& sourcePath);
 /// Deletes `<instance root>/.zero/artwork.png` (and only that file) and clears the setting.
 void clearArtwork(BaseInstance* instance);
 
+// ----- background video -----
+
+/// Folder (relative to the instance root) and base name (without extension) of the background video: `.zero/background.<ext>`.
+QString backgroundVideoBaseName();
+
+/// Absolute path of the Home background video, or an empty string when none is set or the file is missing / outside the instance
+/// folder.
+QString backgroundVideoPath(BaseInstance* instance);
+/// Checks `sourcePath` as a background video: one of the theme import types (mp4, webm, mkv, mov), an existing file, at most
+/// `maxBytes` (the theme import limit when negative). Returns an empty string when fine, otherwise a message.
+QString checkBackgroundVideo(const QString& sourcePath, qint64 maxBytes = -1);
+/// The file part of setBackgroundVideo(), free of widgets, settings and the instance object, so it can run on a worker thread:
+/// copies `sourcePath` to `<instanceRoot>/.zero/background.<ext>` through a temporary file that replaces the old video only when
+/// completely written, then removes an old video with another extension. `storedName` receives the file name (e.g. "background.mp4").
+/// Returns an empty string on success, otherwise a message; on failure the old video is untouched.
+QString copyBackgroundVideo(const QString& instanceRoot, const QString& sourcePath, QString* storedName, qint64 maxBytes = -1);
+/// Records an already copied video (`storedName` from copyBackgroundVideo()): saves the setting and notifies. Main thread.
+void commitBackgroundVideo(BaseInstance* instance, const QString& storedName);
+/// checkBackgroundVideo() + copyBackgroundVideo() + commitBackgroundVideo() on the calling thread (the GUI uses the pieces so the
+/// copy runs in the background). Empty string on success, otherwise a message.
+QString setBackgroundVideo(BaseInstance* instance, const QString& sourcePath, qint64 maxBytes = -1);
+/// Deletes the instance's background video file (and only that file) and clears the setting.
+void clearBackgroundVideo(BaseInstance* instance);
+
 // ----- mods -----
 
 /// Number of enabled mods (`*.jar`, not `*.jar.disabled`) directly in `modsFolder`; nullopt when the folder does not exist.
@@ -85,16 +109,20 @@ class Notifier : public QObject {
     Q_OBJECT
    public:
     static Notifier* instance();
-    void notify(const QString& instanceId, bool artwork = false)
+    void notify(const QString& instanceId, bool artwork = false, bool video = false)
     {
         if (artwork)
             emit artworkChanged(instanceId);
+        if (video)
+            emit backgroundVideoChanged(instanceId);
         emit profileChanged(instanceId);
     }
    signals:
     void profileChanged(const QString& instanceId);
     /// Emitted (before profileChanged) when the artwork file of the instance was replaced or removed.
     void artworkChanged(const QString& instanceId);
+    /// Emitted (before profileChanged) when the background video of the instance was set, replaced or removed.
+    void backgroundVideoChanged(const QString& instanceId);
 
    private:
     Notifier() = default;

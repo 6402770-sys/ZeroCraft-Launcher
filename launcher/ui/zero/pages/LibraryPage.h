@@ -82,8 +82,11 @@ class LibraryPage : public ShellPage {
     /// The details panel Export button: the caller opens the export chooser for that instance.
     void exportRequested(const QString& instanceId);
     void rollbackRequested();
+    void tryCopyRequested();  // ZERO: "Try it in a copy" of the selected instance
     void setArtworkRequested();
     void removeArtworkRequested();
+    void setBackgroundVideoRequested();
+    void removeBackgroundVideoRequested();
 
    protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

@@ -108,6 +108,18 @@ The vcpkg/MSVC preset from upstream is not used for ZERO dev builds.
   `artworkChanged`) and `LibraryFilter` (chips and search as pure logic over `Facts`). Setters save, emit `BaseInstance::propertiesChanged` (so
   `InstanceList` and its proxies re-filter / re-sort) and the notifier. UI: `FilterChipBar`, `ArtworkCache` (cover-cropped pixmap cache, dropped on
   `artworkChanged`) / `ArtworkView`, `FlowLayout`, the card delegate, the details panel and Home read these.
+- **Background video** (per instance): setting `ZeroBackgroundVideo` = file name inside `<instance root>/.zero/` (`background.<ext>`, ext = one
+  of the theme import types mp4/webm/mkv/mov, limit = the theme import limit 200 MB). `Profile::checkBackgroundVideo` validates, the widget-free
+  `copyBackgroundVideo(instanceRoot, source, &name)` copies through a `.part` temp file + rename (the old video is replaced only when the copy
+  is complete; an old video with another extension is removed afterwards) and is safe on a worker thread; `commitBackgroundVideo` saves the
+  setting and notifies (`Notifier::backgroundVideoChanged`, then `profileChanged`). `setBackgroundVideo` = all three on the calling thread
+  (tests); `MainWindow::chooseBackgroundVideoForSelected` runs the copy with `QtConcurrent` + "Copying video..." toast.
+  `backgroundVideoPath` is empty for an unset / missing file or any name that is not a plain supported file name. Library details panel: "Set
+  background video..." / "Remove video" + caption. Playback: `HomePage::heroVideoChanged(path)` (every refresh; the hero is the last played
+  instance) -> `ZeroShell::setPageVideo("home", path)`. `ZeroShell::chooseVideo(page, overridePage, path, motionOff, gameRunning)` (pure) says
+  Theme or Page: the instance video is drawn on its own page only, never with reduced motion (theme background shows, nothing decodes); a
+  running game only pauses it. A second `ZeroVideoBackground` (`m_pageVideo`, muted) holds a source only while shown (released when Home is
+  left); the theme video is paused (conditions page = none) while it is shown, so one decoder plays. Scrim = `max(theme dim, Tokens::pageVideoMinDim)`.
 - **Filtering** runs in `InstanceProxyModel` (text filter + `setPredicate` hook), so the grid, the list and Prism groups (categories = groups) agree.
 - Out of scope for now: bulk actions (multi-select tag / favorite / move), sorting by "recently added", a favorite column in the list view.
 
@@ -194,7 +206,35 @@ The first ZERO feature that writes inside user worlds. Rule: never silently over
     (`lockInstance`) from `launchEnded` until the queue ended (scan included), so a new launch can never slip in between two queued backups and no backup is refused because of it.
   - When the work of an instance ended it emits `finished(instanceId, instanceName, backedUp, tooLarge (world names), failed, firstError)`; nothing selected = no signal. `MainWindow` shows up to three
     toasts per instance (Success "Backed up N world(s) of X", Error "Automatic backup failed for X: ...", Warning "... is too large for automatic backups ..."), never one per world.
-- Tests: `tests/WorldBackup_test.cpp` (injected rename / free-space / trash hooks simulate failures), `tests/AutoBackup_test.cpp` (selection rules and the service with real temp worlds).
+- **Backup destination** (`launcher/zero/backup/BackupDestination`, pure, no widgets, no `APPLICATION`): setting `ZeroBackupRoot` (string; empty = the default root `<data>/zero/backups`). A chosen folder `<F>` stores
+  new backups in `<F>/ZERO Backups/<instanceId>/<worldFolder>` (`rootInFolder`, `worldBackupDirIn`). `detectCloudFolders(Environment)` finds the cloud folders offered in Settings through an injectable environment
+  (env vars, `dirExists`, `readFile`, `driveRoots`; tests use a fake PC): OneDrive (`%OneDrive%`, else `%OneDriveConsumer%`), Google Drive for desktop (`<drive>:/My Drive` on every ready volume, else
+  `%USERPROFILE%/Google Drive/My Drive` or `%USERPROFILE%/My Drive`) and Dropbox (`personal.path`, `business.path` of `%LOCALAPPDATA%` / `%APPDATA%` `/Dropbox/info.json`); only folders that exist.
+  - **Never silent**: `WorldBackupJobs` reads the setting at request time (`Destination::chosenFolder`) and probes it on the pool thread (`probeFolder`: the folder must exist, `ZERO Backups` is created and a probe
+    file is written and removed; the chosen folder itself is never created). When it fails, that backup (or the safety backup of a restore) goes to the default root, the job's message gets
+    "Saved in the ZERO folder: <folder> isn't reachable" appended and `fellBackToDefault(key, folder)` is emitted just before `jobFinished`. `AutoBackup::finished` and `ScheduledBackup::finished` carry the
+    folder (`fallbackFrom`) and `MainWindow` shows it in the summary toast. Settings > Launcher > "World backups" shows the resolved path and a warning caption when the current choice is not writable.
+  - **Several roots**: the default root is always known; every other root that received a backup or was applied in Settings is remembered in `<data>/zero/backup-roots.json` (`KnownRoots`, `Destination::knownRoots` /
+    `rootUsed`; `WorldBackupJobs::rememberRoot`). `refreshList` merges the backups of the world from all known roots (and the active one), newest first. `restore` and `remove` accept a zip only when it lies in
+    `<known root>/<instanceId>/<worldFolder>` of that very world (`rootOwning`; anything else is refused with "This backup does not belong to this world.") and `remove` passes the matching root to `deleteBackup`.
+    A restore reads from any root, but its safety backup and the retention belong to the destination in use (the default root on fallback); retention only ever touches the folder just written to.
+    "Open backups folder" opens `backupDir(entry)`: the active destination's folder, else the first known root's folder that exists.
+- **Scheduled backups** (`launcher/zero/backup/ScheduledBackup`, no widgets, no `APPLICATION`; created in `Application` next to `AutoBackup`, `ScheduledBackup::global()`): setting `ZeroBackupSchedule` = `off` (default) /
+  `daily` / `weekly`. A catch-up check runs 2 minutes after start-up, then one every hour (`Timing`). A run is due (`isDue`) when the last completed run (`<data>/zero/backup-schedule.json`, `lastRunMs`) is
+  older than 24 h / 7 days, never happened, or lies in the future (clock set back). It only starts while no game runs or launches (any instance with `launchPhase != Idle` or `isRunning()`); otherwise the next
+  hourly check tries again.
+  - Selection (pure, `selectScheduled` / `needsBackup`): a world is backed up when it has no backup in any known root, or its `level.dat` is newer than the creation time of its newest backup (any kind, any
+    known root; `newestBackupMs`). Worlds over `kAutoMaxBytes` count as "too large" and are skipped. The scan runs on a pool thread and is posted back with the QPointer pattern.
+  - The backups are `Kind::Auto` jobs of `WorldBackupJobs`, one world at a time, across all instances. An instance is locked (`lockInstance`) while its queue is pending. Before an instance starts, the service
+    checks again that no game runs: if one does, the run is **interrupted** (not recorded; finished worlds are not backed up twice at the next check). An instance that another service already holds locked
+    (the automatic backup of a session that just ended) is skipped. A refused or failed job counts as failed.
+  - The completion time is recorded even when nothing needed a backup. `finished(backedUp, failed, tooLarge, firstError, fallbackFrom)` is emitted for every run; `MainWindow` shows one toast built by
+    `summaryText(...)` only when something was backed up or failed ("Scheduled backup: 3 worlds backed up, 1 world failed (...). Saved in the ZERO folder: X isn't reachable.").
+  - Settings > Launcher > "World backups" (`LauncherPage`): "Back up worlds after playing" (= `ZeroAutoBackupWorlds`, kept in sync with the checkbox of the Backups block through `SettingChanged`), "Scheduled
+    backups" (Off / Every day / Every week) and "Save backups to" (default, detected cloud folders, the current custom folder, "Choose folder...").
+- Tests: `tests/WorldBackup_test.cpp` (injected rename / free-space / trash hooks simulate failures), `tests/AutoBackup_test.cpp` (selection rules and the service with real temp worlds),
+  `tests/BackupDestination_test.cpp` (effective root, cloud detection with a fake PC, probe, fallback, known roots), `tests/BackupRoots_test.cpp` (the job runner with a chosen / unreachable destination and several
+  roots: listing, remove, restore, refusal outside the known roots), `tests/ScheduledBackup_test.cpp` (due computation, selection, summary text and the service).
 - Known limits: nothing prevents another program from editing a world during the copy (the verify step would then fail the backup rather than record a torn one); a restore sets file modification times
   to "now"; empty folders inside a world are not restored.
 
@@ -242,6 +282,43 @@ staging folder, verify again) and `renamePath`.
 - Tests: `tests/PackSnapshot_test.cpp` (exclude rules, cfg merge, snapshot contents and meta, retention, listing, happy-path roll back, every failure path with injected rename / trash / free-space hooks,
   corrupt zips, the tasks: failure gates the update, cancel, refusal while running or locked). Known limits: a crash between the carry-over and the swap leaves the player's folders in the hidden `.zero-restore-*`
   folder (named in the log); the copy is as big as the instance without its play data (mods and resource packs can be gigabytes); a task that is cancelled while it verifies finishes that step first.
+
+## Test copies ("Try it in a copy")
+
+Try mods, versions or settings in a throw-away copy of an instance, then bring the changes back or discard the copy. A test copy is an ordinary instance made by Prism's
+`InstanceCopyTask` (a full, independent copy: no symlinks / hardlinks / clone, no screenshots, no play time, worlds optional) plus one key in its `instance.cfg`:
+`ZeroSandboxOf=<id of the original>` (registered by `BaseInstance`; `InstanceCopyTask::setZeroSandboxOf` writes it inside the task, so the copy is marked from the moment it exists, and a
+manual Prism "Copy" of a test copy clears it). Nothing else marks it; the name is `<X> (test copy)` (Prism makes it unique), same group and icon.
+
+- **Service layer** (`launcher/zero/sandbox/`, no widgets): `Sandbox` (the key, `testCopyName`, `copyPrefs`), `SandboxPlan` (pure, read-only: `comparePlan` says per part whether the copy differs from
+  the original; parts = Mods `mods/` incl. `.index`, Config `config/`, Resource packs, Shader packs, Game version and loader = `mmc-pack.json` + `patches/`, Worlds = the copy's `saves/<name>`
+  folders with a `level.dat` that are new or changed; a missing folder equals an empty one; files compare by size, then time within 2 s, then the bytes (up to 64 MB); `.zero-*` and `session.lock` ignored;
+  links are never followed), `SandboxApply` (the file moves, see below) and `SandboxTasks` (`CompareTask`, `BringBackTask`: `Task`s on the pool for Prism's `ProgressDialog`; the bring-back task locks both
+  instances like the backup jobs and refuses while either is busy).
+- **Bring changes back** (`MainWindow::bringChangesBack`): refuse (toast) while the copy or the original is busy (`packBusyReason`, re-checked after every dialog) → `CompareTask` → the dialog
+  (`SandboxUi::bringBackPrompt`: one checkbox per differing part, all on except Worlds; "Discard the test copy afterwards" on; "A copy of X is saved first, so you can undo this."; nothing differs =
+  "No changes to bring back" with Close / Discard copy) → **`PackSnapshotTask` of the original** (the modpack snapshot engine, meta `kind = "bring-back"` and `label = "Before bringing back changes from
+  <copy>"`; cancellable; a failure stops with nothing touched) → `BringBackTask` → `reloadInstance(original)` → optionally `trashInstance(copy)` → toast "Brought changes back to X" with **Undo**
+  (= `rollBackModpackUpdate(original)`: the same roll back of the snapshot; its question and the Library row "Undo bringing changes back" read by `meta.kind`; worlds are never rolled back, their old
+  versions are the safety backups: the toast adds "Old worlds are saved as backups in Worlds."). The snapshot is removed when the bring-back failed and everything was restored; `newestActive` takes the
+  newest not rolled back snapshot of any kind (an empty pack id fits any), and the details panel shows the roll back row for a non-modpack instance only for a "bring-back" snapshot.
+- **`SandboxApply::apply`** (data safety): targets = the differing files / folders of the chosen parts (worlds: only changed or new ones). (1) Every world about to be replaced gets a Safety world backup
+  (`safetyBackupHook`, into the destination-aware backup folder of that world; a failure stops everything). (2) The copy's version of each target is copied into
+  `<original>/.zero-bringback-<ts>/new/<n>` (the original is untouched; a failure removes only that ZERO-owned folder). (3) The swap, per target two renames: the original to `.../old/<name>`, the new one
+  into place; any failure puts every target back in reverse order (`Result::restored`; if even that fails the staging folder is kept and named in the error). (4) The replaced originals go to the Recycle
+  Bin (`Hooks::trashPath`, default `FS::trash`, never a permanent delete; one that cannot go stays in the staging folder and is listed in `Result::leftovers`). Only ZERO's own `new/` copies and empty
+  staging folders are ever deleted. Worlds only in the original stay; worlds only in the copy are added. The window between the two renames of one target is two renames long; a crash inside it leaves the
+  originals in `.zero-bringback-*/old` (and the safety copy of the instance exists).
+- **UI** (`launcher/ui/zero/sandbox/`): `SandboxDialogs` (`CheckDialog`: the frame of `ModsUi::ChoiceDialog` with checkboxes + captions; `startPrompt`, `bringBackPrompt`, `chosenParts`) and `SandboxBanner`
+  (tinted `info` card: "Test copy of X" + Bring changes back / Discard copy, or "The original instance is gone" + Keep as a normal instance / Discard copy; `Look::Card` in the Library details panel,
+  `Look::Compact` under the instance window header card; buttons disabled with the reason while busy). The clicks travel through `SandboxUi::Requests` (one object, so the instance window needs no
+  pointer to the main window); `MainWindow` connects `tryInCopy`, `bringChangesBack`, `discardTestCopy`, `keepTestCopy`. "Try it in a copy" is a Library details button after Copy (icon `git-branch`,
+  hidden on a test copy, disabled with the reason while the instance is busy) and an entry after Copy in the instance context menu. Discard = confirm ("It goes to the Recycle Bin.") →
+  `trashInstance`; never a permanent delete.
+- Tests: `tests/SandboxPlan_test.cpp` (folder comparison, parts, worlds, `copyTree` keeps times), `tests/SandboxApply_test.cpp` (replace / add / remove parts, Recycle Bin hook, injected copy / rename failures
+  restore everything, failed restore keeps the staging folder, trash failure, worlds replaced / added / kept, backups before the first change, the tasks), `tests/SandboxMeta_test.cpp` (`ZeroSandboxOf` round
+  trip, copy prefs, snapshot kind + label, `newestActive` with an empty pack id, undoing a bring-back), `tests/ZeroSandboxDialogs_test.cpp` (the dialogs and the banner; `ZERO_SANDBOX_SHOTS=<dir>` writes PNGs).
+  Not covered by tests: the `MainWindow` orchestration (it needs the whole application).
 
 ## Storage Manager (Mission 002)
 Core only (no widgets, no `APPLICATION`, no Prism instance classes): `launcher/zero/storage/StorageScanner` (namespace `Zero::Storage`). The UI fills plain `InstanceSource` / `LauncherSource` structs from the
@@ -500,3 +577,21 @@ APPLICATION->zeroDownloads()->start({ name, inst->id(), inst->name(), Kind::Mod,
 **UI.** `DownloadsButton` (32 px, between the page actions and the divider before the account chip, `ZeroTopBar::attachDownloads`): hidden while there is no job and no history; accent ring = overall fraction (rotating 90 degree arc when unknown, static with reduced motion), count badge from 2 jobs, tooltip "Downloads" / "Downloading 2 items · 45%", one pulse when a job ends while the panel is closed (skipped with reduced motion). `DownloadsPanel`: 380 px popover (max 480 px, scrolls), right-aligned under the button; header + "Clear history", "In progress" rows (kind icon, title, "Fabric Fun · 12.4 MB of 30 MB · 2.1 MB/s", 4 px bar with shimmer when unknown, cancel) and "Recent" rows (state pill Done / Failed / Cancelled, error line for Failed; a click on a Done / Failed row opens the instance window on the page of its kind, a modpack selects it in the Library; not clickable when the instance is gone). Command palette: "Downloads" while the button is visible.
 
 Tests: `tests/DownloadCenter_test.cpp` (core), `tests/ZeroDownloadsPanel_test.cpp` (panel + button; `ZERO_DOWNLOADS_SHOTS=<folder>` writes PNG grabs).
+
+## Change timeline
+
+Per-instance **Timeline** page of the instance window (`ui/zero/instance/TimelinePage`, id `timeline`, right after Version; the "what changed" line under the title is `PageHelp::forPage("timeline").about`). It is a read-only aggregation of histories that already exist; it has no store of its own and no undo mechanism of its own.
+
+Model: `zero/history/ChangeTimeline.{h,cpp}` (no widgets). `build(Sources)` takes data that was read already (`readSources()` reads the files and the two services) and returns `Entry { timeMs, kind, title, caption, tone, undoable, undone, undoRef }` newest first; `groupByDay(entries, now)` gives "Today" / "Yesterday" / "Mon 14 Nov" groups in the time zone of the injected `now`.
+
+| Source | Entries | Undo (the newest active one only) |
+|---|---|---|
+| `Mods::Snapshot::listSnapshots` | "Updated N mods" (caption: up to 3 names, "+N more"; one mod: "old -> new") | newest snapshot when finished, valid, not rolled back, not dismissed; Undo = `ModsPage::requestRollback(dir)` (its question, Recycle Bin, toasts) |
+| `Backup::Pack::listSnapshots` (`pack-*.zip`) | "Updated <pack> to <new>" / "Brought changes back from <copy>" | `Pack::newestActive(list, packId)`; Undo = `MainWindow::rollBackModpackUpdate(id)` through the `TimelineUi::Requests` signal hub |
+| `Packs::readHistory` (`<instance>/.zero/pack-order.json`) | "Changed resource pack order" | newest entry; Undo = `ResourcePacksPage::undo(id)` (`Packs::undoLast`) |
+| `DownloadCenter::history()` of this instance | "Installed X" / "Install failed: X" / "Install cancelled: X" (a finished `Kind::Update` job is left out: its snapshot is the entry) | none |
+| `SessionHistory::sessions()` of this instance | "Played 1 h 20 min" / "Crashed after 5 min" / "Didn't start" | none |
+
+A rolled-back entry gets the caption tag "Undone" and the muted tone; a dismissed mod snapshot is only not undoable. Unfinished (`pending` / empty outcome) and unreadable snapshots are not listed. Boost / Java argument changes have no persisted history, so they are not on the timeline.
+
+The page shows the newest 100 entries and a "Show more" button (+100). It reads on open, when the game starts or stops, and when the session or downloads history changes (coalesced to the next event-loop turn, deferred while hidden). Undo buttons are disabled with the reason as tooltip while the instance is running / launching or has a background download. The Mods and Resource Packs pages refresh themselves after their own flows (`requestRollback`, `undo`), so they show no stale state; the modpack undo reloads the instance. Tests: `ChangeTimeline_test` (model), `ZeroTimelinePage_test` (widgets, PNGs with `ZERO_TIMELINE_SHOTS`).

@@ -57,6 +57,9 @@ set(TEST_SOURCES
     WorldBackup_test.cpp
     PackSnapshot_test.cpp
     AutoBackup_test.cpp
+    BackupDestination_test.cpp
+    BackupRoots_test.cpp
+    ScheduledBackup_test.cpp
     StorageScanner_test.cpp
     JavaDoctor_test.cpp
     ModHealth_test.cpp
@@ -104,6 +107,12 @@ set(TEST_SOURCES
     ZeroAddAccount_test.cpp
     ZeroIntro_test.cpp
     ZeroTour_test.cpp
+    SandboxPlan_test.cpp
+    SandboxApply_test.cpp
+    SandboxMeta_test.cpp
+    ZeroSandboxDialogs_test.cpp
+    ChangeTimeline_test.cpp
+    ZeroTimelinePage_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

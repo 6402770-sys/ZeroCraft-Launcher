@@ -55,6 +55,8 @@
 
 #include "zero/auth/ElyAuth.h"  // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
+#include "zero/backup/BackupDestination.h"  // ZERO
+#include "zero/backup/ScheduledBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/downloads/DownloadCenter.h"  // ZERO
 #include "zero/updates/UpdateSweep.h"       // ZERO
@@ -719,6 +721,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ZeroWorldsInstance", QString());  // Worlds page: instance id filter, empty = all instances
         m_settings->registerSetting("ZeroModHealthInstance", QString());  // Tools > Mod Health: last chosen instance id
         m_settings->registerSetting("ZeroAutoBackupWorlds", true);  // back up the played worlds when the game closes (all instances)
+        m_settings->registerSetting("ZeroBackupRoot", QString());  // folder new world backups go to (inside it: "ZERO Backups"); empty = <data>/zero/backups
+        m_settings->registerSetting("ZeroBackupSchedule", QString("off"));  // scheduled world backups: "off" | "daily" | "weekly"
 
         // Remembered state
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());
@@ -1175,6 +1179,39 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                     autoBackup->onGameRunning(id);
             });
             connect(this, &Application::launchEnded, autoBackup, &Zero::Backup::AutoBackup::onLaunchEnded);
+
+            // Where the backups go: the folder of the "ZeroBackupRoot" setting (read at request time), plus every root used before
+            // (`backup-roots.json`) so older backups stay listed and restorable.
+            auto knownRoots = std::make_shared<Zero::Backup::KnownRoots>(FS::PathCombine(m_dataPath, "zero", "backup-roots.json"));
+            Zero::Backup::WorldBackupJobs::Destination destination;
+            destination.chosenFolder = [this]() { return m_settings->get("ZeroBackupRoot").toString(); };
+            destination.knownRoots = [knownRoots]() { return knownRoots->list(); };
+            destination.rootUsed = [knownRoots](const QString& root) { knownRoots->add(root); };
+            jobs->setDestination(destination);
+            jobs->rememberRoot(jobs->activeRoot());  // the active root is known from the start (no-op for the default root)
+
+            // Scheduled backups: a catch-up check 2 minutes after start-up, then hourly; never while a game runs or launches.
+            Zero::Backup::ScheduledBackup::Hooks scheduleHooks;
+            scheduleHooks.schedule = [this]() { return Zero::Backup::scheduleFromString(m_settings->get("ZeroBackupSchedule").toString()); };
+            scheduleHooks.gameActive = [this]() {
+                for (int i = 0; i < m_instances->count(); ++i) {
+                    auto* inst = m_instances->at(i);
+                    if (launchPhase(inst->id()) != LaunchPhase::Idle || inst->isRunning())
+                        return true;
+                }
+                return false;
+            };
+            scheduleHooks.instances = [this]() {
+                QList<Zero::Worlds::InstanceSource> sources;
+                for (int i = 0; i < m_instances->count(); ++i) {
+                    auto* inst = m_instances->at(i);
+                    sources.append({ inst->id(), inst->name(), inst->worldDir() });
+                }
+                return sources;
+            };
+            auto* scheduled =
+                new Zero::Backup::ScheduledBackup(jobs, FS::PathCombine(m_dataPath, "zero", "backup-schedule.json"), scheduleHooks, this);
+            scheduled->start();
         }
 
         // ZERO: play sessions. The tracker knows which instances run (Home's Now playing cards, the tray tooltip); "While playing"

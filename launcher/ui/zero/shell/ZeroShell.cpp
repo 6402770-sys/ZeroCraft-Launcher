@@ -50,6 +50,7 @@ ZeroShell::ZeroShell(QWidget* parent)
         if (!m_bgPath.isEmpty() && QFileInfo(m_bgPath).lastModified().toMSecsSinceEpoch() != m_bgStamp)
             m_bgPath.clear();
         syncVideo();
+        syncPageVideo();  // reduced motion may have changed
         update();
     });
     syncVideo();
@@ -72,14 +73,61 @@ void ZeroShell::syncVideo()
     m_video->setSource(t.backgroundVideo);
 }
 
+ZeroShell::VideoSource ZeroShell::chooseVideo(const QString& page, const QString& overridePage, const QString& overridePath,
+                                              bool motionOff, bool gameRunning)
+{
+    Q_UNUSED(gameRunning)
+    if (overridePath.isEmpty() || overridePage.isEmpty() || page != overridePage || motionOff)
+        return VideoSource::Theme;
+    return VideoSource::Page;
+}
+
+bool ZeroShell::pageVideoShown() const
+{
+    return chooseVideo(m_current, m_pageVideoPage, m_pageVideoPath, Theme::current().reduceMotion, m_gameRunning) == VideoSource::Page;
+}
+
+void ZeroShell::setPageVideo(const QString& pageId, const QString& path)
+{
+    if (m_pageVideoPage == pageId && m_pageVideoPath == path)
+        return;
+    m_pageVideoPage = pageId;
+    m_pageVideoPath = path;
+    syncPageVideo();
+    update();
+}
+
+void ZeroShell::syncPageVideo()
+{
+    const bool show = pageVideoShown();
+    if (!show) {
+        if (m_pageVideo)
+            m_pageVideo->setSource(QString());  // stops and releases the decoder
+    } else {
+        if (!m_pageVideo) {
+            m_pageVideo = new ZeroVideoBackground(this);
+            connect(m_pageVideo, &ZeroVideoBackground::frameChanged, this, qOverload<>(&QWidget::update));
+        }
+        m_pageVideo->setSound(false, 0.0);  // an instance video is always muted
+        updateVideoConditions();
+        m_pageVideo->setSource(m_pageVideoPath);
+    }
+    updateVideoConditions();
+}
+
 void ZeroShell::updateVideoConditions()
 {
-    if (!m_video)
-        return;
     const QWidget* top = window();
     // A hidden window (e.g. sent to the tray) counts as minimized: nobody sees the video, so it must not decode.
     const bool away = top && (top->isMinimized() || !top->isVisible());
-    m_video->setConditions(m_current, away, m_gameRunning, Theme::current().reduceMotion);
+    const bool motionOff = Theme::current().reduceMotion;
+    const bool pageShown = pageVideoShown();
+    if (m_pageVideo && pageShown)
+        m_pageVideo->setConditions(m_current, away, m_gameRunning, motionOff);
+    if (m_video) {
+        // Only one decoder plays: the theme video waits (paused on its frame) while the page video is shown.
+        m_video->setConditions(pageShown ? QString() : m_current, away, m_gameRunning, motionOff);
+    }
 }
 
 void ZeroShell::setGameRunning(bool running)
@@ -141,6 +189,15 @@ const QPixmap& ZeroShell::coverBackground(const QString& path)
 void ZeroShell::paintEvent(QPaintEvent*)
 {
     const auto& t = Theme::current();
+    // The featured instance's video behind its page (Home): cover-cropped, under the theme's dim or at least a light scrim for the text.
+    if (pageVideoShown() && m_pageVideo && !m_pageVideo->failed() && !m_pageVideo->frame().isNull()) {
+        const QImage& frame = m_pageVideo->frame();
+        QPainter p(this);
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
+        p.drawImage(QRectF(rect()), frame, QRectF(ZeroVideoBackground::coverRect(frame.size(), size())));
+        p.fillRect(rect(), withAlpha(t.bg, qBound(Tokens::pageVideoMinDim, t.backgroundDim, 1.0)));
+        return;
+    }
     // A custom theme's background video: the current frame, cover-cropped + dim, drawn straight from the decoded image. Until the
     // first frame arrives, or when the video cannot be played, the flat background below shows instead.
     if (!t.backgroundVideo.isEmpty() && m_video && !m_video->failed() && !m_video->frame().isNull()) {
@@ -247,7 +304,7 @@ void ZeroShell::showPage(const QString& id)
     const Transition::Snapshot before = first ? Transition::Snapshot() : Transition::capture(m_stack);
     m_current = id;
     m_stack->setCurrentWidget(page);
-    updateVideoConditions();
+    syncPageVideo();
     m_topBar->showPage(page, !first);  // title / subtitle / actions crossfade
     if (!before.isNull()) {
         m_stack->layout()->activate();  // the new page needs its geometry before its picture is taken

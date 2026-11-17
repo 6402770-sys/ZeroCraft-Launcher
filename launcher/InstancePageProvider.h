@@ -19,6 +19,7 @@
 #include "ui/zero/instance/ModsPage.h"  // ZERO
 #include "ui/zero/instance/ResourcePacksPage.h"  // ZERO
 #include "ui/zero/instance/ShaderPacksPage.h"    // ZERO
+#include "ui/zero/instance/TimelinePage.h"        // ZERO
 #include "ui/pages/instance/WorldListPage.h"
 
 class InstancePageProvider : protected QObject, public BasePageProvider {
@@ -32,11 +33,15 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
         QList<BasePage*> values;
         values.append(new LogPage(inst));
         values.append(new VersionPage(inst));
+        // ZERO: Timeline (what changed, with Undo). Its Undo reuses the flows of the Mods and Resource Packs pages, so those are made first.
+        auto* modsPage = new Zero::ModsUi::ModsPage(inst, inst->loaderModList());  // ZERO: replaces ModFolderPage (same id "mods")
+        auto* packsPage = new Zero::PacksUi::ResourcePacksPage(inst, inst->resourcePackList());  // ZERO: replaces ResourcePackPage (same id "resourcepacks")
+        values.append(new Zero::TimelineUi::TimelinePage(inst, modsPage, packsPage));  // ZERO
         values.append(ManagedPackPage::createPage(inst));
-        values.append(new Zero::ModsUi::ModsPage(inst, inst->loaderModList()));  // ZERO: replaces ModFolderPage (same id "mods")
+        values.append(modsPage);
         values.append(new CoreModFolderPage(inst, inst->coreModList()));
         values.append(new NilModFolderPage(inst, inst->nilModList()));
-        values.append(new Zero::PacksUi::ResourcePacksPage(inst, inst->resourcePackList()));  // ZERO: replaces ResourcePackPage (same id "resourcepacks")
+        values.append(packsPage);
         values.append(new GlobalDataPackPage(inst));
         values.append(new TexturePackPage(inst, inst->texturePackList()));
         values.append(new Zero::ShadersUi::ShaderPacksPage(inst, inst->shaderPackList()));  // ZERO: replaces ShaderPackPage (same id "shaderpacks")

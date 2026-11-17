@@ -34,6 +34,8 @@ constexpr int kKeep = 2;  ///< snapshots kept per instance (they are big)
 inline constexpr char kOutcomePending[] = "pending";  ///< the update has not finished (or the launcher ended in the middle of it)
 inline constexpr char kOutcomeOk[] = "ok";
 inline constexpr char kOutcomeFailed[] = "failed";
+inline constexpr char kKindUpdate[] = "update";        ///< taken before a modpack update (the default of a snapshot without a kind)
+inline constexpr char kKindBringBack[] = "bring-back";  ///< taken before changes of a test copy were brought back (zero/sandbox)
 
 /// Seams for tests; every member left empty uses the real implementation.
 struct Hooks {
@@ -58,6 +60,8 @@ struct Meta {
     QString oldVersion;    ///< ManagedPackVersionName before the update
     QString newVersion;    ///< the version the update goes to (may be empty)
     QString gameDir;       ///< the game folder relative to the instance folder (".minecraft" / "minecraft", empty = the instance folder)
+    QString kind;          ///< kKindUpdate (empty = the same) | kKindBringBack
+    QString label;         ///< what the snapshot was taken for, shown to the user ("Before bringing back changes from Pack (test copy)")
 };
 
 struct Info {

@@ -54,6 +54,8 @@
 #include "ui/zero/pages/ElidedLabel.h"
 #include "ui/zero/pages/IconTile.h"
 #include "ui/zero/pages/InstanceInfo.h"
+#include "ui/zero/sandbox/SandboxBanner.h"
+#include "zero/profiles/InstanceProfile.h"
 
 #include "InstancePageProvider.h"
 
@@ -209,7 +211,21 @@ QWidget* InstanceWindow::buildInstanceHeader()
     row->addLayout(texts, 1);
     connect(m_instance, &BaseInstance::runningStatusChanged, this, &InstanceWindow::updateStatePill);
     updateStatePill();
-    return card;
+
+    // "Try it in a copy": on a test copy, a compact banner under the card (the clicks go to MainWindow through SandboxUi::Requests)
+    auto* host = new QWidget;
+    auto* column = new QVBoxLayout(host);
+    column->setContentsMargins(0, 0, 0, 0);
+    column->setSpacing(Tokens::spaceSm);
+    column->addWidget(card);
+    m_sandboxBanner = new SandboxUi::SandboxBanner(SandboxUi::SandboxBanner::Look::Compact, host);
+    column->addWidget(m_sandboxBanner);
+    m_sandboxBanner->refresh(m_instance);
+    connect(Profile::Notifier::instance(), &Profile::Notifier::profileChanged, this, [this](const QString& id) {
+        if (id == m_instance->id())
+            m_sandboxBanner->refresh(m_instance);
+    });
+    return host;
 }
 
 void InstanceWindow::updateStatePill()
@@ -219,6 +235,8 @@ void InstanceWindow::updateStatePill()
     const bool running = m_instance->isRunning();
     m_statePill->setText(running ? tr("Running") : tr("Not running"));
     m_statePill->setTone(running ? Zero::PillTag::Tone::Success : Zero::PillTag::Tone::Plain);
+    if (m_sandboxBanner)
+        m_sandboxBanner->refresh(m_instance);  // ZERO: its buttons are off while the game runs
 }
 
 void InstanceWindow::updateButtons()

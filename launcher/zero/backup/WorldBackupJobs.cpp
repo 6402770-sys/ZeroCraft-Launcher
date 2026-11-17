@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "WorldBackupJobs.h"
 
+#include <algorithm>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -69,16 +71,52 @@ WorldBackupJobs::~WorldBackupJobs()
         unlock(it.value());
 }
 
-QString WorldBackupJobs::backupDir(const Worlds::WorldEntry& entry) const
+QString WorldBackupJobs::activeRoot() const
 {
-    return QDir(m_root).filePath(entry.instanceId + QLatin1Char('/') + entry.folderName);
+    return Zero::Backup::activeRoot(m_root, chosenFolder());
 }
 
-bool WorldBackupJobs::ownsBackup(const Worlds::WorldEntry& entry, const QString& zipPath) const
+QStringList WorldBackupJobs::allRoots() const
 {
-    // only this world's own backups may be restored over it / deleted through it
-    return QDir::cleanPath(QFileInfo(zipPath).absolutePath()).compare(QDir::cleanPath(QFileInfo(backupDir(entry)).absoluteFilePath()),
-                                                                      Qt::CaseInsensitive) == 0;
+    return mergeRoots(m_root, m_dest.knownRoots ? m_dest.knownRoots() : QStringList(), activeRoot());
+}
+
+QStringList WorldBackupJobs::backupDirs(const Worlds::WorldEntry& entry) const
+{
+    QStringList dirs;
+    for (const QString& root : allRoots())
+        dirs << worldBackupDirIn(root, entry.instanceId, entry.folderName);
+    return dirs;
+}
+
+void WorldBackupJobs::rememberRoot(const QString& root)
+{
+    if (m_dest.rootUsed && !root.isEmpty())
+        m_dest.rootUsed(root);
+}
+
+QString WorldBackupJobs::backupDir(const Worlds::WorldEntry& entry) const
+{
+    const QString active = worldBackupDirIn(activeRoot(), entry.instanceId, entry.folderName);
+    if (QFileInfo::exists(active))
+        return active;
+    for (const QString& dir : backupDirs(entry)) {
+        if (QFileInfo::exists(dir))
+            return dir;
+    }
+    return active;
+}
+
+QString WorldBackupJobs::rootOwning(const Worlds::WorldEntry& entry, const QString& zipPath) const
+{
+    // only this world's own backups, in a root ZERO has used, may be restored over it / deleted through it
+    const QString zipDir = QDir::cleanPath(QFileInfo(zipPath).absolutePath());
+    for (const QString& root : allRoots()) {
+        const QString dir = QDir::cleanPath(QFileInfo(worldBackupDirIn(root, entry.instanceId, entry.folderName)).absoluteFilePath());
+        if (zipDir.compare(dir, Qt::CaseInsensitive) == 0)
+            return root;
+    }
+    return {};
 }
 
 bool WorldBackupJobs::refuse(const QString& key, const QString& reason, bool automatic)
@@ -105,15 +143,23 @@ bool WorldBackupJobs::begin(const Worlds::WorldEntry& entry, Op op, bool automat
     return true;
 }
 
-void WorldBackupJobs::finish(const QString& key, const QString& instanceId, Op op, bool ok, const QString& message)
+void WorldBackupJobs::finish(const QString& key, const QString& instanceId, Op op, const Outcome& outcome)
 {
     if (m_active.remove(key) == 0)
         return;
     m_activeInst.remove(key);
     const bool automatic = m_activeAuto.remove(key);
     unlock(instanceId);
-    emit jobFinished(key, ok, message, automatic);
-    if (ok && op == Op::Restore)
+    QString message = outcome.message;
+    if (outcome.ok && outcome.fellBackFrom.isEmpty() && !outcome.usedRoot.isEmpty() &&
+        QDir::cleanPath(outcome.usedRoot).compare(QDir::cleanPath(m_root), Qt::CaseInsensitive) != 0)
+        rememberRoot(outcome.usedRoot);  // the default root is always known
+    if (outcome.ok && !outcome.fellBackFrom.isEmpty()) {
+        message += QStringLiteral(". ") + fallbackMessage(outcome.fellBackFrom);
+        emit fellBackToDefault(key, outcome.fellBackFrom);
+    }
+    emit jobFinished(key, outcome.ok, message, automatic);
+    if (outcome.ok && op == Op::Restore)
         emit worldRestored(key);
     emit backupsChanged(key);
 }
@@ -126,26 +172,35 @@ bool WorldBackupJobs::backup(const Worlds::WorldEntry& entry, Kind kind)
         return false;
     const QString key = entry.key();
     const QString instanceId = entry.instanceId;
-    const QString dir = backupDir(entry);
+    const QString defaultRoot = m_root;
+    const QString chosen = chosenFolder();  // read now, on the GUI thread
+    const QString folderName = entry.folderName;
     const QString folder = entry.folderPath;
     const BackupMeta meta = metaOf(entry);
     const Hooks hooks = m_hooks;
 
     // The pool thread never touches `this` or reads the QPointer: it posts to the application object and the pointer is checked
-    // there, on the GUI thread.
+    // there, on the GUI thread. The destination is probed on the pool too (a cloud or network folder can be slow).
     QPointer<WorldBackupJobs> self(this);
-    QThreadPool::globalInstance()->start([self, key, instanceId, dir, folder, meta, hooks, kind]() {
+    QThreadPool::globalInstance()->start([self, key, instanceId, defaultRoot, chosen, folderName, folder, meta, hooks, kind]() {
+        const Resolved target = resolveRoot(defaultRoot, chosen);
+        const QString dir = worldBackupDirIn(target.root, instanceId, folderName);
         const BackupResult r = createBackup(folder, dir, kind, meta, hooks);
         if (r.ok)
             applyRetention(dir, { r.zipPath });
+        Outcome outcome;
+        outcome.ok = r.ok;
+        outcome.message = r.ok ? tr("Backup created") : r.error;
+        outcome.usedRoot = target.root;
+        outcome.fellBackFrom = target.fellBack ? target.chosenFolder : QString();
         auto* app = QCoreApplication::instance();
         if (!app)
             return;
         QMetaObject::invokeMethod(
             app,
-            [self, key, instanceId, r]() {
+            [self, key, instanceId, outcome]() {
                 if (self)
-                    self->finish(key, instanceId, Op::Backup, r.ok, r.ok ? tr("Backup created") : r.error);
+                    self->finish(key, instanceId, Op::Backup, outcome);
             },
             Qt::QueuedConnection);
     });
@@ -155,29 +210,39 @@ bool WorldBackupJobs::backup(const Worlds::WorldEntry& entry, Kind kind)
 bool WorldBackupJobs::restore(const Worlds::WorldEntry& entry, const QString& zipPath)
 {
     const QString key = entry.key();
-    if (!ownsBackup(entry, zipPath))
+    if (rootOwning(entry, zipPath).isEmpty())
         return refuse(key, tr("This backup does not belong to this world."));
     if (!begin(entry, Op::Restore))
         return false;
     const QString instanceId = entry.instanceId;
-    const QString dir = backupDir(entry);
+    const QString defaultRoot = m_root;
+    const QString chosen = chosenFolder();
+    const QString folderName = entry.folderName;
     const QString folder = entry.folderPath;
     const BackupMeta meta = metaOf(entry);
     const Hooks hooks = m_hooks;
 
+    // The backup may come from any known root; its safety backup (and the retention) belong to the destination in use.
     QPointer<WorldBackupJobs> self(this);
-    QThreadPool::globalInstance()->start([self, key, instanceId, dir, folder, meta, hooks, zipPath]() {
+    QThreadPool::globalInstance()->start([self, key, instanceId, defaultRoot, chosen, folderName, folder, meta, hooks, zipPath]() {
+        const Resolved target = resolveRoot(defaultRoot, chosen);
+        const QString dir = worldBackupDirIn(target.root, instanceId, folderName);
         const RestoreResult r = restoreBackup(zipPath, folder, dir, meta, hooks);
         if (r.ok)
             applyRetention(dir, { r.safetyZip, zipPath });
+        Outcome outcome;
+        outcome.ok = r.ok;
+        outcome.message = r.ok ? tr("World restored") : r.error;
+        outcome.usedRoot = target.root;
+        outcome.fellBackFrom = target.fellBack ? target.chosenFolder : QString();
         auto* app = QCoreApplication::instance();
         if (!app)
             return;
         QMetaObject::invokeMethod(
             app,
-            [self, key, instanceId, r]() {
+            [self, key, instanceId, outcome]() {
                 if (self)
-                    self->finish(key, instanceId, Op::Restore, r.ok, r.ok ? tr("World restored") : r.error);
+                    self->finish(key, instanceId, Op::Restore, outcome);
             },
             Qt::QueuedConnection);
     });
@@ -187,26 +252,29 @@ bool WorldBackupJobs::restore(const Worlds::WorldEntry& entry, const QString& zi
 bool WorldBackupJobs::remove(const Worlds::WorldEntry& entry, const QString& zipPath)
 {
     const QString key = entry.key();
-    if (!ownsBackup(entry, zipPath))
+    const QString root = rootOwning(entry, zipPath);
+    if (root.isEmpty())
         return refuse(key, tr("This backup does not belong to this world."));
     if (!begin(entry, Op::Remove))
         return false;
     const QString instanceId = entry.instanceId;
-    const QString root = m_root;
     const Hooks hooks = m_hooks;
 
     QPointer<WorldBackupJobs> self(this);
     QThreadPool::globalInstance()->start([self, key, instanceId, root, zipPath, hooks]() {
         QString error;
         const bool ok = deleteBackup(zipPath, root, &error, hooks);
+        Outcome outcome;
+        outcome.ok = ok;
+        outcome.message = ok ? tr("Backup deleted") : error;
         auto* app = QCoreApplication::instance();
         if (!app)
             return;
         QMetaObject::invokeMethod(
             app,
-            [self, key, instanceId, ok, error]() {
+            [self, key, instanceId, outcome]() {
                 if (self)
-                    self->finish(key, instanceId, Op::Remove, ok, ok ? tr("Backup deleted") : error);
+                    self->finish(key, instanceId, Op::Remove, outcome);
             },
             Qt::QueuedConnection);
     });
@@ -218,11 +286,14 @@ void WorldBackupJobs::refreshList(const Worlds::WorldEntry& entry)
     const QString key = entry.key();
     const quint64 generation = ++m_nextGen;
     m_listGen.insert(key, generation);
-    const QString dir = backupDir(entry);
+    const QStringList dirs = backupDirs(entry);  // every root ever used: old backups stay visible after the destination changed
 
     QPointer<WorldBackupJobs> self(this);
-    QThreadPool::globalInstance()->start([self, key, dir, generation]() {
-        const QList<BackupInfo> list = listBackups(dir);
+    QThreadPool::globalInstance()->start([self, key, dirs, generation]() {
+        QList<BackupInfo> list;
+        for (const QString& dir : dirs)
+            list.append(listBackups(dir));
+        std::stable_sort(list.begin(), list.end(), [](const BackupInfo& a, const BackupInfo& b) { return a.createdMs > b.createdMs; });
         auto* app = QCoreApplication::instance();
         if (!app)
             return;

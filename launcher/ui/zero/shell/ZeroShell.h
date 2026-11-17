@@ -55,6 +55,21 @@ class ZeroShell : public QWidget {
     void setGameRunning(bool running);
     bool gameRunning() const { return m_gameRunning; }
 
+    /// Which background video the shell uses on `page`.
+    enum class VideoSource { Theme, Page };
+    /// Pure rule: the per-page video (`overridePath` of `overridePage`, e.g. the featured instance's video on Home) wins on its own page
+    /// only; it is never used with reduced motion (the theme background shows, nothing extra decodes). A running game does not change
+    /// the choice: it only pauses the playing video (the player keeps its still frame).
+    static VideoSource chooseVideo(const QString& page, const QString& overridePage, const QString& overridePath, bool motionOff,
+                                   bool gameRunning);
+    /// The video that plays behind `pageId` (empty path = none; muted, same play rules as the theme video). On every other page the
+    /// theme background shows as before. Only one decoder runs: the theme video pauses while the page video is shown.
+    void setPageVideo(const QString& pageId, const QString& path);
+    /// The player of the page video (null until one was set); for tests.
+    ZeroVideoBackground* pageVideoBackground() const { return m_pageVideo; }
+    /// The page video is the one drawn right now.
+    bool pageVideoShown() const;
+
    signals:
     void pageChanged(const QString& id);
     /// Account menu: `anchor` is the global bottom-right corner of the top bar chip; place the menu's top-right corner
@@ -78,6 +93,7 @@ class ZeroShell : public QWidget {
     /// Follows the theme's video (creates / retargets / releases the player) and feeds it the play / pause inputs.
     void syncVideo();
     void updateVideoConditions();
+    void syncPageVideo();
 
     ZeroNavRail* m_rail;
     ZeroTopBar* m_topBar;
@@ -94,6 +110,9 @@ class ZeroShell : public QWidget {
     QPixmap m_bgScaled;    // cover-scaled to m_bgScaledSize (device pixels)
     QSize m_bgScaledSize;
     ZeroVideoBackground* m_video = nullptr;  // created with the first video theme
+    ZeroVideoBackground* m_pageVideo = nullptr;  // created with the first page video; holds a source only while it is shown
+    QString m_pageVideoPage;
+    QString m_pageVideoPath;
     bool m_gameRunning = false;
     QPointer<QWidget> m_watchedWindow;       // the top-level window whose minimized state the video follows
 };

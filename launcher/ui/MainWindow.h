@@ -354,6 +354,11 @@ class MainWindow : public QMainWindow {
     // ZERO: safe modpack update (docs/zero/ARCHITECTURE.md, "Modpack snapshots")
     bool saveCopyBeforeModpackUpdate(const QString& instanceId, const QString& newVersion, QString* zipPath);
     void rollBackModpackUpdate(const QString& instanceId);
+    // ZERO: "Try it in a copy" (docs/zero/ARCHITECTURE.md, "Test copies")
+    void tryInCopy(const QString& instanceId);
+    void bringChangesBack(const QString& copyId);
+    void discardTestCopy(const QString& copyId);
+    void keepTestCopy(const QString& copyId);
     void setCatBackground(bool enabled);
     void updateCatState();
     void updateInstanceToolIcon(QString new_icon);
@@ -385,6 +390,8 @@ class MainWindow : public QMainWindow {
     void toggleFavorite(const QString& instanceId);
     void chooseArtworkForSelected();
     void removeArtworkFromSelected();
+    void chooseBackgroundVideoForSelected();
+    void removeBackgroundVideoFromSelected();
     void editInstance(MinecraftInstance* instance);
 
    private:

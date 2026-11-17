@@ -17,6 +17,10 @@ class InstanceCopyTask : public InstanceTask {
    public:
     explicit InstanceCopyTask(BaseInstance* origInstance, const InstanceCopyPrefs& prefs);
 
+    // ZERO: "Try it in a copy": the copy gets ZeroSandboxOf=<id> in its instance.cfg (empty = a normal copy: the key is cleared, so copying a
+    // test copy by hand gives an ordinary instance).
+    void setZeroSandboxOf(const QString& originalId) { m_zeroSandboxOf = originalId; }
+
    protected:
     //! Entry point for tasks.
     virtual void executeTask() override;
@@ -36,4 +40,5 @@ class InstanceCopyTask : public InstanceTask {
     bool m_copySaves = false;
     bool m_linkRecursively = false;
     bool m_useClone = false;
+    QString m_zeroSandboxOf;  // ZERO
 };

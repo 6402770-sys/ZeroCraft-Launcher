@@ -133,7 +133,8 @@ QJsonObject metaToJson(const Meta& m, qint64 createdMs)
 {
     return QJsonObject{ { "instanceId", m.instanceId }, { "instanceName", m.instanceName }, { "packId", m.packId },
                         { "packName", m.packName },     { "oldVersion", m.oldVersion },     { "newVersion", m.newVersion },
-                        { "gameDir", m.gameDir },       { "createdMs", double(createdMs) } };
+                        { "gameDir", m.gameDir },       { "kind", m.kind },                 { "label", m.label },
+                        { "createdMs", double(createdMs) } };
 }
 
 void metaFromJson(const QJsonObject& o, Info* info)
@@ -145,6 +146,8 @@ void metaFromJson(const QJsonObject& o, Info* info)
     info->meta.oldVersion = o.value("oldVersion").toString();
     info->meta.newVersion = o.value("newVersion").toString();
     info->meta.gameDir = o.value("gameDir").toString();
+    info->meta.kind = o.value("kind").toString();
+    info->meta.label = o.value("label").toString();
     info->createdMs = qint64(o.value("createdMs").toDouble());
 }
 
@@ -340,8 +343,9 @@ CreateResult createSnapshot(const QString& instanceRoot, const QString& snapshot
     const QString gameDir = meta.gameDir;
     options.exclude = [gameDir](const QString& rel, bool) { return isExcluded(rel, gameDir); };
     options.fileName = uniqueName(snapshotsDir, now);
-    options.unsafeName = [](const QString& rel) {
-        return tr("This instance contains a file Windows cannot copy: %1. Rename or remove it, then update again.").arg(rel);
+    options.unsafeName = [bringBack = meta.kind == QLatin1String(kKindBringBack)](const QString& rel) {  // ZERO: the same snapshot serves "Try it in a copy"
+        return bringBack ? tr("This instance contains a file Windows cannot copy: %1. Rename or remove it, then try again.").arg(rel)
+                         : tr("This instance contains a file Windows cannot copy: %1. Rename or remove it, then update again.").arg(rel);
     };
     options.extra = metaToJson(meta, now);
     options.cancelled = control.cancelled;

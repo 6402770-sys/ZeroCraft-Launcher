@@ -892,14 +892,26 @@ SET(LAUNCHER_SOURCES
     zero/auth/EnsureAuthlibInjector.h
     zero/backup/AutoBackup.cpp
     zero/backup/AutoBackup.h
+    zero/backup/BackupDestination.cpp
+    zero/backup/BackupDestination.h
     zero/backup/PackSnapshot.cpp
     zero/backup/PackSnapshot.h
     zero/backup/PackSnapshotTasks.cpp
     zero/backup/PackSnapshotTasks.h
+    zero/backup/ScheduledBackup.cpp
+    zero/backup/ScheduledBackup.h
     zero/backup/WorldBackup.cpp
     zero/backup/WorldBackup.h
     zero/backup/WorldBackupJobs.cpp
     zero/backup/WorldBackupJobs.h
+    zero/sandbox/Sandbox.cpp
+    zero/sandbox/Sandbox.h
+    zero/sandbox/SandboxApply.cpp
+    zero/sandbox/SandboxApply.h
+    zero/sandbox/SandboxPlan.cpp
+    zero/sandbox/SandboxPlan.h
+    zero/sandbox/SandboxTasks.cpp
+    zero/sandbox/SandboxTasks.h
     zero/content/ContentFilter.cpp
     zero/content/ContentFilter.h
     zero/content/CreateInstanceModel.cpp
@@ -949,6 +961,8 @@ SET(LAUNCHER_SOURCES
     zero/downloads/DownloadCenter.h
     zero/downloads/DownloadText.cpp
     zero/downloads/DownloadText.h
+    zero/history/ChangeTimeline.cpp
+    zero/history/ChangeTimeline.h
     zero/history/PlaytimeStats.cpp
     zero/history/PlaytimeStats.h
     zero/history/SessionHistory.cpp
@@ -1198,6 +1212,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/instance/ShaderPacksPage.cpp
     ui/zero/instance/ShaderPacksPage.h
     ui/zero/pages/ModHealthView.cpp
+    ui/zero/instance/TimelinePage.cpp
+    ui/zero/instance/TimelinePage.h
     ui/zero/pages/PlaytimeView.cpp
     ui/zero/pages/PlaytimeView.h
     ui/zero/pages/ModHealthView.h
@@ -1280,6 +1296,10 @@ SET(LAUNCHER_SOURCES
     ui/zero/content/TargetInstanceButton.h
     ui/zero/prelaunch/PreLaunchDialog.cpp
     ui/zero/prelaunch/PreLaunchDialog.h
+    ui/zero/sandbox/SandboxBanner.cpp
+    ui/zero/sandbox/SandboxBanner.h
+    ui/zero/sandbox/SandboxDialogs.cpp
+    ui/zero/sandbox/SandboxDialogs.h
     ui/zero/perf/PerformanceDialog.cpp
     ui/zero/perf/PerformanceDialog.h
     ui/zero/palette/PaletteDraw.cpp

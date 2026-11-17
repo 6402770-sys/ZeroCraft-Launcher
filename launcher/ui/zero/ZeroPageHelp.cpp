@@ -70,6 +70,9 @@ const QHash<QString, Page>& pages()
           { tr("Add, update, enable or disable mods"),
             tr("Mods change or add to the game. Download them from Modrinth or CurseForge, drop jar files here, update "
                "them, or turn them off without deleting them. Tools > Mod Health checks for missing pieces.") } },
+        { "timeline",
+          { tr("What changed, with Undo"),
+            tr("What changed in this instance. Undo the newest change of each kind.") } },
         { "coremods", { tr("Old-style core mods"), tr("Core mods for very old Forge versions. Most players never need this page.") } },
         { "nilmods", { tr("NilLoader mods"), tr("Mods for NilLoader. Most players never need this page.") } },
         { "resourcepacks",

@@ -37,6 +37,7 @@
 
 #include <QDialog>
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QRadioButton;
 #include <memory>
@@ -96,4 +97,13 @@ class LauncherPage : public QWidget, public BasePage {
     QWidget* m_skipRow = nullptr;
     QLabel* m_skipLabel = nullptr;
     void refreshSkippedInstances();
+    // ZERO: "World backups" (ZeroAutoBackupWorlds, ZeroBackupSchedule, ZeroBackupRoot)
+    QCheckBox* m_backupAfterPlay = nullptr;
+    QComboBox* m_backupSchedule = nullptr;
+    QComboBox* m_backupDestination = nullptr;
+    QLabel* m_backupPath = nullptr;
+    QLabel* m_backupWarning = nullptr;
+    int m_backupCustomIndex = -1;  ///< the combo item of a folder that is neither the default nor a detected cloud folder
+    void selectBackupFolder(const QString& folder);
+    void refreshBackupDestination();
 };

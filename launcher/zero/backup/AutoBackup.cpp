@@ -41,8 +41,10 @@ qint64 levelDatModifiedMs(const QString& worldFolder)
 AutoBackup::AutoBackup(WorldBackupJobs* jobs, EnabledFn enabled, SourceLookup source, Clock clock, QObject* parent)
     : QObject(parent), m_jobs(jobs), m_enabled(std::move(enabled)), m_source(std::move(source)), m_clock(std::move(clock))
 {
-    if (m_jobs)
+    if (m_jobs) {
         connect(m_jobs, &WorldBackupJobs::jobFinished, this, &AutoBackup::onJobFinished);
+        connect(m_jobs, &WorldBackupJobs::fellBackToDefault, this, &AutoBackup::onFellBack);
+    }
     if (!g_global)
         g_global = this;
 }
@@ -185,12 +187,22 @@ void AutoBackup::onJobFinished(const QString& key, bool ok, const QString& messa
     }
 }
 
+void AutoBackup::onFellBack(const QString& key, const QString& chosenFolder)
+{
+    for (auto it = m_runs.begin(); it != m_runs.end(); ++it) {
+        if (it->current == key) {
+            it->fallbackFrom = chosenFolder;
+            return;
+        }
+    }
+}
+
 void AutoBackup::finishRun(QString instanceId)
 {
     const Run run = m_runs.take(instanceId);
     WorldBackupJobs::unlockInstance(instanceId);
     if (run.backedUp + run.failed + run.tooLarge.size() > 0)
-        emit finished(instanceId, run.instanceName, run.backedUp, run.tooLarge, run.failed, run.firstError);
+        emit finished(instanceId, run.instanceName, run.backedUp, run.tooLarge, run.failed, run.firstError, run.fallbackFrom);
 }
 
 }  // namespace Backup

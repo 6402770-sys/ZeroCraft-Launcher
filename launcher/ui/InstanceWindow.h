@@ -50,6 +50,9 @@
 class QPushButton;
 namespace Zero {
 class PillTag;
+namespace SandboxUi {
+class SandboxBanner;
+}
 }
 class PageContainer;
 class InstanceWindow : public QMainWindow, public BasePageContainer {
@@ -99,4 +102,5 @@ class InstanceWindow : public QMainWindow, public BasePageContainer {
     QPushButton* m_restartButton = nullptr;
     QPushButton* m_killButton = nullptr;
     Zero::PillTag* m_statePill = nullptr;  // ZERO
+    Zero::SandboxUi::SandboxBanner* m_sandboxBanner = nullptr;  // ZERO: "Try it in a copy"
 };

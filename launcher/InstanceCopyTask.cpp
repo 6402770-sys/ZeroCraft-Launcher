@@ -135,6 +135,7 @@ void InstanceCopyTask::copyFinished()
     inst->setName(name());
     inst->setIconKey(m_instIcon);
     inst->regenerateUuid();
+    inst->settings()->set("ZeroSandboxOf", m_zeroSandboxOf);  // ZERO: "Try it in a copy" (empty clears a link copied from a test copy)
     if (!m_keepPlaytime) {
         inst->resetTimePlayed();
     }

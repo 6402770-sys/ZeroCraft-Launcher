@@ -40,9 +40,11 @@
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroTransition.h"
+#include "ui/zero/sandbox/SandboxBanner.h"
 #include "zero/backup/PackSnapshot.h"
 #include "zero/mods/ModHealth.h"
 #include "zero/profiles/InstanceProfile.h"
+#include "zero/sandbox/Sandbox.h"
 
 namespace Zero {
 
@@ -183,6 +185,11 @@ InstanceDetailsPanel::InstanceDetailsPanel(QWidget* parent) : ZeroCard(parent)
     auto* lay = new QVBoxLayout(content);
     lay->setContentsMargins(Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceLg, Tokens::spaceSm);
     lay->setSpacing(0);
+
+    // ZERO: "Try it in a copy": on a test copy, what it is and how to bring the changes back or discard it
+    m_sandbox = new SandboxUi::SandboxBanner(SandboxUi::SandboxBanner::Look::Card, content);
+    lay->addWidget(m_sandbox);
+    lay->addSpacing(Tokens::spaceMd);
 
     // ----- visual: icon tile, or the artwork with the icon as a badge -----
     m_icon = new IconTile(120, 96, content);
@@ -397,7 +404,22 @@ void InstanceDetailsPanel::setActions(const LibraryActions& actions)
     connect(m_removeArtwork, &QPushButton::clicked, this, &InstanceDetailsPanel::removeArtworkRequested);
     m_removeArtwork->hide();
     insert(m_removeArtwork);
+    m_setVideo = addActionButton(parent, QStringLiteral("film"), tr("Set background video…"), nullptr);
+    connect(m_setVideo, &QPushButton::clicked, this, &InstanceDetailsPanel::setBackgroundVideoRequested);
+    insert(m_setVideo);
+    m_removeVideo = addActionButton(parent, QStringLiteral("circle-x"), tr("Remove video"), nullptr);
+    connect(m_removeVideo, &QPushButton::clicked, this, &InstanceDetailsPanel::removeBackgroundVideoRequested);
+    m_removeVideo->hide();
+    insert(m_removeVideo);
+    m_videoNote = makeLabel(tr("Plays behind Home while this instance is featured."), Role::Caption, parent);
+    m_videoNote->setWordWrap(true);
+    m_videoNote->hide();
+    lay->insertWidget(i++, m_videoNote);
     insert(addActionButton(parent, QStringLiteral("copy"), tr("Copy"), actions.copy));
+    m_tryCopy = addActionButton(parent, QStringLiteral("git-branch"), tr("Try it in a copy"), nullptr);  // ZERO
+    m_tryCopy->setToolTip(tr("Make a test copy, change things there, then bring the changes back or discard it"));
+    connect(m_tryCopy, &QPushButton::clicked, this, &InstanceDetailsPanel::tryCopyRequested);
+    insert(m_tryCopy);
     auto* exportButton = addActionButton(parent, QStringLiteral("archive"), tr("Export"), nullptr);
     connect(exportButton, &QPushButton::clicked, this, [this]() {
         if (m_instance)
@@ -416,6 +438,30 @@ void InstanceDetailsPanel::setActions(const LibraryActions& actions)
     refreshIcons();
     syncButtons();
     refreshRollback();
+    refreshSandbox();
+}
+
+void InstanceDetailsPanel::setBusyReason(std::function<QString(const QString&)> busyReason)
+{
+    m_busyReason = std::move(busyReason);
+    refreshSandbox();
+}
+
+// ZERO: the "Try it in a copy" button (not on a test copy) and the banner of a test copy follow the instance and its busy state.
+void InstanceDetailsPanel::refreshSandbox()
+{
+    const bool copy = m_instance && Sandbox::isTestCopy(m_instance);
+    const QString reason = m_instance && m_busyReason ? m_busyReason(m_instance->id()) : QString();
+    if (m_tryCopy) {
+        m_tryCopy->setVisible(m_instance && !copy);
+        m_tryCopy->setEnabled(reason.isEmpty());
+        m_tryCopy->setToolTip(reason.isEmpty() ? tr("Make a test copy, change things there, then bring the changes back or discard it") : reason);
+    }
+    if (m_sandbox) {
+        m_sandbox->refresh(copy ? m_instance.data() : nullptr);
+        if (copy && !reason.isEmpty())
+            m_sandbox->setBusyReason(reason);
+    }
 }
 
 void InstanceDetailsPanel::refreshRollback()
@@ -423,17 +469,27 @@ void InstanceDetailsPanel::refreshRollback()
     if (!m_rollback)
         return;
     Backup::Pack::Info snapshot;
-    if (m_instance && m_instance->isManagedPack()) {
+    if (m_instance) {
         snapshot = Backup::Pack::newestActive(Backup::Pack::listSnapshots(Backup::Pack::snapshotsDirFor(APPLICATION->dataRoot(), m_instance->id())),
                                               m_instance->getManagedPackID());
+        // ZERO: a modpack update snapshot only makes sense for a modpack; the one of "Try it in a copy" belongs to any instance
+        if (snapshot.valid && snapshot.meta.kind != QLatin1String(Backup::Pack::kKindBringBack) && !m_instance->isManagedPack())
+            snapshot = {};
     }
     m_rollback->setVisible(snapshot.valid);
     if (!snapshot.valid)
         return;
+    const bool bringBack = snapshot.meta.kind == QLatin1String(Backup::Pack::kKindBringBack);
+    m_rollback->setText(bringBack ? tr("Undo bringing changes back") : tr("Roll back update"));
     const QString back = snapshot.meta.oldVersion.isEmpty() ? tr("the previous version") : snapshot.meta.oldVersion;
     const bool running = m_instance->isRunning();
     m_rollback->setEnabled(!running);
-    m_rollback->setToolTip(running ? tr("Close the game to roll back") : tr("Back to %1 (saved %2)").arg(back, Format::relativeTime(snapshot.createdMs)));
+    if (running)
+        m_rollback->setToolTip(bringBack ? tr("Close the game to undo this") : tr("Close the game to roll back"));
+    else if (bringBack)
+        m_rollback->setToolTip(tr("Go back to how it was before the changes of the test copy (saved %1)").arg(Format::relativeTime(snapshot.createdMs)));
+    else
+        m_rollback->setToolTip(tr("Back to %1 (saved %2)").arg(back, Format::relativeTime(snapshot.createdMs)));
 }
 
 void InstanceDetailsPanel::refreshIcons()
@@ -449,6 +505,7 @@ void InstanceDetailsPanel::refreshPlayButton(bool running, bool canLaunch)
         m_boost->setVisible(m_instance && !running);
     m_play->setInstanceId(m_instance ? m_instance->id() : QString());
     m_play->setCanLaunch(canLaunch && m_actions.launch && m_actions.launch->isEnabled());
+    refreshSandbox();  // ZERO: the running state decides whether "Try it in a copy" and the banner can act
 }
 
 void InstanceDetailsPanel::syncButtons()
@@ -523,12 +580,18 @@ void InstanceDetailsPanel::refreshProfile(bool reloadEditors)
     m_artHeader->art()->setArtwork(artwork);
     if (m_removeArtwork)
         m_removeArtwork->setVisible(hasArtwork);
+    const bool hasVideo = !Profile::backgroundVideoPath(m_instance).isEmpty();
+    if (m_removeVideo)
+        m_removeVideo->setVisible(hasVideo);
+    if (m_videoNote)
+        m_videoNote->setVisible(hasVideo);
 
     if (m_boost)
         m_boost->setVisible(!m_instance->isRunning());
     if (m_checkMods)  // only for instances with a mod loader (a small read of mmc-pack.json)
         m_checkMods->setVisible(Mods::readInstanceContext(m_instance->instanceRoot()).loader != Mods::InstanceLoader::None);
     refreshRollback();
+    refreshSandbox();
 
     const InstanceInfo info = InstanceInfo::of(m_instance);
     QStringList meta;

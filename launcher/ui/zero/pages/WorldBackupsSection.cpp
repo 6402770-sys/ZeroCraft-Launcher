@@ -21,6 +21,7 @@
 #include "ui/zero/ZeroPaint.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "settings/Setting.h"
 #include "settings/SettingsObject.h"
 #include "ui/zero/ZeroToast.h"
 #include "zero/backup/WorldBackupJobs.h"
@@ -159,6 +160,14 @@ WorldBackupsSection::WorldBackupsSection(QWidget* parent) : QWidget(parent)
     autoBackup->setChecked(APPLICATION->settings()->get("ZeroAutoBackupWorlds").toBool());
     connect(autoBackup, &QCheckBox::toggled, this,
             [](bool on) { APPLICATION->settings()->set("ZeroAutoBackupWorlds", on); });
+    // the same setting is also changed in Settings > Launcher: follow it
+    connect(APPLICATION->settings()->getSetting("ZeroAutoBackupWorlds").get(), &Setting::SettingChanged, autoBackup, [autoBackup]() {
+        const bool on = APPLICATION->settings()->get("ZeroAutoBackupWorlds").toBool();
+        if (autoBackup->isChecked() != on) {
+            const QSignalBlocker block(autoBackup);
+            autoBackup->setChecked(on);
+        }
+    });
     lay->addWidget(autoBackup);
 
     connect(&Theme::instance(), &Theme::changed, this, [this]() {

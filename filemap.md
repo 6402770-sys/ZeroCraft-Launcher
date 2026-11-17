@@ -49,6 +49,7 @@
 - `launcher/zero/security/` — malware look (read-only): `MalwareSignatures` (data-driven public IOC list, `parseSignatures` / `builtinSignatures`), `JarScanner` (`scanJar` one nesting level, `ScanCache` in `<instance>/.zero/scan-cache.json`, `scanModsFolder` with `cachedOnly`), `SystemIndicators` (documented fractureiser traces on the PC, injectable `SystemEnv`); no widgets
 - `launcher/resources/zero/security/malware-signatures.json` — the signature list compiled into the qrc (`:/zero/security/malware-signatures.json`); every entry names its primary source
 - `launcher/ui/zero/prelaunch/PreLaunchDialog.{h,cpp}` — "Before you play" dialog (checking state with progress, results grouped MUST FIX / WORTH A LOOK, fix buttons, opt-out, second question for "Play anyway" with malware) and `checkBeforeLaunch` / `runBeforeYouPlay`, the flow `Application::launch` calls
+- `launcher/ui/zero/pages/PlaytimeView.{h,cpp}` — Tools > Playtime UI (3 stat tiles, painted 14-day bar chart `PlaytimeChart`, By instance rows with top 10 / Show all, empty state; injectable data sources)
 - `launcher/ui/zero/pages/ModHealthView.{h,cpp}` — Tools > Mod Health UI (instance picker, summary card, findings by confidence, repair buttons with preview dialog + Undo toast, Disabled mods card, empty states; uses `zero/mods`)
 - `launcher/ui/zero/pages/JavaDoctorView.{h,cpp}` — Tools > Java Doctor UI (automatic Java card, instances with status pills and "Use Java N", runtimes)
 - `launcher/ui/zero/PillTag.{h,cpp}` — shared bordered pill label (plain / status tones)
@@ -116,7 +117,7 @@
 - `launcher/ui/zero/updates/UpdateSweepSetup.*` — the real hooks of the engine: `InstanceModCheck` (loads the instance's mod folder, then Prism's checkers through `ModsUi::prismUpdateCheckFactory`), applier = mod snapshot + `applyUpdatesInBackground` + finalize; `createApplicationSweep`
 - `launcher/ui/zero/pages/HomeUpdatesSection.*` — Home "Updates" section: rows per instance with Update / Checking… / Queued / Downloading…, Check again, Update all, "Checked N ago"
 - `launcher/ui/zero/ZeroTray.*` — tray icon + menu (`TraySource` seams); `launcher/ui/zero/pages/{NowPlayingCard,LastSessionCard,HomeServersSection}.*` — Home cards
-- `launcher/zero/history/` — session history: `SessionHistory` (one record per launch, classification, JSON store, recorder slots; no widgets)
+- `launcher/zero/history/` — session history: `SessionHistory` (one record per launch, classification, JSON store, recorder slots; no widgets); `PlaytimeStats` (pure playtime numbers: 14 local-time day buckets with the midnight split, week / 30-day windows, longest session, by-instance shares, duration text, chart step)
 - `launcher/ui/zero/pages/` (Library 2.0) — `FilterChipBar` (scrollable single-select chips), `ArtworkCache` (`Artwork::cover`, `ArtworkView`), `FlowLayout` (wrapping layout for tags)
 - `launcher/zero/palette/CommandMatcher.*` — pure ranking logic of the palette (fuzzy score, aliases, recency, tie-breaks, highlight positions)
 - `launcher/resources/zero/` — `obsidian.qss` (base, token placeholders), `minecraft.qss` (per-theme overlay appended to the base), `zero.qrc`, `icons/` (Lucide SVGs + LICENSE)
@@ -167,6 +168,8 @@
 - `tests/WorldScanner_test.cpp` — world scan of real folder layouts, skipped entries, read-only guarantee, folder size (links / junctions), search / sort, scanner generations
 - `tests/UpdateSweep_test.cpp` — sweep engine with fake checks / applier / clock: one check at a time, skipped instances (running, busy, managed, nothing to check), timeout and error kept while the next instance is checked, summary round trip + vanished instances + corrupt file, 24 h rule / game running / setting off, updateInstance (fresh check, then applier), updateAll sequencing, entries dropped after Done, captions
 - `tests/ZeroHomeUpdatesSection_test.cpp` — Home Updates section (offscreen, real engine over fake checks): hidden when empty, rows + captions + "Checked … ago", button states, Update all / Check again / row button reach the engine, the checking line, row click; PNGs with `ZERO_UPDATES_SHOTS`
+- `tests/PlaytimeStats_test.cpp` — day buckets (midnight split, empty days, window edges), week / 30-day windows, longest, by-instance order and shares, duration text, chart step
+- `tests/ZeroPlaytimeView_test.cpp` — Playtime page offscreen: tiles, 14 bars + tooltips + accessible text, top 10 / Show all / row click, empty state, refresh on history change; PNG grabs with `ZERO_PLAYTIME_SHOTS`
 - `tests/SessionHistory_test.cpp` — launch classification, recorder sequences with injected clock, persistence, cap, corrupt / malformed files
 - `tests/CommandMatcher_test.cpp`, `tests/ZeroCommandPalette_test.cpp` — palette ranking; palette/sheet open, close, navigation, callbacks, focus, server entries
 - `tests/Zero*_test.cpp`, `tests/CrashDetective_test.cpp` — ZERO unit tests (in `LauncherTests`, listed in `tests/CMakeLists.txt`)

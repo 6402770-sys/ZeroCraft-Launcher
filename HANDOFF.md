@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-16 (session 16: Mission 004 B2 + B3 done and committed — resume at "Mission 004" › 🔴 RESUME HERE (B4). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-16 (session 16, LIMIT NEAR: Mission 004 B2 + B3 committed; B4 task 1 (Playtime) done in a checkpoint commit — resume at "Mission 004" › 🔴 RESUME HERE (B4). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -746,8 +746,29 @@ Status per batch is logged below as it lands.
   GUI thread so Prism tasks are never destroyed on a pool thread. Not driven by hand: real drops, real installs/updates in the background,
   Minecraft theme look (owner QA below). Tests: DropPlan, ZeroDropAddDialog, DownloadCenter, ZeroDownloadsPanel, UpdateSweep,
   ZeroHomeUpdatesSection (PNG env vars `ZERO_DROP_SHOTS`, `ZERO_DOWNLOADS_SHOTS`, `ZERO_UPDATES_SHOTS`).
-- 🔴 **RESUME HERE: B4** (playtime stats, scheduled backups + cloud folder, "Try it in a copy", change timeline with undo, per-instance
-  video background), then B5. Discord Application ID still to come from the owner (feature hidden until then).
+- 🔴 **RESUME HERE: B4, start at task 2**. Commits so far: `94378325e` (B2), `8894f9a2d` (B3), B4 task 1 checkpoint. B4 plan, one worker at a time, decided designs:
+  1. ✅ **Playtime stats** (done + reviewed, checkpoint commit; 100/100 + 25/25): pure `zero/history/PlaytimeStats` + Tools › Playtime
+     `ui/zero/pages/PlaytimeView` (tiles, 14-day chart, by instance), palette "Playtime", tests `PlaytimeStats_test`,
+     `ZeroPlaytimeView_test` (`ZERO_PLAYTIME_SHOTS`). Notes: other-day bars = accent at 55% (no subtle-accent token); "Last played" uses
+     `lastLaunch()` (Prism's `lastTimePlayed()` is a duration); "Show all" has no collapse. NEXT = task 2.
+  2. **Scheduled backups + cloud folder** (savvy-careful): setting for a backup root (empty = `<data>/zero/backups`; quick choices
+     OneDrive / Google Drive / Dropbox when detected + "Choose folder…", writes under `<chosen>/ZERO Backups/<instanceId>/<world>`, checked
+     writable, failure = warn + fall back to default, never silent); listing must show backups from the old AND new roots; schedule
+     Off / Every day / Every week for worlds changed since their last backup, only while no game runs, catch-up ~2 min after start;
+     UI in Settings › Launcher "World backups" group (After playing checkbox synced with `WorldBackupsSection`, schedule, destination).
+     Facts: `zero/backup/WorldBackup.h` (`backupsRoot`, `backupDirFor`, `listBackups`, `applyRetention`), `AutoBackup` built in
+     Application.cpp ~1157 with `ZeroAutoBackupWorlds`.
+  3. **Try it in a copy** (careful): Prism copy of the instance marked `ZeroSandboxOf=<id>`; banner in its Library details / instance
+     window "Test copy of X — Bring changes back / Discard"; bring back mods/config/resourcepacks/shaderpacks (worlds optional) after a
+     full copy of the original first (reuse `saveCopyBeforeModpackUpdate` / `rollBackModpackUpdate` = Undo).
+  4. **Change timeline with undo** (careful): per-instance "Timeline" page aggregating existing histories (mod snapshots
+     `zero/mods/ModSnapshot`, pack order history, pack snapshots, Boost/Java args, Downloads history entries) with Undo where a mechanism
+     already exists.
+  5. **Per-instance video background** (medium): instance profile "Background video" (copied to `<instanceRoot>/.zero/`), played through
+     the existing `ui/zero/shell/ZeroVideoBackground` pipeline while that instance is the Home hero / selected in Library; theme background
+     otherwise; respects reduce motion and the existing shouldPlay rules.
+  Then a local B4 commit (owner: one per batch, never push), then B5 (Discord RPC hidden until the owner sends the Application ID; full
+  Spanish translation + language picker). Discord Application ID still to come from the owner (feature hidden until then).
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.

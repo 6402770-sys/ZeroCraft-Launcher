@@ -10,6 +10,7 @@
 #include "ElidedLabel.h"
 #include "JavaDoctorView.h"
 #include "ModHealthView.h"
+#include "PlaytimeView.h"
 #include "StorageView.h"
 #include "ui/zero/ZeroCard.h"
 #include "ui/zero/ZeroIcons.h"
@@ -94,6 +95,8 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     auto* modsCard = makeToolCard(3, QStringLiteral("package"), tr("Mod Health"),
                                   tr("Finds missing dependencies, conflicts, duplicates and mods made for another version — without guessing."));
     connect(modsCard, &ZeroCard::clicked, this, [this]() { openModHealth(QString()); });
+    auto* playtimeCard = makeToolCard(4, QStringLiteral("clock"), tr("Playtime"), PlaytimeView::description());
+    connect(playtimeCard, &ZeroCard::clicked, this, &ToolsPage::openPlaytime);
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
     col->addLayout(grid);
@@ -121,6 +124,11 @@ ToolsPage::ToolsPage(QWidget* parent) : ShellPage(parent)
     // ----- Mod Health -----
     m_mods = new ModHealthView(this);
     m_stack->addWidget(centered(m_mods, this));
+
+    // ----- Playtime -----
+    m_playtime = new PlaytimeView(this);
+    connect(m_playtime, &PlaytimeView::showInstanceRequested, this, &ToolsPage::showInstanceRequested);
+    m_stack->addWidget(centered(m_playtime, this));
 }
 
 void ToolsPage::showEvent(QShowEvent* event)
@@ -142,6 +150,7 @@ QString ToolsPage::title() const
         case 2: return tr("Storage");
         case 3: return tr("Java Doctor");
         case 4: return tr("Mod Health");
+        case 5: return tr("Playtime");
         default: return tr("Tools");
     }
 }
@@ -153,6 +162,7 @@ QString ToolsPage::subtitle() const
         case 2: return StorageView::description();
         case 3: return JavaDoctorView::description();
         case 4: return ModHealthView::description();
+        case 5: return PlaytimeView::description();
         default: return tr("Utilities for keeping your instances healthy");
     }
 }
@@ -217,6 +227,13 @@ void ToolsPage::openModHealth(const QString& instanceId)
     m_stack->setCurrentIndex(4);
     emit chromeChanged();
     m_mods->open(instanceId);
+}
+
+void ToolsPage::openPlaytime()
+{
+    m_stack->setCurrentIndex(5);
+    emit chromeChanged();
+    m_playtime->open();
 }
 
 }  // namespace Zero

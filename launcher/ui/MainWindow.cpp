@@ -170,6 +170,7 @@
 #include "ui/zero/pages/ThemeEditorPanel.h"
 #include "ui/zero/pages/JavaDoctorView.h"
 #include "ui/zero/pages/ModHealthView.h"
+#include "ui/zero/pages/PlaytimeView.h"
 #include "ui/zero/pages/StorageView.h"
 #include "ui/zero/pages/ToolsPage.h"
 #include "ui/zero/pages/ZeroInstanceDelegate.h"
@@ -3839,6 +3840,20 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         c.primaryLabel = tr("Open");
         c.run = [this]() {
             m_tools->openModHealth(m_selectedInstance ? m_selectedInstance->id() : QString());
+            m_shell->setCurrentPage(QStringLiteral("tools"));
+        };
+        out.append(c);
+    }
+    {
+        PaletteCommand c;
+        c.id = QStringLiteral("nav:playtime");
+        c.kind = Kind::Navigation;
+        c.title = tr("Playtime");
+        c.keywords = { tr("playtime"), tr("time"), tr("hours"), tr("stats"), tr("played"), tr("sessions") };
+        c.iconName = QStringLiteral("clock");
+        c.primaryLabel = tr("Open");
+        c.run = [this]() {
+            m_tools->openPlaytime();
             m_shell->setCurrentPage(QStringLiteral("tools"));
         };
         out.append(c);

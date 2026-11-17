@@ -89,10 +89,12 @@ set(TEST_SOURCES
     ZeroShaderPacksPage_test.cpp
     JvmArgsAdvisor_test.cpp
     PreLaunchCheck_test.cpp
+    PlaytimeStats_test.cpp
     PerformanceProfile_test.cpp
     ZeroElyAuth_test.cpp
     ZeroPerformanceDialog_test.cpp
     ZeroPreLaunchDialog_test.cpp
+    ZeroPlaytimeView_test.cpp
     DropPlan_test.cpp
     ZeroDropAddDialog_test.cpp
     DownloadCenter_test.cpp

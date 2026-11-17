@@ -949,6 +949,8 @@ SET(LAUNCHER_SOURCES
     zero/downloads/DownloadCenter.h
     zero/downloads/DownloadText.cpp
     zero/downloads/DownloadText.h
+    zero/history/PlaytimeStats.cpp
+    zero/history/PlaytimeStats.h
     zero/history/SessionHistory.cpp
     zero/history/SessionHistory.h
     zero/session/PlayTracker.cpp
@@ -1196,6 +1198,8 @@ SET(LAUNCHER_SOURCES
     ui/zero/instance/ShaderPacksPage.cpp
     ui/zero/instance/ShaderPacksPage.h
     ui/zero/pages/ModHealthView.cpp
+    ui/zero/pages/PlaytimeView.cpp
+    ui/zero/pages/PlaytimeView.h
     ui/zero/pages/ModHealthView.h
     ui/zero/pages/StorageView.cpp
     ui/zero/pages/StorageView.h

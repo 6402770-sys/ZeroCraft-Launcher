@@ -45,6 +45,7 @@ class MinecraftSettingsWidget;
 }
 
 class MinecraftSettingsWidget : public QWidget {
+    Q_OBJECT  // ZERO: without it tr() resolves to QWidget's context and no translation (Prism's or ZERO's) is ever found
    public:
     explicit MinecraftSettingsWidget(MinecraftInstance* instance, QWidget* parent = nullptr);
     ~MinecraftSettingsWidget() override;

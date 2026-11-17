@@ -24,11 +24,6 @@ constexpr int kBadgePad = Tokens::spaceSm;
 constexpr int kDot = 6;
 constexpr int kMinNameWidth = 96;
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::WorldRows", text);
-}
-
 struct Badge {
     QString text;
     QColor textColor;
@@ -140,9 +135,9 @@ void WorldRowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
     // badges (right-aligned, just before the right column): In use, Hardcore, game mode (not Survival)
     QList<Badge> badges;
     if (model->isRunning(e.instanceId))
-        badges.append({ tr("In use"), t.text, true, 0 });
+        badges.append({ QCoreApplication::translate("Zero::WorldRows", "In use"), t.text, true, 0 });
     if (e.hardcore)
-        badges.append({ tr("Hardcore"), t.danger, false, 0 });
+        badges.append({ QCoreApplication::translate("Zero::WorldRows", "Hardcore"), t.danger, false, 0 });
     if (e.gameTypeCode > 0 && !e.gameMode.isEmpty())  // Creative, Adventure, Spectator
         badges.append({ e.gameMode, t.textSecondary, false, 0 });
 

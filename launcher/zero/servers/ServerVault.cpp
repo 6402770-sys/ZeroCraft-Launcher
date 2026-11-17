@@ -20,11 +20,6 @@ namespace Zero {
 namespace Servers {
 
 namespace {
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Servers", text);
-}
-
 QString stringTag(const nbt::tag_compound& compound, const char* key)
 {
     if (!compound.has_key(key, nbt::tag_type::String))
@@ -42,16 +37,16 @@ ServersFile parseServersDatBytes(const QByteArray& bytes)
         std::istringstream stream(std::string(bytes.constData(), static_cast<size_t>(bytes.size())));
         auto root = nbt::io::read_compound(stream);
         if (!root.second) {
-            out.error = tr("The file is not a servers list.");
+            out.error = QCoreApplication::translate("Zero::Servers", "The file is not a servers list.");
             return out;
         }
         if (!root.second->has_key("servers", nbt::tag_type::List)) {
-            out.error = tr("The file has no server list.");
+            out.error = QCoreApplication::translate("Zero::Servers", "The file has no server list.");
             return out;
         }
         const auto& list = root.second->at("servers").as<nbt::tag_list>();
         if (list.size() > 0 && list.el_type() != nbt::tag_type::Compound) {
-            out.error = tr("The server list has an unexpected format.");
+            out.error = QCoreApplication::translate("Zero::Servers", "The server list has an unexpected format.");
             return out;
         }
         for (size_t i = 0; i < list.size(); ++i) {
@@ -69,7 +64,7 @@ ServersFile parseServersDatBytes(const QByteArray& bytes)
         }
     } catch (...) {  // nbt::io::input_error, std::bad_cast, std::out_of_range, bad_alloc on a corrupt length
         out.entries.clear();
-        out.error = tr("The file is damaged and could not be read.");
+        out.error = QCoreApplication::translate("Zero::Servers", "The file is damaged and could not be read.");
     }
     return out;
 }
@@ -81,7 +76,7 @@ ServersFile parseServersDat(const QString& path)
         return {};
     if (!file.open(QIODevice::ReadOnly)) {
         ServersFile out;
-        out.error = tr("The file could not be opened.");
+        out.error = QCoreApplication::translate("Zero::Servers", "The file could not be opened.");
         return out;
     }
     return parseServersDatBytes(file.readAll());
@@ -106,7 +101,7 @@ HostPort parseAddress(const QString& address)
 
     const QString text = address.trimmed();
     if (text.isEmpty())
-        return fail(tr("The address is empty."));
+        return fail(QCoreApplication::translate("Zero::Servers", "The address is empty."));
 
     QString host;
     QString portText;
@@ -122,13 +117,13 @@ HostPort parseAddress(const QString& address)
     if (text.startsWith(QLatin1Char('['))) {
         const int close = text.indexOf(QLatin1Char(']'));
         if (close < 0)
-            return fail(tr("The closing bracket is missing."));
+            return fail(QCoreApplication::translate("Zero::Servers", "The closing bracket is missing."));
         if (!ipv6(text.mid(1, close - 1).trimmed()))
-            return fail(tr("The part in brackets is not an IPv6 address."));
+            return fail(QCoreApplication::translate("Zero::Servers", "The part in brackets is not an IPv6 address."));
         const QString rest = text.mid(close + 1);
         if (!rest.isEmpty()) {
             if (!rest.startsWith(QLatin1Char(':')))
-                return fail(tr("Unexpected text after the closing bracket."));
+                return fail(QCoreApplication::translate("Zero::Servers", "Unexpected text after the closing bracket."));
             portText = rest.mid(1);
             hasPort = true;
         }
@@ -136,7 +131,7 @@ HostPort parseAddress(const QString& address)
         const int colons = static_cast<int>(text.count(QLatin1Char(':')));
         if (colons >= 2) {
             if (!ipv6(text))  // a bare IPv6 literal has no port
-                return fail(tr("Too many colons."));
+                return fail(QCoreApplication::translate("Zero::Servers", "Too many colons."));
         } else if (colons == 1) {
             const int colon = text.indexOf(QLatin1Char(':'));
             host = text.left(colon);
@@ -148,15 +143,15 @@ HostPort parseAddress(const QString& address)
         if (!host.contains(QLatin1Char(':'))) {
             host = host.toLower();
             if (host.isEmpty())
-                return fail(tr("The host name is empty."));
+                return fail(QCoreApplication::translate("Zero::Servers", "The host name is empty."));
             if (host.size() > 253)
-                return fail(tr("The host name is too long."));
+                return fail(QCoreApplication::translate("Zero::Servers", "The host name is too long."));
             for (const QString& label : host.split(QLatin1Char('.'))) {
                 if (label.isEmpty() || label.size() > 63)
-                    return fail(tr("The host name is not valid."));
+                    return fail(QCoreApplication::translate("Zero::Servers", "The host name is not valid."));
                 for (const QChar c : label) {
                     if (!(c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_')))
-                        return fail(tr("The host name has characters that are not allowed."));
+                        return fail(QCoreApplication::translate("Zero::Servers", "The host name has characters that are not allowed."));
                 }
             }
         }
@@ -171,7 +166,7 @@ HostPort parseAddress(const QString& address)
                 ok = false;
         }
         if (!ok || value < 1 || value > 65535)
-            return fail(tr("The port is not a number between 1 and 65535."));
+            return fail(QCoreApplication::translate("Zero::Servers", "The port is not a number between 1 and 65535."));
         port = static_cast<quint16>(value);
     }
 

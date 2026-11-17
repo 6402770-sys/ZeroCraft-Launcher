@@ -58,11 +58,6 @@ constexpr int kHeaderHeight = 64;
 constexpr int kFooterHeight = 72;
 constexpr int kIconButton = 40;
 
-QString dtr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Create::CreateInstanceDialog", text);
-}
-
 /// The footer bar: `surface` with a 1 px `border` rule on top.
 class FooterBar : public QWidget {
    public:
@@ -137,7 +132,7 @@ CreateInstanceEnvironment CreateInstanceEnvironment::fromApplication()
             dirs.append({ label.isEmpty() ? canonical : label, canonical });
         };
         const QString instDir = APPLICATION->settings()->get("InstanceDir").toString();
-        add(instDir, dtr("Default (%1)").arg(instDir));
+        add(instDir, QCoreApplication::translate("Zero::Create::CreateInstanceDialog", "Default (%1)").arg(instDir));
         for (const QString& dir : APPLICATION->settings()->get("AdditionalInstanceDirs").toStringList())
             add(dir, {});
         return dirs;
@@ -152,7 +147,7 @@ CreateInstanceEnvironment CreateInstanceEnvironment::fromApplication()
         const auto flags = QDirListing::IteratorFlag::Recursive | QDirListing::IteratorFlag::IncludeHidden;
         for (const auto& entry : QDirListing(templateDir, flags)) {
             if (std::filesystem::is_symlink(StringUtils::toStdString(entry.absoluteFilePath()))) {
-                env.templateToolTip = dtr("On Windows, symbolic links may require admin permission to create.");
+                env.templateToolTip = QCoreApplication::translate("Zero::Create::CreateInstanceDialog", "On Windows, symbolic links may require admin permission to create.");
                 break;
             }
         }
@@ -170,10 +165,10 @@ CreateInstanceEnvironment CreateInstanceEnvironment::fromApplication()
     env.chooseImportFile = [](QWidget* parent) {
         // ImportPage's filter: zip by MIME glob patterns, plus .mrpack.
         const QMimeType zip = QMimeDatabase().mimeTypeForName(QStringLiteral("application/zip"));
-        QString filter = dtr("Supported files") + QStringLiteral(" (%1 *.mrpack)").arg(zip.globPatterns().join(QLatin1Char(' ')));
+        QString filter = QCoreApplication::translate("Zero::Create::CreateInstanceDialog", "Supported files") + QStringLiteral(" (%1 *.mrpack)").arg(zip.globPatterns().join(QLatin1Char(' ')));
         filter += QStringLiteral(";;") + zip.filterString();
-        filter += QStringLiteral(";;") + dtr("Modrinth pack") + QStringLiteral(" (*.mrpack)");
-        return QFileDialog::getOpenFileName(parent, dtr("Choose modpack"), QString(), filter);
+        filter += QStringLiteral(";;") + QCoreApplication::translate("Zero::Create::CreateInstanceDialog", "Modrinth pack") + QStringLiteral(" (*.mrpack)");
+        return QFileDialog::getOpenFileName(parent, QCoreApplication::translate("Zero::Create::CreateInstanceDialog", "Choose modpack"), QString(), filter);
     };
     env.makeMetaSource = [](QObject* parent) -> MetaSource* { return new PrismMetaSource(parent); };
     return env;

@@ -56,6 +56,8 @@
 #include "zero/auth/ElyAuth.h"  // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
 #include "zero/backup/BackupDestination.h"  // ZERO
+#include "zero/discord/DiscordPresence.h"  // ZERO
+#include "zero/mods/ModHealth.h"  // ZERO: readInstanceContext (Discord Rich Presence)
 #include "zero/backup/ScheduledBackup.h"  // ZERO
 #include "zero/backup/WorldBackupJobs.h"  // ZERO
 #include "zero/downloads/DownloadCenter.h"  // ZERO
@@ -74,6 +76,7 @@
 #include "ui/zero/instance/PackRollbackPrompt.h"  // ZERO: "Minecraft turned off your resource packs"
 #include "ui/zero/prelaunch/PreLaunchDialog.h"  // ZERO: "Before you play"
 #include "zero/ZeroLanguage.h"  // ZERO
+#include "zero/ZeroRestart.h"  // ZERO
 #include "ui/zero/ZeroSmoothScroll.h"
 #include "ui/zero/ZeroSound.h"  // ZERO: smooth wheel scrolling
 #include "ui/zero/ZeroTheme.h"  // ZERO
@@ -483,6 +486,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
      * If there is one, tell it what the user actually wanted to do and exit.
      * We want to initialize this before logging to avoid messing with the log of a potential already running copy.
      */
+    Zero::Restart::waitForPredecessor();  // ZERO: a restart (language change) waits here until the old launcher released the lock
     auto appID = ApplicationId::fromPathAndVersion(QDir::currentPath(), BuildConfig.printableVersionString());
     {
         // FIXME: you can run the same binaries with multiple data dirs and they won't clash. This could cause issues for updates.
@@ -969,6 +973,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // ZERO: what the launcher does while a game runs: "tray" (hide to the tray), "open" (keep it open) or "close" (Prism's
         // CloseAfterLaunch). The choice drives CloseAfterLaunch, see the "play sessions" block below.
         m_settings->registerSetting("ZeroWhilePlaying", "tray");
+        // ZERO: Discord Rich Presence (zero/discord): show what is played on Discord, and whether the instance name is part of it
+        m_settings->registerSetting("ZeroDiscordPresence", true);
+        m_settings->registerSetting("ZeroDiscordShowInstance", true);
         // ZERO: "Before you play" (zero/prelaunch): the mod and malware check when Play is pressed; false switches it all off
         m_settings->registerSetting("ZeroPreLaunchCheck", true);
         // ZERO: "Updates for everything" (zero/updates): look for mod updates of all instances once a day while no game runs
@@ -994,20 +1001,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // Custom Technic Client ID
         m_settings->registerSetting("TechnicClientID", "");
 
-        // Init page provider
-        {
-            m_globalSettingsProvider = std::make_unique<GenericPageProvider>(tr("Settings"));
-            m_globalSettingsProvider->addPage<LauncherPage>();
-            if (!Zero::Language::kEnglishOnly)  // ZERO: hidden while the launcher is English only
-                m_globalSettingsProvider->addPage<LanguagePage>();
-            m_globalSettingsProvider->addPage<AppearancePage>();
-            m_globalSettingsProvider->addPage<MinecraftPage>();
-            m_globalSettingsProvider->addPage<JavaPage>();
-            m_globalSettingsProvider->addPage<AccountListPage>();
-            m_globalSettingsProvider->addPage<APIPage>();
-            m_globalSettingsProvider->addPage<ExternalToolsPage>();
-            m_globalSettingsProvider->addPage<ProxyPage>();
-        }
+        // ZERO: the settings page provider is created after the translations are loaded (its title is translated), see below
 
         PixmapCache::setInstance(new PixmapCache(this));
 
@@ -1152,6 +1146,51 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             connect(this, &Application::launchPhaseChanged, m_zeroUpdates, [this]() { m_zeroUpdates->onGameStateChanged(); });
             connect(this, &Application::launchEnded, m_zeroUpdates, [this]() { m_zeroUpdates->onGameStateChanged(); });
             m_zeroUpdates->start();
+        }
+
+        // ZERO: Discord Rich Presence (zero/discord): while a game runs, the Discord desktop client shows what is played. Nothing is
+        // shown or connected while no game runs.
+        {
+            Zero::Discord::Options options;
+            options.pid = QCoreApplication::applicationPid();
+            auto* discord = new Zero::Discord::DiscordPresence(options, this);
+            discord->setEnabled(m_settings->get("ZeroDiscordPresence").toBool());
+            discord->setShowInstance(m_settings->get("ZeroDiscordShowInstance").toBool());
+            connect(m_settings->getSetting("ZeroDiscordPresence").get(), &Setting::SettingChanged, discord,
+                    [this, discord]() { discord->setEnabled(m_settings->get("ZeroDiscordPresence").toBool()); });
+            connect(m_settings->getSetting("ZeroDiscordShowInstance").get(), &Setting::SettingChanged, discord,
+                    [this, discord]() { discord->setShowInstance(m_settings->get("ZeroDiscordShowInstance").toBool()); });
+            connect(this, &Application::launchPhaseChanged, discord, [this, discord](const QString& id, Application::LaunchPhase phase) {
+                if (phase != Application::LaunchPhase::Running)
+                    return;
+                auto* inst = m_instances->getInstanceById(id);
+                if (!inst)
+                    return;
+                const auto context = Zero::Mods::readInstanceContext(inst->instanceRoot());
+                Zero::Discord::Game game;
+                game.id = id;
+                game.instanceName = inst->name();
+                game.mcVersion = context.mcVersion;
+                switch (context.loader) {
+                    case Zero::Mods::InstanceLoader::Fabric:
+                        game.loader = QStringLiteral("Fabric");
+                        break;
+                    case Zero::Mods::InstanceLoader::Quilt:
+                        game.loader = QStringLiteral("Quilt");
+                        break;
+                    case Zero::Mods::InstanceLoader::Forge:
+                        game.loader = QStringLiteral("Forge");
+                        break;
+                    case Zero::Mods::InstanceLoader::NeoForge:
+                        game.loader = QStringLiteral("NeoForge");
+                        break;
+                    case Zero::Mods::InstanceLoader::None:
+                        break;
+                }
+                game.startEpoch = QDateTime::currentSecsSinceEpoch();
+                discord->gameStarted(game);
+            });
+            connect(this, &Application::launchEnded, discord, [discord](const QString& id) { discord->gameEnded(id); });
         }
 
         // ZERO: Smart Backup. The job runner is app-level (Worlds page and automatic backups share it); AutoBackup backs up the
@@ -1436,14 +1475,30 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     // load translations
     {
         m_translations.reset(new TranslationsModel("translations"));
-        if (Zero::Language::kEnglishOnly) {
-            // ZERO: English only for now (no translator, en_US locale, no index download); see zero/ZeroLanguage.h.
-            m_translations->selectLanguage(Zero::Language::kEnglishCode);
-        } else {
-            m_translations->downloadIndex();
-        }
+        // ZERO: English or Español (zero/ZeroLanguage.h). The first start follows Windows; what was decided is saved from then on.
+        const QString savedLanguage = settings()->get("Language").toString();
+        const QString language = Zero::Language::initialCode(savedLanguage, QLocale::system());
+        if (savedLanguage != language)
+            settings()->set("Language", language);
+        m_translations->selectLanguage(language);  // English: no translator at all; Español: ZERO's file with Prism's under it
+        if (Zero::Language::isSpanish(language))
+            m_translations->downloadIndex();  // Prism's own translation of the screens ZERO did not touch, as upstream does
         qInfo() << "Your language is" << m_translations->selectedLanguage();
         qInfo() << "<> Translations loaded.";
+    }
+
+    // Init page provider (ZERO: after the translations, its title is translated; Prism's Language page is not added, ZERO's picker is
+    // in Settings > Launcher)
+    {
+        m_globalSettingsProvider = std::make_unique<GenericPageProvider>(tr("Settings"));
+        m_globalSettingsProvider->addPage<LauncherPage>();
+        m_globalSettingsProvider->addPage<AppearancePage>();
+        m_globalSettingsProvider->addPage<MinecraftPage>();
+        m_globalSettingsProvider->addPage<JavaPage>();
+        m_globalSettingsProvider->addPage<AccountListPage>();
+        m_globalSettingsProvider->addPage<APIPage>();
+        m_globalSettingsProvider->addPage<ExternalToolsPage>();
+        m_globalSettingsProvider->addPage<ProxyPage>();
     }
 
     // FIXME: what to do with these?
@@ -1659,7 +1714,7 @@ bool Application::createSetupWizard()
     }();
     bool askjava = BuildConfig.JAVA_DOWNLOADER_ENABLED && !javaRequired && !settings()->get("AutomaticJavaDownload").toBool() &&
                    !settings()->get("AutomaticJavaSwitch").toBool() && !settings()->get("UserAskedAboutAutomaticJavaDownload").toBool();
-    bool languageRequired = !Zero::Language::kEnglishOnly && settings()->get("Language").toString().isEmpty();  // ZERO: English only
+    bool languageRequired = false;  // ZERO: the language is decided at start (zero/ZeroLanguage.h); no wizard page
     bool pasteInterventionRequired = settings()->get("PastebinURL") != "";
     bool validWidgets = m_themeManager->isValidApplicationTheme(settings()->get("ApplicationTheme").toString());
     bool validIcons = m_themeManager->isValidIconTheme(settings()->get("IconTheme").toString());
@@ -2135,6 +2190,32 @@ bool Application::zeroConfirmQuitWithDownloads(QWidget* parent)
         return false;
     m_zeroQuitConfirmed = true;  // closing the windows that follow must not ask again
     m_zeroDownloads->cancelAll();
+    return true;
+}
+
+bool Application::zeroRestart(QWidget* parent)
+{
+    // The guards of quitting apply: a running game would be cut off, running downloads ask first.
+    if (m_runningInstances > 0) {
+        QMessageBox::information(parent, tr("Close the game first"),
+                                 tr("ZERO can't restart while Minecraft is running. The new language is saved and applies the next time you start ZERO."));
+        return false;
+    }
+    if (!zeroConfirmQuitWithDownloads(parent))
+        return false;
+    // The data folder only travels when it was chosen on the command line (-d / --dir); every other way of finding it repeats by itself.
+    // Its path is made absolute first: this process changed its working folder into it.
+    bool explicitDataDir = false;
+    for (const QString& argument : arguments().mid(1)) {
+        explicitDataDir = explicitDataDir || argument == QLatin1String("-d") || argument.startsWith(QLatin1String("-d=")) ||
+                          argument == QLatin1String("--dir") || argument.startsWith(QLatin1String("--dir="));
+    }
+    if (!Zero::Restart::startSuccessor(explicitDataDir ? m_dataPath : QString())) {
+        QMessageBox::warning(parent, tr("Couldn't restart ZERO"), tr("The new language is saved and applies the next time you start ZERO."));
+        return false;
+    }
+    closeAllWindows();
+    quit();
     return true;
 }
 

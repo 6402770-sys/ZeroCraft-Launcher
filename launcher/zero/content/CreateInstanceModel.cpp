@@ -13,11 +13,6 @@ namespace Create {
 
 namespace {
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Create", text);
-}
-
 /// `equals` of the net.minecraft requirement, empty when there is none.
 QString minecraftRequirement(const Meta::Version& version)
 {
@@ -52,15 +47,15 @@ QString versionTypeLabel(VersionType type)
 {
     switch (type) {
         case VersionType::Release:
-            return tr("Release");
+            return QCoreApplication::translate("Zero::Create", "Release");
         case VersionType::Snapshot:
-            return tr("Snapshot");
+            return QCoreApplication::translate("Zero::Create", "Snapshot");
         case VersionType::Beta:
-            return tr("Beta");
+            return QCoreApplication::translate("Zero::Create", "Beta");
         case VersionType::Alpha:
-            return tr("Alpha");
+            return QCoreApplication::translate("Zero::Create", "Alpha");
         case VersionType::Experiment:
-            return tr("Experiment");
+            return QCoreApplication::translate("Zero::Create", "Experiment");
         case VersionType::Other:
             break;
     }
@@ -76,13 +71,13 @@ QString versionFilterLabel(VersionFilter filter)
 {
     switch (filter) {
         case VersionFilter::Releases:
-            return tr("Releases");
+            return QCoreApplication::translate("Zero::Create", "Releases");
         case VersionFilter::Snapshots:
-            return tr("Snapshots");
+            return QCoreApplication::translate("Zero::Create", "Snapshots");
         case VersionFilter::Old:
-            return tr("Old");
+            return QCoreApplication::translate("Zero::Create", "Old");
         case VersionFilter::Experiments:
-            return tr("Experiments");
+            return QCoreApplication::translate("Zero::Create", "Experiments");
     }
     return {};
 }
@@ -327,7 +322,7 @@ QString unavailableCaption(const QString& minecraft, const QList<Loader>& loader
     QStringList names;
     for (Loader l : loaders)
         names.append(loaderName(l));
-    return tr("Not available for %1: %2").arg(minecraft, names.join(QStringLiteral(", ")));
+    return QCoreApplication::translate("Zero::Create", "Not available for %1: %2").arg(minecraft, names.join(QStringLiteral(", ")));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -387,9 +382,9 @@ QString validateName(const QString& name)
 {
     const QString trimmed = name.trimmed();
     if (trimmed.isEmpty())
-        return tr("Enter a name for the instance.");
+        return QCoreApplication::translate("Zero::Create", "Enter a name for the instance.");
     if (trimmed.size() > kMaxNameLength)
-        return tr("Use at most %1 characters.").arg(kMaxNameLength);
+        return QCoreApplication::translate("Zero::Create", "Use at most %1 characters.").arg(kMaxNameLength);
     return {};
 }
 
@@ -407,7 +402,7 @@ ImportSource resolveLocalFile(const QString& path)
     s.fileName = fi.fileName();
     if (!fi.exists() || !fi.isFile()) {
         s.kind = ImportSource::Kind::Invalid;
-        s.error = tr("This file does not exist.");
+        s.error = QCoreApplication::translate("Zero::Create", "This file does not exist.");
         return s;
     }
     const QUrl url = QUrl::fromLocalFile(fi.absoluteFilePath());
@@ -416,7 +411,7 @@ ImportSource resolveLocalFile(const QString& path)
     const bool isMrpack = fi.suffix().compare(QLatin1String("mrpack"), Qt::CaseInsensitive) == 0;
     if (!isZip && !isMrpack) {
         s.kind = ImportSource::Kind::Invalid;
-        s.error = tr("Choose a .zip or .mrpack file.");
+        s.error = QCoreApplication::translate("Zero::Create", "Choose a .zip or .mrpack file.");
         return s;
     }
     s.kind = ImportSource::Kind::LocalFile;
@@ -440,7 +435,7 @@ ImportSource resolveUrl(const QString& text)
     }
     if ((scheme != QLatin1String("http") && scheme != QLatin1String("https")) || !probe.isValid() || probe.host().isEmpty()) {
         s.kind = ImportSource::Kind::Invalid;
-        s.error = tr("Enter a link that starts with http:// or https://.");
+        s.error = QCoreApplication::translate("Zero::Create", "Enter a link that starts with http:// or https://.");
         return s;
     }
     // ImportPage: a CurseForge "?client=y" link is rewritten to the direct "/file" download.
@@ -458,7 +453,7 @@ ImportSource resolveUrl(const QString& text)
 QString detectedFormat(const QString& fileName)
 {
     if (QFileInfo(fileName).suffix().compare(QLatin1String("mrpack"), Qt::CaseInsensitive) == 0)
-        return tr("Modrinth pack");
+        return QCoreApplication::translate("Zero::Create", "Modrinth pack");
     return {};
 }
 

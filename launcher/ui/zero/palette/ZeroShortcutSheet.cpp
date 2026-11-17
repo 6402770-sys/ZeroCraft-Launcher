@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ZeroShortcutSheet.h"
 
+#include <QCoreApplication>
 #include <QFontMetrics>
 #include <QPainter>
 #include <QVBoxLayout>
@@ -31,6 +32,9 @@ int groupHeight(const ShortcutGroup& g)
 /// Title row + the groups laid out in two columns (each group goes to the shorter column).
 class SheetContent : public QWidget {
    public:
+    // No Q_OBJECT here: give tr() the same context lupdate records (the class name) instead of the base class's.
+    Q_DECLARE_TR_FUNCTIONS(Zero::SheetContent)
+   public:  // the macro leaves the section private
     explicit SheetContent(QWidget* parent) : QWidget(parent) { setFocusPolicy(Qt::StrongFocus); }
 
     void setGroups(const QList<ShortcutGroup>& groups)

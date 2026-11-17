@@ -3,6 +3,7 @@
 
 #include <QButtonGroup>
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QDebug>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -304,6 +305,9 @@ class SwatchRow : public QWidget {
 /// Selectable card for one theme: swatches, name, tooltip text and a "Current" badge.
 class ThemeCard : public ZeroCard {
    public:
+    // No Q_OBJECT here: give tr() the same context lupdate records (the class name) instead of the base class's.
+    Q_DECLARE_TR_FUNCTIONS(Zero::ThemeCard)
+   public:  // the macro leaves the section private
     ThemeCard(const QString& id, const ThemeSpec& spec, const QString& name, const QString& description, bool custom, QWidget* parent)
         : ZeroCard(parent), m_id(id), m_spec(spec)
     {

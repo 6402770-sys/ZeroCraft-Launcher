@@ -24,11 +24,6 @@ namespace {
 
 constexpr int kModsCheckVersion = 1;  // bump when the rules of the mods check change: cached "all fine" verdicts are dropped
 
-QString tr(const char* s)
-{
-    return QObject::tr(s);
-}
-
 QString fileLabel(const QString& name)
 {
     return name;
@@ -38,7 +33,7 @@ Fix urlFix(const QString& url)
 {
     Fix f;
     f.kind = Fix::Kind::OpenUrl;
-    f.label = tr("More info");
+    f.label = QCoreApplication::translate("Zero::PreLaunch", "More info");
     f.targets = { url };
     return f;
 }
@@ -88,13 +83,13 @@ QList<Item> malwareItems(const Env& env, const RunOptions& options, CheckResult*
         item.detail = QObject::tr("It matches %1. Don't start the game with this file: it can steal your accounts and files.").arg(names.join(QStringLiteral(", ")));
         Fix recycle;
         recycle.kind = Fix::Kind::RecycleFile;
-        recycle.label = tr("Move to Recycle Bin");
+        recycle.label = QCoreApplication::translate("Zero::PreLaunch", "Move to Recycle Bin");
         recycle.targets = { jar.path };
         recycle.danger = true;
         item.fixes.append(recycle);
         Fix show;
         show.kind = Fix::Kind::ShowFile;
-        show.label = tr("Show file");
+        show.label = QCoreApplication::translate("Zero::PreLaunch", "Show file");
         show.targets = { jar.path };
         item.fixes.append(show);
         if (!infoUrl.isEmpty()) {
@@ -119,7 +114,7 @@ QList<Item> systemItems(const Env& env)
                           .arg(trace.description, trace.path);
         Fix show;
         show.kind = Fix::Kind::ShowFile;
-        show.label = tr("Show in folder");
+        show.label = QCoreApplication::translate("Zero::PreLaunch", "Show in folder");
         show.targets = { trace.path };
         item.fixes.append(show);
         if (!trace.infoUrl.isEmpty()) {
@@ -127,7 +122,7 @@ QList<Item> systemItems(const Env& env)
         }
         Fix again;
         again.kind = Fix::Kind::Recheck;
-        again.label = tr("Check again");
+        again.label = QCoreApplication::translate("Zero::PreLaunch", "Check again");
         item.fixes.append(again);
         items.append(item);
     }
@@ -168,15 +163,15 @@ Item itemForFinding(const Mods::Finding& f)
         fix.kind = Fix::Kind::DisableJars;
         fix.actions = f.actions;
         if (f.kind == Mods::FindingKind::DuplicateMod) {
-            fix.label = f.actions.size() == 1 ? tr("Disable the older copy") : tr("Disable the older copies");
+            fix.label = f.actions.size() == 1 ? QCoreApplication::translate("Zero::PreLaunch", "Disable the older copy") : QCoreApplication::translate("Zero::PreLaunch", "Disable the older copies");
         } else {
-            fix.label = tr("Disable this mod");
+            fix.label = QCoreApplication::translate("Zero::PreLaunch", "Disable this mod");
         }
         item.fixes.append(fix);
     } else {
         Fix open;
         open.kind = Fix::Kind::OpenMods;
-        open.label = tr("Open Mods");
+        open.label = QCoreApplication::translate("Zero::PreLaunch", "Open Mods");
         item.fixes.append(open);
     }
     return item;
@@ -239,7 +234,7 @@ QList<Item> packItems(const Env& env)
     item.fixes.append(restore);
     Fix keep;
     keep.kind = Fix::Kind::KeepPacksOff;
-    keep.label = tr("Leave them off");
+    keep.label = QCoreApplication::translate("Zero::PreLaunch", "Leave them off");
     item.fixes.append(keep);
     items.append(item);
     return items;

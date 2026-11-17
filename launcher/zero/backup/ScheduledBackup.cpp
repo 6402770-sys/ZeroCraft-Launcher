@@ -21,10 +21,6 @@ namespace Backup {
 namespace {
 ScheduledBackup* g_global = nullptr;
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Backup::ScheduledBackup", text);
-}
 }  // namespace
 
 Schedule scheduleFromString(const QString& text)
@@ -105,16 +101,16 @@ QString summaryText(int backedUp, int failed, int tooLarge, const QString& first
         return {};
     QStringList parts;
     if (backedUp > 0)
-        parts << (backedUp == 1 ? tr("1 world backed up") : tr("%1 worlds backed up").arg(backedUp));
+        parts << (backedUp == 1 ? QCoreApplication::translate("Zero::Backup::ScheduledBackup", "1 world backed up") : QCoreApplication::translate("Zero::Backup::ScheduledBackup", "%1 worlds backed up").arg(backedUp));
     if (failed > 0) {
-        QString part = failed == 1 ? tr("1 world failed") : tr("%1 worlds failed").arg(failed);
+        QString part = failed == 1 ? QCoreApplication::translate("Zero::Backup::ScheduledBackup", "1 world failed") : QCoreApplication::translate("Zero::Backup::ScheduledBackup", "%1 worlds failed").arg(failed);
         if (!firstError.isEmpty())
             part += QStringLiteral(" (") + firstError + QLatin1Char(')');
         parts << part;
     }
     if (tooLarge > 0)
-        parts << (tooLarge == 1 ? tr("1 world too large to back up automatically") : tr("%1 worlds too large to back up automatically").arg(tooLarge));
-    QString text = tr("Scheduled backup: ") + parts.join(QStringLiteral(", ")) + QLatin1Char('.');
+        parts << (tooLarge == 1 ? QCoreApplication::translate("Zero::Backup::ScheduledBackup", "1 world too large to back up automatically") : QCoreApplication::translate("Zero::Backup::ScheduledBackup", "%1 worlds too large to back up automatically").arg(tooLarge));
+    QString text = QCoreApplication::translate("Zero::Backup::ScheduledBackup", "Scheduled backup: ") + parts.join(QStringLiteral(", ")) + QLatin1Char('.');
     if (!fallbackFrom.isEmpty())
         text += QLatin1Char(' ') + fallbackMessage(fallbackFrom) + QLatin1Char('.');
     return text;

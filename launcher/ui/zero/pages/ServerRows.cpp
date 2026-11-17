@@ -23,11 +23,6 @@ namespace {
 constexpr int kPadding = Tokens::spaceMd;  // inside the row, left and right
 constexpr int kGap = Tokens::spaceMd;      // between icon, text and the status column
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::ServerRows", text);
-}
-
 QCache<QString, QPixmap>& iconCache()
 {
     static QCache<QString, QPixmap> instance(128);
@@ -47,13 +42,13 @@ QString instancesText(const Servers::VaultServer& server)
     QStringList names;
     for (const auto& ref : server.instances)
         names << ref.name;
-    return tr("In %1").arg(names.join(QStringLiteral(", ")));
+    return QCoreApplication::translate("Zero::ServerRows", "In %1").arg(names.join(QStringLiteral(", ")));
 }
 }  // namespace
 
 QString serverStatusDisclaimer()
 {
-    return tr("A response only means the server answered a status request. It doesn't guarantee you can join.");
+    return QCoreApplication::translate("Zero::ServerRows", "A response only means the server answered a status request. It doesn't guarantee you can join.");
 }
 
 QString playersText(const Servers::PingResult& r)
@@ -61,13 +56,13 @@ QString playersText(const Servers::PingResult& r)
     if (r.onlinePlayers < 0)
         return {};
     if (r.maxPlayers >= 0)
-        return tr("%1 / %2 players").arg(r.onlinePlayers).arg(r.maxPlayers);
-    return r.onlinePlayers == 1 ? tr("1 player") : tr("%1 players").arg(r.onlinePlayers);
+        return QCoreApplication::translate("Zero::ServerRows", "%1 / %2 players").arg(r.onlinePlayers).arg(r.maxPlayers);
+    return r.onlinePlayers == 1 ? QCoreApplication::translate("Zero::ServerRows", "1 player") : QCoreApplication::translate("Zero::ServerRows", "%1 players").arg(r.onlinePlayers);
 }
 
 QString latencyText(const Servers::PingResult& r)
 {
-    return r.latencyMs >= 0 ? tr("%1 ms").arg(r.latencyMs) : QString();
+    return r.latencyMs >= 0 ? QCoreApplication::translate("Zero::ServerRows", "%1 ms").arg(r.latencyMs) : QString();
 }
 
 QString summaryText(const Servers::PingResult& r)
@@ -254,21 +249,21 @@ void ServerRowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     if (result) {
         switch (result->state) {
             case Servers::PingResult::State::Responded:
-                pillText = tr("Responded");
+                pillText = QCoreApplication::translate("Zero::ServerRows", "Responded");
                 tone = PillTag::Tone::Success;
                 caption = summaryText(*result);
                 break;
             case Servers::PingResult::State::NoResponse:
-                pillText = tr("No response");
+                pillText = QCoreApplication::translate("Zero::ServerRows", "No response");
                 break;
             case Servers::PingResult::State::InvalidAddress:
-                pillText = tr("Invalid address");
+                pillText = QCoreApplication::translate("Zero::ServerRows", "Invalid address");
                 tone = PillTag::Tone::Warning;
                 break;
         }
     } else if (pinger && pinger->isPending(s.address)) {
         pinging = true;
-        caption = tr("Pinging…");
+        caption = QCoreApplication::translate("Zero::ServerRows", "Pinging…");
     }
 
     int rightWidth = 0;

@@ -367,11 +367,6 @@ Tri checkUpper(const Parsed& v, const QString& hi, bool inclusive)
     return (inclusive ? *c <= 0 : *c < 0) ? Tri::Yes : Tri::No;
 }
 
-QString tr(const char* s)
-{
-    return QCoreApplication::translate("ModHealth", s);
-}
-
 QString describeTerm(const QString& term)
 {
     QString op;
@@ -382,19 +377,19 @@ QString describeTerm(const QString& term)
     if (rest.isEmpty())
         return term;
     if (isWildcard(rest))
-        return tr("any version");
+        return QCoreApplication::translate("ModHealth", "any version");
     if (op == QLatin1String(">="))
-        return tr("%1 or newer").arg(rest);
+        return QCoreApplication::translate("ModHealth", "%1 or newer").arg(rest);
     if (op == QLatin1String(">"))
-        return tr("newer than %1").arg(rest);
+        return QCoreApplication::translate("ModHealth", "newer than %1").arg(rest);
     if (op == QLatin1String("<="))
-        return tr("%1 or older").arg(rest);
+        return QCoreApplication::translate("ModHealth", "%1 or older").arg(rest);
     if (op == QLatin1String("<"))
-        return tr("older than %1").arg(rest);
+        return QCoreApplication::translate("ModHealth", "older than %1").arg(rest);
     if (op == QLatin1String("~"))
-        return tr("%1 (same minor version)").arg(rest);
+        return QCoreApplication::translate("ModHealth", "%1 (same minor version)").arg(rest);
     if (op == QLatin1String("^"))
-        return tr("%1 (same major version)").arg(rest);
+        return QCoreApplication::translate("ModHealth", "%1 (same major version)").arg(rest);
     return rest;
 }
 
@@ -424,24 +419,24 @@ QString describeMaven(const QString& range)
                 const QString lo = inner.left(comma).trimmed();
                 const QString hi = inner.mid(comma + 1).trimmed();
                 if (!lo.isEmpty() && hi.isEmpty())
-                    parts.append(loInc ? tr("%1 or newer").arg(lo) : tr("newer than %1").arg(lo));
+                    parts.append(loInc ? QCoreApplication::translate("ModHealth", "%1 or newer").arg(lo) : QCoreApplication::translate("ModHealth", "newer than %1").arg(lo));
                 else if (lo.isEmpty() && !hi.isEmpty())
-                    parts.append(hiInc ? tr("%1 or older").arg(hi) : tr("older than %1").arg(hi));
+                    parts.append(hiInc ? QCoreApplication::translate("ModHealth", "%1 or older").arg(hi) : QCoreApplication::translate("ModHealth", "older than %1").arg(hi));
                 else if (!lo.isEmpty() && !hi.isEmpty())
-                    parts.append(hiInc ? tr("%1 to %2").arg(lo, hi) : tr("%1 up to, but not including, %2").arg(lo, hi));
+                    parts.append(hiInc ? QCoreApplication::translate("ModHealth", "%1 to %2").arg(lo, hi) : QCoreApplication::translate("ModHealth", "%1 up to, but not including, %2").arg(lo, hi));
                 else
-                    parts.append(tr("any version"));
+                    parts.append(QCoreApplication::translate("ModHealth", "any version"));
             }
             i = end + 1;
         } else {
             int end = i;
             while (end < range.size() && range[end] != QLatin1Char(','))
                 ++end;
-            parts.append(tr("%1 or newer").arg(range.mid(i, end - i).trimmed()));
+            parts.append(QCoreApplication::translate("ModHealth", "%1 or newer").arg(range.mid(i, end - i).trimmed()));
             i = end;
         }
     }
-    return parts.isEmpty() ? range : parts.join(tr(" or "));
+    return parts.isEmpty() ? range : parts.join(QCoreApplication::translate("ModHealth", " or "));
 }
 
 }  // namespace
@@ -527,7 +522,7 @@ QString describePredicate(const QString& predicate, bool mavenSyntax)
 {
     const QString p = predicate.trimmed();
     if (p.isEmpty() || p == QLatin1String("*"))
-        return tr("any version");
+        return QCoreApplication::translate("ModHealth", "any version");
     if (mavenSyntax)
         return describeMaven(p);
     QStringList alternatives;
@@ -535,9 +530,9 @@ QString describePredicate(const QString& predicate, bool mavenSyntax)
         QStringList terms;
         for (const QString& t : splitTerms(alt.trimmed()))
             terms.append(describeTerm(t));
-        alternatives.append(terms.join(tr(" and ")));
+        alternatives.append(terms.join(QCoreApplication::translate("ModHealth", " and ")));
     }
-    return alternatives.join(tr(" or "));
+    return alternatives.join(QCoreApplication::translate("ModHealth", " or "));
 }
 
 }  // namespace Mods

@@ -8,11 +8,6 @@ namespace Zero {
 namespace LibraryFilter {
 
 namespace {
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::LibraryFilter", text);
-}
-
 int loaderRank(const QString& label)
 {
     static const QStringList order = { QStringLiteral("Vanilla"), QStringLiteral("Fabric"), QStringLiteral("Forge"), QStringLiteral("NeoForge"),
@@ -74,8 +69,8 @@ QList<ChipInfo> buildChips(const QList<Facts>& all)
     auto count = [&](const Chip& chip) {
         return int(std::count_if(all.cbegin(), all.cend(), [&](const Facts& f) { return chipMatches(chip, f); }));
     };
-    for (const auto& [kind, label] : { std::pair{ Kind::All, tr("All") }, std::pair{ Kind::Favorites, tr("Favorites") },
-                                       std::pair{ Kind::Running, tr("Running") } }) {
+    for (const auto& [kind, label] : { std::pair{ Kind::All, QCoreApplication::translate("Zero::LibraryFilter", "All") }, std::pair{ Kind::Favorites, QCoreApplication::translate("Zero::LibraryFilter", "Favorites") },
+                                       std::pair{ Kind::Running, QCoreApplication::translate("Zero::LibraryFilter", "Running") } }) {
         const Chip chip{ kind, {} };
         out.append({ chip, label, count(chip) });
     }

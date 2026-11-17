@@ -46,6 +46,7 @@ set(TEST_SOURCES
     InstanceProfile_test.cpp
     SessionHistory_test.cpp
     PlayTracker_test.cpp
+    DiscordPresence_test.cpp
     SessionSummary_test.cpp
     WhilePlaying_test.cpp
     HomeServers_test.cpp
@@ -113,6 +114,8 @@ set(TEST_SOURCES
     ZeroSandboxDialogs_test.cpp
     ChangeTimeline_test.cpp
     ZeroTimelinePage_test.cpp
+    ZeroLanguage_test.cpp
+    ZeroRestart_test.cpp
 )
 
 # NOTE(@getchoo): Very funny way of aliasing the Qt generated `main` test functions to respective filenames

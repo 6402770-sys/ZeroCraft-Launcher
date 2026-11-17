@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ModsUpdates.h"
 
+#include <QCoreApplication>
 #include <QMessageBox>
 #include <QPointer>
 #include <QTimer>
@@ -66,6 +67,9 @@ void bindLifetime(QObject* task, const std::shared_ptr<CheckStorage>& storage)
 
 class PrismModUpdateCheck : public ModUpdateCheck {
    public:
+    // No Q_OBJECT here: give tr() the same context lupdate records (the class name) instead of the base class's.
+    Q_DECLARE_TR_FUNCTIONS(Zero::ModsUi::PrismModUpdateCheck)
+   public:  // the macro leaves the section private
     PrismModUpdateCheck(const QList<Resource::Ptr>& resources, MinecraftInstance* instance, ModFolderModel* model, QObject* parent)
         : ModUpdateCheck(parent), m_storage(std::make_shared<CheckStorage>()), m_model(model)
     {

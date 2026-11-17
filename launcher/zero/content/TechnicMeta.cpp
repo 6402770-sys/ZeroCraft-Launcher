@@ -19,11 +19,6 @@ namespace Content {
 
 namespace {
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("TechnicMeta", text);
-}
-
 /// A string field, empty when missing, null or not a string.
 QString stringOf(const QJsonObject& obj, const QString& key)
 {
@@ -166,13 +161,13 @@ Result<TechnicPackDetails> parsePackDetails(const QByteArray& data)
     TRY_INTO(const QJsonObject root, Json::requireObject(data, "Technic pack details"))
     if (root.contains("error")) {
         const QString error = root.value("error").toString().trimmed();
-        return std::unexpected(error.isEmpty() ? tr("Technic doesn't know this pack.") : tr("Technic: %1").arg(error));
+        return std::unexpected(error.isEmpty() ? QCoreApplication::translate("TechnicMeta", "Technic doesn't know this pack.") : QCoreApplication::translate("TechnicMeta", "Technic: %1").arg(error));
     }
 
     TechnicPackDetails d;
     TRY_INTO(d.slug, Json::requireString(root, "name"))
     if (d.slug.trimmed().isEmpty()) {
-        return std::unexpected(tr("Technic pack details have an empty name."));
+        return std::unexpected(QCoreApplication::translate("TechnicMeta", "Technic pack details have an empty name."));
     }
     d.id = idOf(root);
     d.displayName = stringOf(root, "displayName");
@@ -290,20 +285,20 @@ QString previewHtml(const TechnicPackDetails& details, const QString& title)
                        ? QStringLiteral("<a href=\"%1\">%2</a>").arg(details.platformUrl.toHtmlEscaped(), title.toHtmlEscaped())
                        : title.toHtmlEscaped();
     if (!details.author.trimmed().isEmpty()) {
-        html += "<br>" + tr("by %1").arg(details.author.trimmed().toHtmlEscaped());
+        html += "<br>" + QCoreApplication::translate("TechnicMeta", "by %1").arg(details.author.trimmed().toHtmlEscaped());
     }
     QStringList facts;
     if (!details.minecraftVersion.trimmed().isEmpty()) {
-        facts.append(tr("Minecraft %1").arg(details.minecraftVersion.trimmed().toHtmlEscaped()));
+        facts.append(QCoreApplication::translate("TechnicMeta", "Minecraft %1").arg(details.minecraftVersion.trimmed().toHtmlEscaped()));
     }
     if (!details.version.trimmed().isEmpty()) {
-        facts.append(tr("Version %1").arg(details.version.trimmed().toHtmlEscaped()));
+        facts.append(QCoreApplication::translate("TechnicMeta", "Version %1").arg(details.version.trimmed().toHtmlEscaped()));
     }
     if (!facts.isEmpty()) {
         html += "<br>" + facts.join(QStringLiteral(" &middot; "));
     }
     if (!details.isInstallable()) {
-        html += "<br><br>" + tr("This pack has no download, so it can't be installed.").toHtmlEscaped();
+        html += "<br><br>" + QCoreApplication::translate("TechnicMeta", "This pack has no download, so it can't be installed.").toHtmlEscaped();
     }
     html += "<br><br>" + details.description;
     return html;
@@ -311,12 +306,12 @@ QString previewHtml(const TechnicPackDetails& details, const QString& title)
 
 QString previewLoadingHtml(const QString& title)
 {
-    return title.toHtmlEscaped() + "<br><br>" + tr("Loading details…").toHtmlEscaped();
+    return title.toHtmlEscaped() + "<br><br>" + QCoreApplication::translate("TechnicMeta", "Loading details…").toHtmlEscaped();
 }
 
 QString previewFailedHtml(const QString& title, const QString& reason)
 {
-    QString html = title.toHtmlEscaped() + "<br><br>" + tr("Couldn't load the details of this pack.").toHtmlEscaped();
+    QString html = title.toHtmlEscaped() + "<br><br>" + QCoreApplication::translate("TechnicMeta", "Couldn't load the details of this pack.").toHtmlEscaped();
     if (!reason.trimmed().isEmpty()) {
         html += "<br>" + reason.trimmed().toHtmlEscaped();
     }

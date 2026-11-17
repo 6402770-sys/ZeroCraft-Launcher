@@ -15,14 +15,9 @@ namespace Timeline {
 
 namespace {
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("ChangeTimeline", text);
-}
-
 QString undoneTag()
 {
-    return tr("Undone");
+    return QCoreApplication::translate("ChangeTimeline", "Undone");
 }
 
 QString withTag(const QString& caption, bool undone)
@@ -36,17 +31,17 @@ QString kindWord(Downloads::Kind kind)
 {
     switch (kind) {
         case Downloads::Kind::Mod:
-            return tr("Mod");
+            return QCoreApplication::translate("ChangeTimeline", "Mod");
         case Downloads::Kind::ResourcePack:
-            return tr("Resource pack");
+            return QCoreApplication::translate("ChangeTimeline", "Resource pack");
         case Downloads::Kind::ShaderPack:
-            return tr("Shader pack");
+            return QCoreApplication::translate("ChangeTimeline", "Shader pack");
         case Downloads::Kind::World:
-            return tr("World");
+            return QCoreApplication::translate("ChangeTimeline", "World");
         case Downloads::Kind::Modpack:
-            return tr("Modpack");
+            return QCoreApplication::translate("ChangeTimeline", "Modpack");
         case Downloads::Kind::Update:
-            return tr("Update");
+            return QCoreApplication::translate("ChangeTimeline", "Update");
         case Downloads::Kind::Mixed:
             break;
     }
@@ -78,12 +73,12 @@ void addMods(const Sources& s, QList<Entry>* out)
         }
         const bool failed = info.outcome == QLatin1String(Mods::Snapshot::kOutcomeFailed);
         if (failed) {
-            e.title = tr("Mod update did not finish");
+            e.title = QCoreApplication::translate("ChangeTimeline", "Mod update did not finish");
             e.tone = Tone::Warning;
         } else if (names.size() == 1) {
-            e.title = tr("Updated %1").arg(names.first());
+            e.title = QCoreApplication::translate("ChangeTimeline", "Updated %1").arg(names.first());
         } else {
-            e.title = tr("Updated %1 mods").arg(names.size());
+            e.title = QCoreApplication::translate("ChangeTimeline", "Updated %1 mods").arg(names.size());
         }
         if (names.size() == 1 && !info.mods.isEmpty() && !failed) {
             const auto& mod = info.mods.first();
@@ -119,16 +114,16 @@ void addPacks(const Sources& s, QList<Entry>* out)
         if (bringBack) {
             e.kind = Kind::BringBack;
             const QString label = info.meta.label;
-            e.title = failed ? tr("Bringing changes back did not finish")
-                             : tr("Brought changes back from %1").arg(label.isEmpty() ? tr("a test copy") : label);
+            e.title = failed ? QCoreApplication::translate("ChangeTimeline", "Bringing changes back did not finish")
+                             : QCoreApplication::translate("ChangeTimeline", "Brought changes back from %1").arg(label.isEmpty() ? QCoreApplication::translate("ChangeTimeline", "a test copy") : label);
         } else {
             e.kind = Kind::ModpackUpdate;
             if (failed)
-                e.title = tr("Update of %1 did not finish").arg(pack);
+                e.title = QCoreApplication::translate("ChangeTimeline", "Update of %1 did not finish").arg(pack);
             else
-                e.title = info.meta.newVersion.isEmpty() ? tr("Updated %1").arg(pack) : tr("Updated %1 to %2").arg(pack, info.meta.newVersion);
+                e.title = info.meta.newVersion.isEmpty() ? QCoreApplication::translate("ChangeTimeline", "Updated %1").arg(pack) : QCoreApplication::translate("ChangeTimeline", "Updated %1 to %2").arg(pack, info.meta.newVersion);
             if (!info.meta.oldVersion.isEmpty())
-                e.caption = tr("from %1").arg(info.meta.oldVersion);
+                e.caption = QCoreApplication::translate("ChangeTimeline", "from %1").arg(info.meta.oldVersion);
         }
         if (failed)
             e.tone = Tone::Warning;
@@ -152,7 +147,7 @@ void addPackOrder(const Sources& s, QList<Entry>* out)
         Entry e;
         e.kind = Kind::PackOrder;
         e.timeMs = h.time.toMSecsSinceEpoch();
-        e.title = tr("Changed resource pack order");
+        e.title = QCoreApplication::translate("ChangeTimeline", "Changed resource pack order");
         e.undoable = first;  // undoLast() restores the newest entry only
         if (first)
             e.undoRef = h.id;
@@ -175,15 +170,15 @@ void addDownloads(const Sources& s, QList<Entry>* out)
         e.timeMs = h.finishedMs();
         switch (h.state) {
             case State::Done:
-                e.title = tr("Installed %1").arg(h.title);
+                e.title = QCoreApplication::translate("ChangeTimeline", "Installed %1").arg(h.title);
                 e.tone = Tone::Success;
                 break;
             case State::Failed:
-                e.title = tr("Install failed: %1").arg(h.title);
+                e.title = QCoreApplication::translate("ChangeTimeline", "Install failed: %1").arg(h.title);
                 e.tone = Tone::Warning;
                 break;
             case State::Cancelled:
-                e.title = tr("Install cancelled: %1").arg(h.title);
+                e.title = QCoreApplication::translate("ChangeTimeline", "Install cancelled: %1").arg(h.title);
                 e.tone = Tone::Muted;
                 break;
         }
@@ -212,15 +207,15 @@ void addSessions(const Sources& s, QList<Entry>* out)
         switch (session.outcome) {
             case Outcome::Played:
             case Outcome::Stopped:
-                e.title = tr("Played %1").arg(duration);
+                e.title = QCoreApplication::translate("ChangeTimeline", "Played %1").arg(duration);
                 e.tone = Tone::Muted;
                 break;
             case Outcome::Crashed:
-                e.title = tr("Crashed after %1").arg(duration);
+                e.title = QCoreApplication::translate("ChangeTimeline", "Crashed after %1").arg(duration);
                 e.tone = Tone::Error;
                 break;
             case Outcome::Failed:
-                e.title = tr("Didn't start");
+                e.title = QCoreApplication::translate("ChangeTimeline", "Didn't start");
                 e.tone = Tone::Warning;
                 break;
         }
@@ -236,7 +231,7 @@ QString namesCaption(const QStringList& names)
         return {};
     QString text = names.mid(0, 3).join(QStringLiteral(", "));
     if (names.size() > 3)
-        text += tr(" +%1 more").arg(names.size() - 3);
+        text += QCoreApplication::translate("ChangeTimeline", " +%1 more").arg(names.size() - 3);
     return text;
 }
 
@@ -261,9 +256,9 @@ QString dayLabel(qint64 timeMs, const QDateTime& now)
     const QDate day = QDateTime::fromMSecsSinceEpoch(timeMs, now.timeZone()).date();
     const QDate today = now.date();
     if (day == today)
-        return tr("Today");
+        return QCoreApplication::translate("ChangeTimeline", "Today");
     if (day == today.addDays(-1))
-        return tr("Yesterday");
+        return QCoreApplication::translate("ChangeTimeline", "Yesterday");
     const QLocale english(QLocale::English);
     return english.toString(day, day.year() == today.year() ? QStringLiteral("ddd d MMM") : QStringLiteral("ddd d MMM yyyy"));
 }

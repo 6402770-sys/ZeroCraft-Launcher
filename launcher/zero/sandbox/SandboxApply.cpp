@@ -17,11 +17,6 @@ namespace Sandbox {
 
 namespace {
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Sandbox", text);
-}
-
 Hooks resolve(const Hooks& in)
 {
     Hooks h = in;
@@ -116,11 +111,11 @@ std::function<QString(const QString&, const QString&)> safetyBackupHook(const QS
     return [instanceId, instanceName, backupDirOf](const QString& worldFolder, const QString& worldPath) -> QString {
         const QString dir = backupDirOf(worldFolder);
         if (dir.isEmpty())
-            return tr("There is no place for the backups.");
+            return QCoreApplication::translate("Zero::Sandbox", "There is no place for the backups.");
         const Backup::BackupMeta meta{ instanceId, instanceName, worldFolder, worldFolder };
         const Backup::BackupResult made = Backup::createBackup(worldPath, dir, Backup::Kind::Safety, meta);
         if (!made.ok)
-            return made.error.isEmpty() ? tr("The backup failed.") : made.error;
+            return made.error.isEmpty() ? QCoreApplication::translate("Zero::Sandbox", "The backup failed.") : made.error;
         Backup::applyRetention(dir, { made.zipPath });
         return {};
     };
@@ -138,9 +133,9 @@ Result apply(const Request& request, const Hooks& hooksIn)
     };
 
     if (request.original.instanceRoot.isEmpty() || request.copy.instanceRoot.isEmpty() || samePath(request.original.instanceRoot, request.copy.instanceRoot))
-        return fail(tr("The instances to compare are not valid."));
+        return fail(QCoreApplication::translate("Zero::Sandbox", "The instances to compare are not valid."));
     if (!QFileInfo(request.original.instanceRoot).isDir() || !QFileInfo(request.copy.instanceRoot).isDir())
-        return fail(tr("The instance folder was not found."));
+        return fail(QCoreApplication::translate("Zero::Sandbox", "The instance folder was not found."));
 
     // 1. the targets
     QList<Item> items;
@@ -186,10 +181,10 @@ Result apply(const Request& request, const Hooks& hooksIn)
         if (!item.world || !item.dstExists)
             continue;
         if (!h.backupWorld)
-            return fail(tr("Could not save a backup of the world %1 first, so nothing was changed.").arg(item.name));
+            return fail(QCoreApplication::translate("Zero::Sandbox", "Could not save a backup of the world %1 first, so nothing was changed.").arg(item.name));
         const QString error = h.backupWorld(item.name, item.dst);
         if (!error.isEmpty())
-            return fail(tr("Could not save a backup of the world %1 first, so nothing was changed: %2").arg(item.name, error));
+            return fail(QCoreApplication::translate("Zero::Sandbox", "Could not save a backup of the world %1 first, so nothing was changed: %2").arg(item.name, error));
     }
 
     // 3. staging: the copy's version of every target, next to the original
@@ -198,10 +193,10 @@ Result apply(const Request& request, const Hooks& hooksIn)
     const QString newDir = QDir(staging).filePath(QStringLiteral("new"));
     const QString oldDir = QDir(staging).filePath(QStringLiteral("old"));
     if (pathExists(staging))
-        return fail(tr("Bringing changes back is already in progress for this instance."));
+        return fail(QCoreApplication::translate("Zero::Sandbox", "Bringing changes back is already in progress for this instance."));
     if (!QDir().mkpath(newDir) || !QDir().mkpath(oldDir)) {
         removeEmptyTree(staging);
-        return fail(tr("Could not prepare the folder for the changes, so nothing was changed."));
+        return fail(QCoreApplication::translate("Zero::Sandbox", "Could not prepare the folder for the changes, so nothing was changed."));
     }
     auto dropNew = [&]() {
         QDir(newDir).removeRecursively();  // ZERO's own copies of the test copy's files
@@ -215,7 +210,7 @@ Result apply(const Request& request, const Hooks& hooksIn)
         item.newPath = QDir(newDir).filePath(QString::number(i));
         if (!h.copyTree(item.src, item.newPath)) {
             dropNew();
-            return fail(tr("Could not copy %1 from the test copy, so nothing was changed.").arg(item.name));
+            return fail(QCoreApplication::translate("Zero::Sandbox", "Could not copy %1 from the test copy, so nothing was changed.").arg(item.name));
         }
     }
 
@@ -246,23 +241,23 @@ Result apply(const Request& request, const Hooks& hooksIn)
         const QStringList stuck = undo();
         if (stuck.isEmpty()) {
             dropNew();
-            return fail(message + QLatin1Char(' ') + tr("Your instance was not changed."));
+            return fail(message + QLatin1Char(' ') + QCoreApplication::translate("Zero::Sandbox", "Your instance was not changed."));
         }
         qWarning() << "ZERO test copy: could not put back" << stuck;
-        return fail(message + QLatin1Char(' ') + tr("Some files could not be put back, they are in %1").arg(QDir::toNativeSeparators(staging)), false);
+        return fail(message + QLatin1Char(' ') + QCoreApplication::translate("Zero::Sandbox", "Some files could not be put back, they are in %1").arg(QDir::toNativeSeparators(staging)), false);
     };
     for (int i = 0; i < items.size(); ++i) {
         Item& item = items[i];
         started << i;
         if (item.dstExists) {
             if (!h.rename(item.dst, item.oldPath))
-                return abandon(tr("Could not replace %1. Is the game or another program using it?").arg(item.name));
+                return abandon(QCoreApplication::translate("Zero::Sandbox", "Could not replace %1. Is the game or another program using it?").arg(item.name));
             item.movedOld = true;
         }
         if (item.srcExists) {
             QDir().mkpath(QFileInfo(item.dst).absolutePath());
             if (!h.rename(item.newPath, item.dst))
-                return abandon(tr("Could not put %1 in place.").arg(item.name));
+                return abandon(QCoreApplication::translate("Zero::Sandbox", "Could not put %1 in place.").arg(item.name));
             item.placedNew = true;
         }
     }

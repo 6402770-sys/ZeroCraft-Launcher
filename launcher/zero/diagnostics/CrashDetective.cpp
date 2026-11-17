@@ -19,11 +19,6 @@ namespace Zero::Diagnostics {
 
 namespace {
 
-QString T(const char* text)
-{
-    return QCoreApplication::translate("Zero::Diagnostics::CrashDetective", text);
-}
-
 QString lastPathSegment(const QString& path)
 {
     static const QRegularExpression sep(QStringLiteral("[\\\\/]"));
@@ -113,8 +108,8 @@ QString joinNames(const QStringList& names, int maxShown = 3)
     if (names.size() == 1)
         return names.first();
     if (names.size() <= maxShown)
-        return names.mid(0, names.size() - 1).join(QStringLiteral(", ")) + T(" and ") + names.last();
-    return names.mid(0, maxShown).join(QStringLiteral(", ")) + T(" and %1 more").arg(names.size() - maxShown);
+        return names.mid(0, names.size() - 1).join(QStringLiteral(", ")) + QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " and ") + names.last();
+    return names.mid(0, maxShown).join(QStringLiteral(", ")) + QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " and %1 more").arg(names.size() - maxShown);
 }
 
 QString label(const QString& name, const QString& id)
@@ -129,17 +124,17 @@ QString friendlyRange(const QString& raw)
     static const QRegularExpression interval(R"(^([\[(])\s*([^,\]\)]*)\s*(?:,\s*([^,\]\)]*)\s*)?([\])])$)");
     const auto m = interval.match(r);
     if (!m.hasMatch())
-        return r == QLatin1String("*") ? T("any version") : r;
+        return r == QLatin1String("*") ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "any version") : r;
     const QString lo = m.captured(2), hi = m.captured(3);
     const bool single = !r.contains(QLatin1Char(','));
     if (single && !lo.isEmpty())
-        return T("exactly %1").arg(lo);
+        return QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "exactly %1").arg(lo);
     if (!lo.isEmpty() && hi.isEmpty())
-        return m.captured(1) == QLatin1String("[") ? T("%1 or newer").arg(lo) : T("newer than %1").arg(lo);
+        return m.captured(1) == QLatin1String("[") ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 or newer").arg(lo) : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "newer than %1").arg(lo);
     if (lo.isEmpty() && !hi.isEmpty())
-        return m.captured(4) == QLatin1String("]") ? T("%1 or older").arg(hi) : T("older than %1").arg(hi);
+        return m.captured(4) == QLatin1String("]") ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 or older").arg(hi) : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "older than %1").arg(hi);
     if (!lo.isEmpty() && !hi.isEmpty())
-        return lo == hi ? T("exactly %1").arg(lo) : T("%1 to %2").arg(lo, hi);
+        return lo == hi ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "exactly %1").arg(lo) : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 to %2").arg(lo, hi);
     return r;
 }
 
@@ -224,7 +219,7 @@ void parseDeps(Ctx& c)
             } else if (auto m5 = forgeOld.match(line); m5.hasMatch() && i + 1 < ls.size() && ls[i + 1].contains(QLatin1String("Currently,"))) {
                 d.mod = d.modId = m5.captured("mod");
                 d.depName = d.depId = m5.captured("dep");
-                d.range = m5.captured("range") + T(" or newer");
+                d.range = m5.captured("range") + QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " or newer");
                 d.missing = ls[i + 1].contains(QLatin1String("is not installed"));
                 if (!d.missing) {
                     static const QRegularExpression cur(R"(is version (\S+))");
@@ -280,11 +275,11 @@ void ruleJavaVersion(const Ctx& c, QList<Finding>& out)
     if (needed < 5 || f.evidence.isEmpty())
         return;
 
-    f.title = T("This game needs Java %1 or newer").arg(needed);
-    f.explanation = current > 0 ? T("The game or one of its mods was built for Java %1, but it is being run with Java %2.").arg(needed).arg(current)
-                                : T("The game or one of its mods was built for Java %1, but an older Java is being used to run it.").arg(needed);
-    f.suggestions = { T("Open the instance settings, go to the Java section and pick a Java %1 (or newer) installation.").arg(needed),
-                      T("If none is listed, use the auto-detect or download option there, or install Java %1 and detect again.").arg(needed) };
+    f.title = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "This game needs Java %1 or newer").arg(needed);
+    f.explanation = current > 0 ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game or one of its mods was built for Java %1, but it is being run with Java %2.").arg(needed).arg(current)
+                                : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game or one of its mods was built for Java %1, but an older Java is being used to run it.").arg(needed);
+    f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Open the instance settings, go to the Java section and pick a Java %1 (or newer) installation.").arg(needed),
+                      QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If none is listed, use the auto-detect or download option there, or install Java %1 and detect again.").arg(needed) };
     f.actions = { Action::OpenJavaDoctor, Action::OpenInstanceSettings };
     out.append(f);
 }
@@ -331,28 +326,28 @@ void ruleOutOfMemory(const Ctx& c, QList<Finding>& out)
         f.suggestions = tips;
         out.append(f);
     };
-    const QString raiseTip = T("In the instance settings, open Java and raise the maximum memory (for example 4096 MiB for a lightly modded game, "
+    const QString raiseTip = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "In the instance settings, open Java and raise the maximum memory (for example 4096 MiB for a lightly modded game, "
                             "6-8 GiB for a large modpack). Never allocate more than about 75% of your computer's RAM.");
-    report("heap", T("The game ran out of memory"),
-         T("Java's memory pool was full, so Minecraft could not continue. This is common with large modpacks, shaders and high render distances."),
-         { raiseTip, T("Lower the render distance, or remove shaders and heavy mods, if raising the limit is not possible.") });
-    report("gc", T("The game ran out of memory"),
-         T("Java spent almost all of its time trying to free memory and gave up. The memory limit is too low for what is loaded."), { raiseTip });
-    report("meta", T("Java ran out of class metadata space"),
-         T("The part of Java that stores loaded classes is full. This usually means a very large number of mods or a mod that generates classes in a loop."),
-         { T("Remove recently added mods and see whether the problem goes away."),
-           T("Advanced: add -XX:MaxMetaspaceSize=512m (or larger) to the JVM arguments in the instance's Java settings.") });
-    report("thread", T("The system refused to create more threads"),
-         T("Java asked Windows for a new thread and was denied. The computer is short on memory, or too much memory is reserved for the game."),
-         { T("Close other programs, and lower the maximum memory if it is set above 75% of your RAM.") });
-    report("reserve", T("Java could not reserve the requested memory"),
-         T("Java was started with a memory limit larger than Windows could provide, or a 32-bit Java is in use (it cannot use more than about 1.5 GiB)."),
-         { T("Lower the maximum memory in the instance's Java settings to fit within your free RAM."),
-           T("Make sure a 64-bit Java is selected in the same settings page; 32-bit Java installs are listed as 32-bit.") });
-    report("native", T("The computer ran out of memory"),
-         T("Java asked Windows for memory and there was none left to give. Other programs may be using it, or the game limit is set too high."),
-         { T("Close other programs and lower the maximum memory in the instance's Java settings."),
-           T("Increase the Windows page file size if the problem keeps happening.") });
+    report("heap", QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game ran out of memory"),
+         QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java's memory pool was full, so Minecraft could not continue. This is common with large modpacks, shaders and high render distances."),
+         { raiseTip, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Lower the render distance, or remove shaders and heavy mods, if raising the limit is not possible.") });
+    report("gc", QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game ran out of memory"),
+         QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java spent almost all of its time trying to free memory and gave up. The memory limit is too low for what is loaded."), { raiseTip });
+    report("meta", QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java ran out of class metadata space"),
+         QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The part of Java that stores loaded classes is full. This usually means a very large number of mods or a mod that generates classes in a loop."),
+         { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Remove recently added mods and see whether the problem goes away."),
+           QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Advanced: add -XX:MaxMetaspaceSize=512m (or larger) to the JVM arguments in the instance's Java settings.") });
+    report("thread", QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The system refused to create more threads"),
+         QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java asked Windows for a new thread and was denied. The computer is short on memory, or too much memory is reserved for the game."),
+         { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Close other programs, and lower the maximum memory if it is set above 75% of your RAM.") });
+    report("reserve", QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java could not reserve the requested memory"),
+         QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java was started with a memory limit larger than Windows could provide, or a 32-bit Java is in use (it cannot use more than about 1.5 GiB)."),
+         { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Lower the maximum memory in the instance's Java settings to fit within your free RAM."),
+           QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Make sure a 64-bit Java is selected in the same settings page; 32-bit Java installs are listed as 32-bit.") });
+    report("native", QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The computer ran out of memory"),
+         QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java asked Windows for memory and there was none left to give. Other programs may be using it, or the game limit is set too high."),
+         { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Close other programs and lower the maximum memory in the instance's Java settings."),
+           QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Increase the Windows page file size if the problem keeps happening.") });
 }
 
 void ruleMissingDependency(const Ctx& c, QList<Finding>& out)
@@ -383,16 +378,16 @@ void ruleMissingDependency(const Ctx& c, QList<Finding>& out)
     }
     for (const auto& key : order) {
         const Group& g = groups[key];
-        Finding f = mk("missing-dependency", Severity::Critical, Confidence::Confirmed, T("Missing required mod: %1").arg(g.depName), {});
+        Finding f = mk("missing-dependency", Severity::Critical, Confidence::Confirmed, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Missing required mod: %1").arg(g.depName), {});
         QStringList parts;
         for (int i = 0; i < g.requesters.size(); ++i) {
             const QString range = g.ranges[i].isEmpty() ? QString() : friendlyRange(g.ranges[i]);
-            parts.append(range.isEmpty() || range == T("any version") ? g.requesters[i] : T("%1 (needs version %2)").arg(g.requesters[i], range));
+            parts.append(range.isEmpty() || range == QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "any version") ? g.requesters[i] : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 (needs version %2)").arg(g.requesters[i], range));
         }
-        f.explanation = T("%1 cannot start without %2, but %2 was not found among the installed mods.").arg(joinNames(parts), g.depName);
-        f.suggestions = { T("Install %1 for the same Minecraft version and mod loader as this instance, then launch again.").arg(g.depName),
-                          T("Use the instance's mod browser to search for it, or add its .jar file to the mods folder."),
-                          T("If you do not need %1, remove the mods that depend on it.").arg(joinNames(g.requesters)) };
+        f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 cannot start without %2, but %2 was not found among the installed mods.").arg(joinNames(parts), g.depName);
+        f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Install %1 for the same Minecraft version and mod loader as this instance, then launch again.").arg(g.depName),
+                          QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Use the instance's mod browser to search for it, or add its .jar file to the mods folder."),
+                          QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If you do not need %1, remove the mods that depend on it.").arg(joinNames(g.requesters)) };
         for (const auto& e : g.evidence)
             addEvidence(f, e);
         f.actions = { Action::OpenModsFolder, Action::OpenInstanceSettings };
@@ -420,7 +415,7 @@ void ruleIncompatibleVersion(const Ctx& c, QList<Finding>& out)
         }
         if (g.actual.isEmpty())
             g.actual = d.actual;
-        g.lines.append(T("%1 needs %2 %3").arg(label(d.mod, d.modId), g.depName, friendlyRange(d.range)));
+        g.lines.append(QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 needs %2 %3").arg(label(d.mod, d.modId), g.depName, friendlyRange(d.range)));
         g.evidence.append(c.ev(d.src, d.idx));
     }
     for (const auto& key : order) {
@@ -431,20 +426,20 @@ void ruleIncompatibleVersion(const Ctx& c, QList<Finding>& out)
         QStringList tips;
         const QString actualSuffix = g.actual.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(g.actual);
         if (isMc) {
-            title = T("Some mods are not made for this Minecraft version");
-            expl = T("The instance runs Minecraft %1, but %2.").arg(g.actual.isEmpty() ? T("(see log)") : g.actual, g.lines.join(QStringLiteral("; ")));
-            tips = { T("Download the version of each listed mod that matches this instance's Minecraft version, or remove the mod."),
-                     T("Alternatively change the Minecraft version in the instance's Version page to the one the mods support.") };
+            title = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Some mods are not made for this Minecraft version");
+            expl = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The instance runs Minecraft %1, but %2.").arg(g.actual.isEmpty() ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "(see log)") : g.actual, g.lines.join(QStringLiteral("; ")));
+            tips = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Download the version of each listed mod that matches this instance's Minecraft version, or remove the mod."),
+                     QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Alternatively change the Minecraft version in the instance's Version page to the one the mods support.") };
         } else if (isLoader) {
-            title = T("A mod needs a different %1 version").arg(g.depName);
-            expl = T("The installed %1%2 does not satisfy the requirements: %3.").arg(g.depName, actualSuffix, g.lines.join(QStringLiteral("; ")));
-            tips = { T("Change the loader version in the instance's Version page to one in the required range."),
-                     T("Or use an older/newer build of the mod that matches the installed loader.") };
+            title = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "A mod needs a different %1 version").arg(g.depName);
+            expl = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The installed %1%2 does not satisfy the requirements: %3.").arg(g.depName, actualSuffix, g.lines.join(QStringLiteral("; ")));
+            tips = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Change the loader version in the instance's Version page to one in the required range."),
+                     QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Or use an older/newer build of the mod that matches the installed loader.") };
         } else {
-            title = T("Wrong version of %1").arg(g.depName);
-            expl = T("%1, but a different version%2 is installed.").arg(g.lines.join(QStringLiteral("; ")), actualSuffix);
-            tips = { T("Update or downgrade %1 so it satisfies the requirement above.").arg(g.depName),
-                     T("Check that every mod involved was built for the same Minecraft version.") };
+            title = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Wrong version of %1").arg(g.depName);
+            expl = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1, but a different version%2 is installed.").arg(g.lines.join(QStringLiteral("; ")), actualSuffix);
+            tips = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Update or downgrade %1 so it satisfies the requirement above.").arg(g.depName),
+                     QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Check that every mod involved was built for the same Minecraft version.") };
         }
         Finding f = mk("incompatible-version", Severity::Critical, Confidence::Confirmed, title, expl);
         f.suggestions = tips;
@@ -465,10 +460,10 @@ void ruleIncompatibleVersion(const Ctx& c, QList<Finding>& out)
         if (!m.hasMatch())
             return;
         const QString a = label(m.captured("a"), m.captured("aid")), b = label(m.captured("b"), m.captured("bid"));
-        Finding f = mk("incompatible-version", Severity::Critical, Confidence::Confirmed, T("%1 and %2 cannot be used together").arg(a, b),
-                       T("%1 declares itself incompatible with %2, so the game refuses to start with both installed.").arg(a, b));
-        f.suggestions = { T("Remove either %1 or %2 from the mods folder.").arg(a, b),
-                          T("Check whether an updated version of either mod removes the conflict.") };
+        Finding f = mk("incompatible-version", Severity::Critical, Confidence::Confirmed, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 and %2 cannot be used together").arg(a, b),
+                       QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "%1 declares itself incompatible with %2, so the game refuses to start with both installed.").arg(a, b));
+        f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Remove either %1 or %2 from the mods folder.").arg(a, b),
+                          QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Check whether an updated version of either mod removes the conflict.") };
         addEvidence(f, c.ev(s, i));
         f.actions = { Action::OpenModsFolder };
         out.append(f);
@@ -501,16 +496,16 @@ void ruleDuplicateMods(const Ctx& c, QList<Finding>& out)
     ids.removeDuplicates();
     if (ids.isEmpty() && !headerSeen)
         return;
-    f.title = T("The same mod is installed more than once");
+    f.title = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The same mod is installed more than once");
     if (ids.isEmpty()) {
-        f.explanation = T("The game found two copies of the same mod in the mods folder and refuses to start.");
+        f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game found two copies of the same mod in the mods folder and refuses to start.");
     } else {
-        f.explanation = T("These mods exist in more than one file: %1.").arg(joinNames(ids, 5));
+        f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "These mods exist in more than one file: %1.").arg(joinNames(ids, 5));
         if (ids.size() == 1 && !fileHints.isEmpty())
-            f.explanation += T(" Files: %1.").arg(fileHints.first());
+            f.explanation += QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " Files: %1.").arg(fileHints.first());
     }
-    f.suggestions = { T("Open the mods folder and delete the older copy of each duplicated mod (keep one .jar per mod)."),
-                      T("Check subfolders of the mods folder too: Forge and NeoForge load .jar files from there.") };
+    f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Open the mods folder and delete the older copy of each duplicated mod (keep one .jar per mod)."),
+                      QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Check subfolders of the mods folder too: Forge and NeoForge load .jar files from there.") };
     f.actions = { Action::OpenModsFolder };
     out.append(f);
 }
@@ -560,18 +555,18 @@ void ruleMixin(const Ctx& c, QList<Finding>& out)
         if (mod.isEmpty() || mod == QLatin1String("minecraft"))
             return;
         if (!byMod.contains(mod)) {
-            byMod.insert(mod, mk("mixin-failure", Severity::Critical, Confidence::Likely, T("A mixin from \"%1\" failed to apply").arg(mod), {}));
+            byMod.insert(mod, mk("mixin-failure", Severity::Critical, Confidence::Likely, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "A mixin from \"%1\" failed to apply").arg(mod), {}));
             order.append(mod);
         }
         addEvidence(byMod[mod], c.ev(s, i));
     });
     for (const auto& mod : order) {
         Finding f = byMod[mod];
-        f.explanation = T("Mixins are how mods change the game's code. A change made by \"%1\" could not be applied, usually because the mod "
+        f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Mixins are how mods change the game's code. A change made by \"%1\" could not be applied, usually because the mod "
                           "was built for another Minecraft version, or because another mod changes the same code.")
                             .arg(mod);
-        f.suggestions = { T("Update \"%1\" to a version made for this exact Minecraft version, or remove it.").arg(mod),
-                          T("If it still fails after updating, another mod is probably clashing with it: remove recently added mods one at a time.") };
+        f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Update \"%1\" to a version made for this exact Minecraft version, or remove it.").arg(mod),
+                          QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If it still fails after updating, another mod is probably clashing with it: remove recently added mods one at a time.") };
         f.actions = { Action::OpenModsFolder, Action::OpenCrashReport };
         out.append(f);
     }
@@ -627,15 +622,15 @@ void ruleSuspectedMods(const Ctx& c, QList<Finding>& out)
                     continue;
                 const bool single = names.size() == 1;
                 Finding f = mk("suspected-mods", Severity::Warning, single ? Confidence::Likely : Confidence::Possible,
-                               single ? T("Suspected mod: %1").arg(names.first()) : T("Suspected mods: %1").arg(joinNames(names)), {});
-                f.explanation = single ? T("The crash report's own analysis found code from \"%1\" in the error trace. The mod is the most likely place to start, "
+                               single ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Suspected mod: %1").arg(names.first()) : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Suspected mods: %1").arg(joinNames(names)), {});
+                f.explanation = single ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The crash report's own analysis found code from \"%1\" in the error trace. The mod is the most likely place to start, "
                                            "although it may only be where another problem surfaced.")
                                                .arg(names.first())
-                                       : T("The crash report found code from several mods in the error trace (%1). One of them is probably involved, "
+                                       : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The crash report found code from several mods in the error trace (%1). One of them is probably involved, "
                                            "but the report cannot tell which.")
                                                .arg(joinNames(names));
-                f.suggestions = { T("Update the suspected mod(s) to the latest version for this Minecraft version."),
-                                  T("If that does not help, remove them one at a time (or half of them at a time) and launch again.") };
+                f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Update the suspected mod(s) to the latest version for this Minecraft version."),
+                                  QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If that does not help, remove them one at a time (or half of them at a time) and launch again.") };
                 for (const auto& e : ev)
                     addEvidence(f, e);
                 f.actions = { Action::OpenModsFolder, Action::OpenCrashReport };
@@ -657,12 +652,12 @@ void ruleSuspectedMods(const Ctx& c, QList<Finding>& out)
                 }
                 if (mods.isEmpty())
                     continue;
-                Finding f = mk("suspected-mods", Severity::Warning, Confidence::Possible, T("Mixins from %1 appear in the error trace").arg(joinNames(mods)), {});
-                f.explanation = T("These mods changed the game code that was running when it crashed (%1). That makes them suspects, not proof: "
+                Finding f = mk("suspected-mods", Severity::Warning, Confidence::Possible, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Mixins from %1 appear in the error trace").arg(joinNames(mods)), {});
+                f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "These mods changed the game code that was running when it crashed (%1). That makes them suspects, not proof: "
                                   "mixins show up in a trace even when the bug is elsewhere.")
                                     .arg(joinNames(mods));
-                f.suggestions = { T("Update these mods to the latest version for this Minecraft version."),
-                                  T("If the crash continues, temporarily remove them and launch again.") };
+                f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Update these mods to the latest version for this Minecraft version."),
+                                  QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If the crash continues, temporarily remove them and launch again.") };
                 for (const auto& e : ev)
                     addEvidence(f, e);
                 f.actions = { Action::OpenModsFolder, Action::OpenCrashReport };
@@ -682,10 +677,10 @@ const QRegularExpression& gpuDllRegex()
 
 QStringList driverSuggestions()
 {
-    return { T("Update the graphics driver from the manufacturer's site (NVIDIA, AMD or Intel), not through Windows Update."),
-             T("On a laptop with two graphics chips, make sure Java (javaw.exe) runs on the dedicated GPU in the Windows graphics settings."),
-             T("Turn off overlays (Discord, Steam, GeForce Experience, MSI Afterburner) while testing, and remove graphics mods or shaders once to check."),
-             T("Remote desktop sessions and virtual machines do not provide OpenGL; run the game on the physical screen.") };
+    return { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Update the graphics driver from the manufacturer's site (NVIDIA, AMD or Intel), not through Windows Update."),
+             QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "On a laptop with two graphics chips, make sure Java (javaw.exe) runs on the dedicated GPU in the Windows graphics settings."),
+             QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Turn off overlays (Discord, Steam, GeForce Experience, MSI Afterburner) while testing, and remove graphics mods or shaders once to check."),
+             QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Remote desktop sessions and virtual machines do not provide OpenGL; run the game on the physical screen.") };
 }
 
 void ruleGraphics(const Ctx& c, QList<Finding>& out)
@@ -702,8 +697,8 @@ void ruleGraphics(const Ctx& c, QList<Finding>& out)
             addEvidence(glfwFinding, c.ev(s, i));
     });
     if (!glfwFinding.evidence.isEmpty()) {
-        glfwFinding.title = T("The graphics driver cannot run Minecraft");
-        glfwFinding.explanation = T("Minecraft could not create its OpenGL window: the graphics driver reported that it does not support, or could not set up, the "
+        glfwFinding.title = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The graphics driver cannot run Minecraft");
+        glfwFinding.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Minecraft could not create its OpenGL window: the graphics driver reported that it does not support, or could not set up, the "
                                     "required OpenGL. This is almost always an outdated or missing driver.");
         glfwFinding.suggestions = driverSuggestions();
         glfwFinding.actions = { Action::OpenLogsFolder };
@@ -729,10 +724,10 @@ void ruleGraphics(const Ctx& c, QList<Finding>& out)
         }
         if (problemIdx >= 0) {
             if (const auto m = gpuDllRegex().match(problem); m.hasMatch()) {
-                Finding f = mk("graphics-driver", Severity::Critical, Confidence::Likely, T("The JVM crashed inside the graphics driver (%1)").arg(m.captured("dll")), {});
-                f.explanation = T("Java stopped in %1, which belongs to the graphics driver%2. The log does not say why, but a driver bug or an outdated driver is "
+                Finding f = mk("graphics-driver", Severity::Critical, Confidence::Likely, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The JVM crashed inside the graphics driver (%1)").arg(m.captured("dll")), {});
+                f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java stopped in %1, which belongs to the graphics driver%2. The log does not say why, but a driver bug or an outdated driver is "
                                   "the usual cause.")
-                                    .arg(m.captured("dll"), accessViolation ? T(" (memory access violation)") : QString());
+                                    .arg(m.captured("dll"), accessViolation ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " (memory access violation)") : QString());
                 f.suggestions = driverSuggestions();
                 addEvidence(f, c.ev(s, problemIdx));
                 f.actions = { Action::OpenCrashReport };
@@ -746,8 +741,8 @@ void ruleGraphics(const Ctx& c, QList<Finding>& out)
                 continue;
             for (int k = i + 1; k < std::min<int>(i + 9, ls.size()); ++k) {
                 if (const auto m = gpuDllRegex().match(ls[k]); m.hasMatch() && accessViolation) {
-                    Finding f = mk("graphics-driver", Severity::Warning, Confidence::Possible, T("The JVM crashed near the graphics driver (%1)").arg(m.captured("dll")), {});
-                    f.explanation = T("A graphics driver library (%1) is among the first calls on the crashed thread's stack. This may point to a driver problem, "
+                    Finding f = mk("graphics-driver", Severity::Warning, Confidence::Possible, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The JVM crashed near the graphics driver (%1)").arg(m.captured("dll")), {});
+                    f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "A graphics driver library (%1) is among the first calls on the crashed thread's stack. This may point to a driver problem, "
                                       "though it can also be a bug in the game or a mod that the driver tripped over.")
                                         .arg(m.captured("dll"));
                     f.suggestions = driverSuggestions();
@@ -796,16 +791,16 @@ void ruleTickingCrash(const Ctx& c, QList<Finding>& out)
             const QString what = d.captured("what");
             const bool entity = what == QLatin1String("Ticking entity") || what == QLatin1String("Ticking player");
             Finding f = mk("ticking-crash", Severity::Critical, Confidence::Likely,
-                           entity ? T("The game crashed while updating an entity") : T("The game crashed while updating the world"), {});
-            QString expl = T("The crash report says the game failed while processing%1. This is usually caused by a damaged entity or block in the world, or by a "
+                           entity ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game crashed while updating an entity") : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game crashed while updating the world"), {});
+            QString expl = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The crash report says the game failed while processing%1. This is usually caused by a damaged entity or block in the world, or by a "
                              "mod that added it and has since been removed or changed.")
                                .arg(type.isEmpty() ? QString() : QStringLiteral(" %1").arg(type));
             if (!where.isEmpty())
-                expl += T(" Location: %1.").arg(where.left(120));
+                expl += QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " Location: %1.").arg(where.left(120));
             f.explanation = expl;
-            f.suggestions = { T("Restore a backup of the world from before the first crash, if you have one."),
-                              T("If the entity or block belongs to a mod, update that mod (or put back the one that was removed)."),
-                              T("Without a backup, a world editor such as NBTExplorer or MCASelector can delete the entity/chunk at the location above.") };
+            f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Restore a backup of the world from before the first crash, if you have one."),
+                              QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If the entity or block belongs to a mod, update that mod (or put back the one that was removed)."),
+                              QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Without a backup, a world editor such as NBTExplorer or MCASelector can delete the entity/chunk at the location above.") };
             addEvidence(f, c.ev(s, i));
             f.actions = { Action::OpenGameFolder, Action::OpenCrashReport };
             out.append(f);
@@ -828,11 +823,11 @@ void ruleConfigCorrupt(const Ctx& c, QList<Finding>& out)
     QStringList order;
     auto touch = [&](const QString& file, Severity sev, const QString& mod) -> Finding& {
         if (!byFile.contains(file)) {
-            Finding f = mk("config-corrupt", sev, Confidence::Likely, T("Configuration file \"%1\" is damaged").arg(file), {});
-            f.explanation = T("The game could not read the file \"%1\"%2. A config file that was edited by hand or cut short during a crash can look like this.")
-                                .arg(file, mod.isEmpty() ? QString() : T(" of the mod \"%1\"").arg(mod));
-            f.suggestions = { T("Close the game, open the game folder's config folder, and rename \"%1\" so the mod writes a fresh default one.").arg(file),
-                              T("If you edited it by hand, check for a missing quote, comma or bracket.") };
+            Finding f = mk("config-corrupt", sev, Confidence::Likely, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Configuration file \"%1\" is damaged").arg(file), {});
+            f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game could not read the file \"%1\"%2. A config file that was edited by hand or cut short during a crash can look like this.")
+                                .arg(file, mod.isEmpty() ? QString() : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " of the mod \"%1\"").arg(mod));
+            f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Close the game, open the game folder's config folder, and rename \"%1\" so the mod writes a fresh default one.").arg(file),
+                              QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If you edited it by hand, check for a missing quote, comma or bracket.") };
             f.actions = { Action::OpenGameFolder };
             byFile.insert(file, f);
             order.append(file);
@@ -886,23 +881,23 @@ void ruleWrongLoader(const Ctx& c, QList<Finding>& out)
             continue;
         const QString loader = label(d.depName, d.depId);
         if (!byLoader.contains(d.depId)) {
-            Finding nf = mk("wrong-loader", Severity::Critical, Confidence::Likely, T("A mod was built for a different mod loader (%1)").arg(loader), {});
-            nf.suggestions = { T("Remove the listed mod, or download the build made for the loader this instance uses."),
-                               T("Mod pages list Fabric, Quilt, Forge and NeoForge versions separately.") };
+            Finding nf = mk("wrong-loader", Severity::Critical, Confidence::Likely, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "A mod was built for a different mod loader (%1)").arg(loader), {});
+            nf.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Remove the listed mod, or download the build made for the loader this instance uses."),
+                               QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Mod pages list Fabric, Quilt, Forge and NeoForge versions separately.") };
             nf.actions = { Action::OpenModsFolder, Action::OpenInstanceSettings };
             byLoader.insert(d.depId, nf);
             order.append(d.depId);
         }
         Finding& f = byLoader[d.depId];
         f.explanation += (f.explanation.isEmpty() ? QString() : QStringLiteral(" ")) +
-                         T("\"%1\" requires %2, which is not part of this instance's mod loader.").arg(label(d.mod, d.modId), loader);
+                         QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "\"%1\" requires %2, which is not part of this instance's mod loader.").arg(label(d.mod, d.modId), loader);
         addEvidence(f, c.ev(d.src, d.idx));
     }
     for (const auto& id : order)
         out.append(byLoader[id]);
 
     // 2) Forge / NeoForge cannot read a jar without mods.toml: usually a Fabric mod or a plain library.
-    Finding noToml = mk("wrong-loader", Severity::Critical, Confidence::Likely, T("A file in the mods folder is not a Forge/NeoForge mod"), {});
+    Finding noToml = mk("wrong-loader", Severity::Critical, Confidence::Likely, QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "A file in the mods folder is not a Forge/NeoForge mod"), {});
     QStringList files;
     c.scan([&](int s, int i, const QString& line) {
         if (isNoiseLevel(line))
@@ -918,11 +913,11 @@ void ruleWrongLoader(const Ctx& c, QList<Finding>& out)
     if (!noToml.evidence.isEmpty()) {
         files.removeDuplicates();
         noToml.explanation = files.isEmpty()
-                                 ? T("The mod loader rejected a mod because it was built for a different loader (for example a Fabric mod on Forge).")
-                                 : T("The mod loader cannot read %1. A jar without mods.toml is usually a mod built for a different loader (for example Fabric), or not a mod at all.")
+                                 ? QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The mod loader rejected a mod because it was built for a different loader (for example a Fabric mod on Forge).")
+                                 : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The mod loader cannot read %1. A jar without mods.toml is usually a mod built for a different loader (for example Fabric), or not a mod at all.")
                                        .arg(joinNames(files, 4));
-        noToml.suggestions = { T("Remove that file from the mods folder, or replace it with the build made for this instance's loader."),
-                               T("Check the mod's download page: each loader (Fabric, Quilt, Forge, NeoForge) has its own file.") };
+        noToml.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Remove that file from the mods folder, or replace it with the build made for this instance's loader."),
+                               QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Check the mod's download page: each loader (Fabric, Quilt, Forge, NeoForge) has its own file.") };
         noToml.actions = { Action::OpenModsFolder, Action::OpenInstanceSettings };
         out.append(noToml);
     }
@@ -952,15 +947,15 @@ void ruleNativeCrash(const Ctx& c, QList<Finding>& out)
         const bool overlayHit = overlay.match(problem).hasMatch() || overlay.match(c.sources[s].text.left(200000)).hasMatch();
 
         Finding f = mk("jvm-native-crash", Severity::Warning, overlayHit ? Confidence::Likely : Confidence::Possible,
-                       T("The Java virtual machine crashed in native code"), {});
-        f.explanation = T("Java itself stopped (the file hs_err_pid... is its crash dump)%1. Crashes like this are normally caused by drivers, overlay software, "
+                       QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The Java virtual machine crashed in native code"), {});
+        f.explanation = QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Java itself stopped (the file hs_err_pid... is its crash dump)%1. Crashes like this are normally caused by drivers, overlay software, "
                           "a damaged Java installation, or failing RAM rather than by a mod.")
-                            .arg(where.isEmpty() ? QString() : T(" inside \"%1\"").arg(where));
+                            .arg(where.isEmpty() ? QString() : QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " inside \"%1\"").arg(where));
         if (overlayHit)
-            f.explanation += T(" Overlay or capture software was detected in the dump; that kind of program often injects into Java and crashes it.");
-        f.suggestions = { T("Close overlay and capture programs (Discord overlay, Steam overlay, OBS, MSI Afterburner, Overwolf) and try again."),
-                          T("Update your graphics driver and try a different Java installation in the instance settings."),
-                          T("If it keeps happening at random, test your RAM (Windows Memory Diagnostic).") };
+            f.explanation += QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " Overlay or capture software was detected in the dump; that kind of program often injects into Java and crashes it.");
+        f.suggestions = { QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Close overlay and capture programs (Discord overlay, Steam overlay, OBS, MSI Afterburner, Overwolf) and try again."),
+                          QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Update your graphics driver and try a different Java installation in the instance settings."),
+                          QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "If it keeps happening at random, test your RAM (Windows Memory Diagnostic).") };
         addEvidence(f, c.ev(s, idx));
         f.actions = { Action::OpenCrashReport, Action::OpenInstanceSettings };
         out.append(f);
@@ -979,29 +974,30 @@ void ruleExitCode(const Ctx& c, QList<Finding>& out)
         bool graphics;
     };
     static const Entry table[] = {
-        { 0xC0000005, "access violation (0xC0000005)",
-          "The program touched memory it should not. For a game this nearly always comes from a graphics driver, an overlay program, or a native library that crashed.",
+        { 0xC0000005, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "access violation (0xC0000005)"),
+          QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "The program touched memory it should not. For a game this nearly always comes from a graphics driver, an overlay program, or a native library that crashed."),
           true },
-        { 0xC0000409, "stack buffer overrun (0xC0000409)", "Windows stopped the process because a native library detected memory corruption.", true },
-        { 0xC0000374, "heap corruption (0xC0000374)",
-          "Windows detected that memory used by a native library was damaged. Faulty drivers or overlays are the usual cause.", true },
-        { 0xC00000FD, "stack overflow (0xC00000FD)", "A program ran out of stack space, typically from endless recursion in a native library.", false },
-        { 0xC000001D, "illegal instruction (0xC000001D)",
-          "The CPU was asked to run an instruction it does not support. This may point to a Java build for different hardware, or a failing CPU/RAM.", false },
-        { 0xC0000135, "missing DLL (0xC0000135)", "A required Windows library was not found, so the process could not start. Java may be installed incompletely.",
+        { 0xC0000409, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "stack buffer overrun (0xC0000409)"), QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "Windows stopped the process because a native library detected memory corruption."), true },
+        { 0xC0000374, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "heap corruption (0xC0000374)"),
+          QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "Windows detected that memory used by a native library was damaged. Faulty drivers or overlays are the usual cause."), true },
+        { 0xC00000FD, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "stack overflow (0xC00000FD)"), QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "A program ran out of stack space, typically from endless recursion in a native library."), false },
+        { 0xC000001D, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "illegal instruction (0xC000001D)"),
+          QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "The CPU was asked to run an instruction it does not support. This may point to a Java build for different hardware, or a failing CPU/RAM."), false },
+        { 0xC0000135, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "missing DLL (0xC0000135)"), QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "A required Windows library was not found, so the process could not start. Java may be installed incompletely."),
           false },
-        { 0xC0000142, "DLL initialization failed (0xC0000142)", "A library failed to start. Security software or a broken Java install can cause this.", false },
-        { 0xC000013A, "terminated by Ctrl+C (0xC000013A)", "The process was closed from a console, not by a game error.", false },
-        { 0x80000003, "breakpoint (0x80000003)", "The process hit a debugger breakpoint, which means a native library aborted on purpose.", false },
+        { 0xC0000142, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "DLL initialization failed (0xC0000142)"), QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "A library failed to start. Security software or a broken Java install can cause this."), false },
+        { 0xC000013A, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "terminated by Ctrl+C (0xC000013A)"), QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "The process was closed from a console, not by a game error."), false },
+        { 0x80000003, QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "breakpoint (0x80000003)"), QT_TRANSLATE_NOOP("Zero::Diagnostics::CrashDetective", "The process hit a debugger breakpoint, which means a native library aborted on purpose."), false },
     };
     for (const auto& e : table) {
         if (e.code != code)
             continue;
         Finding f = mk("exit-code", Severity::Warning, Confidence::Possible,
-                       T("The game exited with a Windows error: %1").arg(QString::fromLatin1(e.name)), T(e.text));
-        f.suggestions = e.graphics ? QStringList{ T("Update the graphics driver and close overlay software (Discord, Steam, OBS, Afterburner)."),
-                                                  T("Try a different Java version in the instance settings.") }
-                                   : QStringList{ T("Try a different Java version in the instance settings, then reinstall Java if it still fails.") };
+                       QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "The game exited with a Windows error: %1").arg(QCoreApplication::translate("Zero::Diagnostics::CrashDetective", e.name)),
+                       QCoreApplication::translate("Zero::Diagnostics::CrashDetective", e.text));
+        f.suggestions = e.graphics ? QStringList{ QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Update the graphics driver and close overlay software (Discord, Steam, OBS, Afterburner)."),
+                                                  QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Try a different Java version in the instance settings.") }
+                                   : QStringList{ QCoreApplication::translate("Zero::Diagnostics::CrashDetective", "Try a different Java version in the instance settings, then reinstall Java if it still fails.") };
         f.actions = { Action::OpenInstanceSettings, Action::OpenLogsFolder };
         out.append(f);
         return;
@@ -1091,7 +1087,7 @@ QList<Finding> CrashDetective::analyze(const QList<LogSource>& sources, std::opt
             continue;
         const bool allOlder = std::all_of(f.evidence.begin(), f.evidence.end(), [&](const Evidence& e) { return olderNames.contains(e.source); });
         if (allOlder)
-            f.explanation += T(" Note: this was found only in a file from before the most recent launch, so it may describe an earlier session.");
+            f.explanation += QCoreApplication::translate("Zero::Diagnostics::CrashDetective", " Note: this was found only in a file from before the most recent launch, so it may describe an earlier session.");
     }
 
     std::stable_sort(result.begin(), result.end(), [](const Finding& a, const Finding& b) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ModpackSource.h"
 
+#include <QCoreApplication>
 #include <QHash>
 #include <QPair>
 #include <QRegularExpression>
@@ -297,10 +298,10 @@ QString licenseText(const QString& license)
         return {};
     }
     static const QHash<QString, QString> spelled = {
-        { QStringLiteral("LicenseRef-All-Rights-Reserved"), QStringLiteral("All Rights Reserved") },
-        { QStringLiteral("ARR"), QStringLiteral("All Rights Reserved") },
-        { QStringLiteral("LicenseRef-Custom"), QStringLiteral("Custom license") },
-        { QStringLiteral("LicenseRef-Public-Domain"), QStringLiteral("Public domain") },
+        { QStringLiteral("LicenseRef-All-Rights-Reserved"), QCoreApplication::translate("Zero::Content::ModpackSource", "All Rights Reserved") },
+        { QStringLiteral("ARR"), QCoreApplication::translate("Zero::Content::ModpackSource", "All Rights Reserved") },
+        { QStringLiteral("LicenseRef-Custom"), QCoreApplication::translate("Zero::Content::ModpackSource", "Custom license") },
+        { QStringLiteral("LicenseRef-Public-Domain"), QCoreApplication::translate("Zero::Content::ModpackSource", "Public domain") },
     };
     if (const auto it = spelled.constFind(license); it != spelled.cend()) {
         return it.value();

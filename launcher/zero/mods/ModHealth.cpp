@@ -23,11 +23,6 @@ namespace Mods {
 
 namespace {
 
-QString tr(const char* s)
-{
-    return QCoreApplication::translate("ModHealth", s);
-}
-
 QString loaderName(InstanceLoader loader)
 {
     switch (loader) {
@@ -42,7 +37,7 @@ QString loaderName(InstanceLoader loader)
         case InstanceLoader::None:
             break;
     }
-    return tr("no mod loader");
+    return QCoreApplication::translate("ModHealth", "no mod loader");
 }
 
 QString formatName(LoaderFormat format)
@@ -57,11 +52,11 @@ QString formatName(LoaderFormat format)
         case LoaderFormat::NeoForge:
             return QStringLiteral("NeoForge");
         case LoaderFormat::LegacyForge:
-            return tr("an older version of Forge");
+            return QCoreApplication::translate("ModHealth", "an older version of Forge");
         case LoaderFormat::Unknown:
             break;
     }
-    return tr("another mod loader");
+    return QCoreApplication::translate("ModHealth", "another mod loader");
 }
 
 using Resolve::environmentIds;
@@ -75,15 +70,15 @@ QString joinNames(const QStringList& names)
     if (names.size() <= 1)
         return names.value(0);
     if (names.size() == 2)
-        return tr("%1 and %2").arg(names[0], names[1]);
+        return QCoreApplication::translate("ModHealth", "%1 and %2").arg(names[0], names[1]);
     if (names.size() == 3)
-        return tr("%1, %2 and %3").arg(names[0], names[1], names[2]);
-    return tr("%1, %2 and %3 more").arg(names[0], names[1]).arg(names.size() - 2);
+        return QCoreApplication::translate("ModHealth", "%1, %2 and %3").arg(names[0], names[1], names[2]);
+    return QCoreApplication::translate("ModHealth", "%1, %2 and %3 more").arg(names[0], names[1]).arg(names.size() - 2);
 }
 
 QString versionText(const QString& v)
 {
-    return v.isEmpty() ? tr("(version unknown)") : v;
+    return v.isEmpty() ? QCoreApplication::translate("ModHealth", "(version unknown)") : v;
 }
 
 QString stripDisabledSuffix(QString name)
@@ -204,11 +199,11 @@ class Analyzer {
             f.confidence = Confidence::Unknown;
             f.fileNames = { jar.fileName };
             f.args = { jar.fileName };
-            f.title = tr("Cannot read %1").arg(jar.fileName);
-            f.detail = tr("ZERO can't read this mod's metadata; it may still work.");
+            f.title = QCoreApplication::translate("ModHealth", "Cannot read %1").arg(jar.fileName);
+            f.detail = QCoreApplication::translate("ModHealth", "ZERO can't read this mod's metadata; it may still work.");
             if (!jar.parseError.isEmpty())
                 f.detail += QLatin1Char(' ') + jar.parseError;
-            f.suggestion = tr("Nothing to do unless the game has problems. If it does, try starting without this file.");
+            f.suggestion = QCoreApplication::translate("ModHealth", "Nothing to do unless the game has problems. If it does, try starting without this file.");
             add(f);
             return;
         }
@@ -231,24 +226,24 @@ class Analyzer {
         f.fileNames = { jar.fileName };
         f.relatedId = loaderId();
         f.args = { modName, formatText, loaderText };
-        f.title = tr("%1 is built for %2, not %3").arg(modName, formatText, loaderText);
+        f.title = QCoreApplication::translate("ModHealth", "%1 is built for %2, not %3").arg(modName, formatText, loaderText);
         switch (conf) {
             case Confidence::Confirmed:
-                f.detail = tr("%1 is built for %2, but this instance uses %3, so the game will not load it.").arg(modName, formatText, loaderText);
-                f.suggestion = tr("Download the %1 version of this mod, or remove it.").arg(loaderText);
+                f.detail = QCoreApplication::translate("ModHealth", "%1 is built for %2, but this instance uses %3, so the game will not load it.").arg(modName, formatText, loaderText);
+                f.suggestion = QCoreApplication::translate("ModHealth", "Download the %1 version of this mod, or remove it.").arg(loaderText);
                 break;
             case Confidence::Likely:
-                f.detail = tr("%1 looks like a mod for %2, so it probably will not load on %3.").arg(modName, formatText, loaderText);
-                f.suggestion = tr("Download the %1 version of this mod, or remove it.").arg(loaderText);
+                f.detail = QCoreApplication::translate("ModHealth", "%1 looks like a mod for %2, so it probably will not load on %3.").arg(modName, formatText, loaderText);
+                f.suggestion = QCoreApplication::translate("ModHealth", "Download the %1 version of this mod, or remove it.").arg(loaderText);
                 break;
             default:
                 if (reason == WrongReason::Connector)
-                    f.detail = tr("%1 is built for %2, but this instance uses %3. A compatibility layer (Connector) is installed, "
+                    f.detail = QCoreApplication::translate("ModHealth", "%1 is built for %2, but this instance uses %3. A compatibility layer (Connector) is installed, "
                                   "so it may still load, but it may also fail.")
                                    .arg(modName, formatText, loaderText);
                 else
-                    f.detail = tr("%1 is built for %2, but this instance uses %3. It may not load.").arg(modName, formatText, loaderText);
-                f.suggestion = tr("If the game has problems, get the %1 version of this mod or remove it.").arg(loaderText);
+                    f.detail = QCoreApplication::translate("ModHealth", "%1 is built for %2, but this instance uses %3. It may not load.").arg(modName, formatText, loaderText);
+                f.suggestion = QCoreApplication::translate("ModHealth", "If the game has problems, get the %1 version of this mod or remove it.").arg(loaderText);
                 break;
         }
         add(f);
@@ -338,14 +333,14 @@ class Analyzer {
         f.relatedId = dep.id;
         const QString depName = p.entry->displayName();
         f.args = { e.displayName(), depName, wanted, p.version };
-        f.title = tr("%1 does not accept this version of %2").arg(e.displayName(), depName);
+        f.title = QCoreApplication::translate("ModHealth", "%1 does not accept this version of %2").arg(e.displayName(), depName);
         if (anyUnknown) {
-            f.detail = tr("%1 asks for %2 %3. The installed version is %4, and ZERO cannot tell whether that fits, so this may be a problem.")
+            f.detail = QCoreApplication::translate("ModHealth", "%1 asks for %2 %3. The installed version is %4, and ZERO cannot tell whether that fits, so this may be a problem.")
                            .arg(e.displayName(), depName, wanted, versionText(p.version));
-            f.suggestion = tr("If the game has problems, update %1 and %2 so their versions fit together.").arg(e.displayName(), depName);
+            f.suggestion = QCoreApplication::translate("ModHealth", "If the game has problems, update %1 and %2 so their versions fit together.").arg(e.displayName(), depName);
         } else {
-            f.detail = tr("%1 needs %2 %3, but version %4 is installed.").arg(e.displayName(), depName, wanted, versionText(p.version));
-            f.suggestion = tr("Update or replace %1 or %2 so their versions fit together.").arg(e.displayName(), depName);
+            f.detail = QCoreApplication::translate("ModHealth", "%1 needs %2 %3, but version %4 is installed.").arg(e.displayName(), depName, wanted, versionText(p.version));
+            f.suggestion = QCoreApplication::translate("ModHealth", "Update or replace %1 or %2 so their versions fit together.").arg(e.displayName(), depName);
         }
         add(f);
     }
@@ -361,10 +356,10 @@ class Analyzer {
         f.fileNames = { l.top->fileName };
         f.relatedId = QStringLiteral("minecraft");
         f.args = { e.displayName(), wanted, m_ctx.mcVersion };
-        f.title = tr("%1 is made for another Minecraft version").arg(e.displayName());
-        f.detail = tr("%1 is made for Minecraft %2, but this instance runs %3, so the game will refuse to load it.")
+        f.title = QCoreApplication::translate("ModHealth", "%1 is made for another Minecraft version").arg(e.displayName());
+        f.detail = QCoreApplication::translate("ModHealth", "%1 is made for Minecraft %2, but this instance runs %3, so the game will refuse to load it.")
                        .arg(e.displayName(), wanted, m_ctx.mcVersion);
-        f.suggestion = tr("Download the version of %1 made for Minecraft %2, or remove it.").arg(e.displayName(), m_ctx.mcVersion);
+        f.suggestion = QCoreApplication::translate("ModHealth", "Download the version of %1 made for Minecraft %2, or remove it.").arg(e.displayName(), m_ctx.mcVersion);
         add(f);
     }
 
@@ -380,9 +375,9 @@ class Analyzer {
         f.fileNames = { l.top->fileName };
         f.relatedId = dep.id;
         f.args = { e.displayName(), loader, wanted, have };
-        f.title = tr("%1 needs a different %2 version").arg(e.displayName(), loader);
-        f.detail = tr("%1 needs %2 %3, but this instance uses %4, so the game will refuse to load it.").arg(e.displayName(), loader, wanted, have);
-        f.suggestion = tr("Change the %1 version of the instance, or use another version of %2.").arg(loader, e.displayName());
+        f.title = QCoreApplication::translate("ModHealth", "%1 needs a different %2 version").arg(e.displayName(), loader);
+        f.detail = QCoreApplication::translate("ModHealth", "%1 needs %2 %3, but this instance uses %4, so the game will refuse to load it.").arg(e.displayName(), loader, wanted, have);
+        f.suggestion = QCoreApplication::translate("ModHealth", "Change the %1 version of the instance, or use another version of %2.").arg(loader, e.displayName());
         add(f);
     }
 
@@ -411,10 +406,10 @@ class Analyzer {
         f.fileNames = sortedUnique({ l.top->fileName, p.top->fileName });
         f.relatedId = dep.id;
         f.args = { e.displayName(), p.entry->displayName(), wanted, p.version };
-        f.title = tr("%1 may not work with this version of %2").arg(e.displayName(), p.entry->displayName());
-        f.detail = tr("%1 only accepts %2 %3, and version %4 is installed. This probably causes problems.")
+        f.title = QCoreApplication::translate("ModHealth", "%1 may not work with this version of %2").arg(e.displayName(), p.entry->displayName());
+        f.detail = QCoreApplication::translate("ModHealth", "%1 only accepts %2 %3, and version %4 is installed. This probably causes problems.")
                        .arg(e.displayName(), p.entry->displayName(), wanted, versionText(p.version));
-        f.suggestion = tr("Update or replace %1 or %2 so their versions fit together.").arg(e.displayName(), p.entry->displayName());
+        f.suggestion = QCoreApplication::translate("ModHealth", "Update or replace %1 or %2 so their versions fit together.").arg(e.displayName(), p.entry->displayName());
         add(f);
     }
 
@@ -466,16 +461,16 @@ class Analyzer {
         f.relatedId = dep.id;
         f.args = { e.displayName(), otherName, wanted, otherVersion };
         if (breaks) {
-            f.title = tr("%1 does not work with %2").arg(e.displayName(), otherName);
-            f.detail = tr("%1 says it does not work with %2 (%3), and %2 %4 is installed. The game will refuse to start.")
+            f.title = QCoreApplication::translate("ModHealth", "%1 does not work with %2").arg(e.displayName(), otherName);
+            f.detail = QCoreApplication::translate("ModHealth", "%1 says it does not work with %2 (%3), and %2 %4 is installed. The game will refuse to start.")
                            .arg(e.displayName(), otherName, wanted, versionText(otherVersion));
-            f.suggestion = tr("Remove one of them, or update both to versions that work together.");
+            f.suggestion = QCoreApplication::translate("ModHealth", "Remove one of them, or update both to versions that work together.");
         } else {
-            f.title = tr("%1 conflicts with %2").arg(e.displayName(), otherName);
-            f.detail = tr("%1 warns that it conflicts with %2 (%3), and %2 %4 is installed. This probably causes problems, "
+            f.title = QCoreApplication::translate("ModHealth", "%1 conflicts with %2").arg(e.displayName(), otherName);
+            f.detail = QCoreApplication::translate("ModHealth", "%1 warns that it conflicts with %2 (%3), and %2 %4 is installed. This probably causes problems, "
                           "though the game may still start.")
                            .arg(e.displayName(), otherName, wanted, versionText(otherVersion));
-            f.suggestion = tr("Remove one of them, or update both to versions that work together.");
+            f.suggestion = QCoreApplication::translate("ModHealth", "Remove one of them, or update both to versions that work together.");
         }
         add(f);
     }
@@ -495,23 +490,23 @@ class Analyzer {
             f.args = names;
             f.args.prepend(names.value(0));  // args[0] = main mod; the rest is the full list
             const QString who = joinNames(names);
-            f.title = tr("Missing mod: %1").arg(g.depId);
+            f.title = QCoreApplication::translate("ModHealth", "Missing mod: %1").arg(g.depId);
             if (g.confidence == Confidence::Confirmed)
-                f.detail = names.size() == 1 ? tr("%1 needs %2, but no installed mod provides it.").arg(who, g.depId)
-                                             : tr("%1 need %2, but no installed mod provides it.").arg(who, g.depId);
+                f.detail = names.size() == 1 ? QCoreApplication::translate("ModHealth", "%1 needs %2, but no installed mod provides it.").arg(who, g.depId)
+                                             : QCoreApplication::translate("ModHealth", "%1 need %2, but no installed mod provides it.").arg(who, g.depId);
             else
-                f.detail = tr("%1 needs %2. ZERO did not find it, but some mods could not be read, so one of them may provide it.")
+                f.detail = QCoreApplication::translate("ModHealth", "%1 needs %2. ZERO did not find it, but some mods could not be read, so one of them may provide it.")
                                .arg(who, g.depId);
             if (g.predicates.size() == 1)
-                f.detail += QLatin1Char(' ') + tr("Accepted versions: %1.").arg(g.predicates.first());
+                f.detail += QLatin1Char(' ') + QCoreApplication::translate("ModHealth", "Accepted versions: %1.").arg(g.predicates.first());
 
             bool certain = false;
             const QString disabled = findDisabledProvider(g.depId, &certain);
             if (!disabled.isEmpty())
-                f.suggestion = certain ? tr("Enable %1.").arg(disabled)
-                                       : tr("The disabled file %1 may be this mod. Enable it, or install %2.").arg(disabled, g.depId);
+                f.suggestion = certain ? QCoreApplication::translate("ModHealth", "Enable %1.").arg(disabled)
+                                       : QCoreApplication::translate("ModHealth", "The disabled file %1 may be this mod. Enable it, or install %2.").arg(disabled, g.depId);
             else
-                f.suggestion = tr("Install the mod \"%1\".").arg(g.depId);
+                f.suggestion = QCoreApplication::translate("ModHealth", "Install the mod \"%1\".").arg(g.depId);
             add(f);
         }
     }
@@ -589,15 +584,15 @@ class Analyzer {
             f.fileNames = sortedUnique(files);
             f.relatedId = it.key();
             f.args = { name, shown.join(QStringLiteral(", ")) };
-            f.title = tr("Duplicate mod: %1").arg(name);
-            f.detail = legacy ? tr("%1 is installed more than once (%2). The game probably will not start with two copies of the same mod.")
+            f.title = QCoreApplication::translate("ModHealth", "Duplicate mod: %1").arg(name);
+            f.detail = legacy ? QCoreApplication::translate("ModHealth", "%1 is installed more than once (%2). The game probably will not start with two copies of the same mod.")
                                     .arg(name, shown.join(QStringLiteral(", ")))
-                              : tr("%1 is installed more than once (%2). The game refuses to start with two copies of the same mod.")
+                              : QCoreApplication::translate("ModHealth", "%1 is installed more than once (%2). The game refuses to start with two copies of the same mod.")
                                     .arg(name, shown.join(QStringLiteral(", ")));
             if (comparable && newest)
-                f.suggestion = tr("Keep %1 (the newest version) and remove the other copies.").arg(newest->top->fileName);
+                f.suggestion = QCoreApplication::translate("ModHealth", "Keep %1 (the newest version) and remove the other copies.").arg(newest->top->fileName);
             else
-                f.suggestion = tr("Keep only one of these files and remove the others.");
+                f.suggestion = QCoreApplication::translate("ModHealth", "Keep only one of these files and remove the others.");
             add(f);
         }
     }

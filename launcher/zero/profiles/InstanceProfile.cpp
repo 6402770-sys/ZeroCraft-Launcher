@@ -30,11 +30,6 @@ constexpr const char* kTagsKey = "ZeroTags";
 constexpr const char* kArtworkKey = "ZeroArtwork";
 constexpr const char* kVideoKey = "ZeroBackgroundVideo";
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Profile", text);
-}
-
 void changed(BaseInstance* instance, bool artwork = false, bool video = false)
 {
     emit instance->propertiesChanged();
@@ -204,30 +199,30 @@ QString artworkPath(BaseInstance* instance)
 QString setArtwork(BaseInstance* instance, const QString& sourcePath)
 {
     if (!instance)
-        return tr("No instance.");
+        return QCoreApplication::translate("Zero::Profile", "No instance.");
 
     QImageReader reader(sourcePath);
     reader.setAutoTransform(true);
     QImage image = reader.read();
     if (image.isNull())
-        return tr("The image could not be read: %1").arg(reader.errorString());
+        return QCoreApplication::translate("Zero::Profile", "The image could not be read: %1").arg(reader.errorString());
     if (image.width() > kMaxArtworkSide || image.height() > kMaxArtworkSide)
         image = image.scaled(kMaxArtworkSide, kMaxArtworkSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     const QString target = artworkFile(instance);
     if (!QDir().mkpath(QFileInfo(target).absolutePath()))
-        return tr("The artwork folder could not be created.");
+        return QCoreApplication::translate("Zero::Profile", "The artwork folder could not be created.");
 
     // QSaveFile writes to a temporary file next to the target and only replaces the target when commit() succeeds.
     QSaveFile file(target);
     if (!file.open(QIODevice::WriteOnly))
-        return tr("The artwork could not be written: %1").arg(file.errorString());
+        return QCoreApplication::translate("Zero::Profile", "The artwork could not be written: %1").arg(file.errorString());
     if (!image.save(&file, "PNG")) {
         file.cancelWriting();
-        return tr("The artwork could not be encoded.");
+        return QCoreApplication::translate("Zero::Profile", "The artwork could not be encoded.");
     }
     if (!file.commit())
-        return tr("The artwork could not be saved: %1").arg(file.errorString());
+        return QCoreApplication::translate("Zero::Profile", "The artwork could not be saved: %1").arg(file.errorString());
 
     instance->settings()->set(kArtworkKey, artworkRelativePath());
     changed(instance, true);
@@ -273,12 +268,12 @@ QString checkBackgroundVideo(const QString& sourcePath, qint64 maxBytes)
     if (maxBytes < 0)
         maxBytes = Custom::kMaxBackgroundBytes;
     if (Custom::videoExtension(sourcePath).isEmpty())
-        return tr("ZERO can use mp4, webm, mkv or mov videos as a background.");
+        return QCoreApplication::translate("Zero::Profile", "ZERO can use mp4, webm, mkv or mov videos as a background.");
     const QFileInfo info(sourcePath);
     if (!info.isFile())
-        return tr("The video could not be found.");
+        return QCoreApplication::translate("Zero::Profile", "The video could not be found.");
     if (info.size() > maxBytes)
-        return tr("This video is too big for a background. The limit is %1 MB.").arg(maxBytes / (1024 * 1024));
+        return QCoreApplication::translate("Zero::Profile", "This video is too big for a background. The limit is %1 MB.").arg(maxBytes / (1024 * 1024));
     return {};
 }
 
@@ -289,7 +284,7 @@ QString copyBackgroundVideo(const QString& instanceRoot, const QString& sourcePa
     const QString ext = Custom::videoExtension(sourcePath);
     const QString folder = QDir(instanceRoot).absoluteFilePath(QStringLiteral(".zero"));
     if (!QDir().mkpath(folder))
-        return tr("The video folder could not be created.");
+        return QCoreApplication::translate("Zero::Profile", "The video folder could not be created.");
     const QString name = QStringLiteral("background.") + ext;
     const QString target = folder + QLatin1Char('/') + name;
 
@@ -297,16 +292,16 @@ QString copyBackgroundVideo(const QString& instanceRoot, const QString& sourcePa
     const QString temp = folder + QStringLiteral("/background.") + QUuid::createUuid().toString(QUuid::Id128).left(8) + QStringLiteral(".part");
     if (!QFile::copy(sourcePath, temp)) {
         QFile::remove(temp);
-        return tr("The video could not be copied.");
+        return QCoreApplication::translate("Zero::Profile", "The video could not be copied.");
     }
     if (QFileInfo(temp).size() != QFileInfo(sourcePath).size()) {
         QFile::remove(temp);
-        return tr("The video could not be copied completely.");
+        return QCoreApplication::translate("Zero::Profile", "The video could not be copied completely.");
     }
     QFile::remove(target);  // QFile::rename does not overwrite
     if (!QFile::rename(temp, target)) {
         QFile::remove(temp);
-        return tr("The video could not be saved.");
+        return QCoreApplication::translate("Zero::Profile", "The video could not be saved.");
     }
     for (const QString& other : Custom::videoExtensions()) {
         if (other != ext)
@@ -328,7 +323,7 @@ void commitBackgroundVideo(BaseInstance* instance, const QString& storedName)
 QString setBackgroundVideo(BaseInstance* instance, const QString& sourcePath, qint64 maxBytes)
 {
     if (!instance)
-        return tr("No instance.");
+        return QCoreApplication::translate("Zero::Profile", "No instance.");
     QString name;
     const QString error = copyBackgroundVideo(instance->instanceRoot(), sourcePath, &name, maxBytes);
     if (!error.isEmpty())

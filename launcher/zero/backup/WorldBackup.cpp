@@ -34,11 +34,6 @@ constexpr qint64 kSlackBytes = 50LL * 1024 * 1024;  // free space beyond the dat
 constexpr qint64 kMaxManifestBytes = 64LL * 1024 * 1024;
 constexpr qsizetype kChunk = 1024 * 1024;
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Backup", text);
-}
-
 // QDir::mkpath that survives a concurrent mkpath of a shared parent. On Windows Qt creates missing parents one by one
 // and a thread that loses the race to create one (ERROR_ALREADY_EXISTS) gives up, so the first backups of two worlds
 // (zero/backups/<instance>/... created by two pool threads) failed with "Could not create the backup folder" at random.
@@ -158,19 +153,19 @@ bool parseManifest(const QByteArray& json, Manifest* out, QString* error)
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(json, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        *error = tr("The backup manifest is unreadable.");
+        *error = QCoreApplication::translate("Zero::Backup", "The backup manifest is unreadable.");
         return false;
     }
     const QJsonObject root = doc.object();
     if (root.value("version").toInt(-1) != kManifestVersion) {
-        *error = tr("The backup was made by an unsupported version.");
+        *error = QCoreApplication::translate("Zero::Backup", "The backup was made by an unsupported version.");
         return false;
     }
     bool kindOk = false;
     Manifest m;
     m.kind = kindFromString(root.value("kind").toString(), &kindOk);
     if (!kindOk || !root.value("files").isArray()) {
-        *error = tr("The backup manifest is incomplete.");
+        *error = QCoreApplication::translate("Zero::Backup", "The backup manifest is incomplete.");
         return false;
     }
     m.createdMs = qint64(root.value("createdMs").toDouble());
@@ -190,17 +185,17 @@ bool parseManifest(const QByteArray& json, Manifest* out, QString* error)
         const double size = o.value("size").toDouble(-1);
         f.sha256 = o.value("sha256").toString().toLower();
         if (!isSafeRelativePath(f.path)) {
-            *error = tr("The backup contains an unsafe file path and was rejected: %1").arg(f.path);
+            *error = QCoreApplication::translate("Zero::Backup", "The backup contains an unsafe file path and was rejected: %1").arg(f.path);
             return false;
         }
         if (size < 0 || !isHex64(f.sha256)) {
-            *error = tr("The backup manifest is incomplete.");
+            *error = QCoreApplication::translate("Zero::Backup", "The backup manifest is incomplete.");
             return false;
         }
         f.size = qint64(size);
         // case-insensitive: two paths that differ by case would overwrite each other on Windows
         if (seen.contains(f.path.toLower())) {
-            *error = tr("The backup lists the same file twice: %1").arg(f.path);
+            *error = QCoreApplication::translate("Zero::Backup", "The backup lists the same file twice: %1").arg(f.path);
             return false;
         }
         seen.insert(f.path.toLower());
@@ -208,7 +203,7 @@ bool parseManifest(const QByteArray& json, Manifest* out, QString* error)
         m.files.append(f);
     }
     if (m.totalBytes != sum) {
-        *error = tr("The backup manifest does not add up.");
+        *error = QCoreApplication::translate("Zero::Backup", "The backup manifest does not add up.");
         return false;
     }
     *out = m;
@@ -220,8 +215,8 @@ bool readManifest(const QString& zipPath, Manifest* out, QString* error)
     MMCZip::ArchiveReader reader(zipPath);
     const auto data = reader.readFile(QString::fromLatin1(kManifestName));
     if (!data) {
-        *error = data.error() == QLatin1String("File not found") ? tr("This is not a ZERO backup (no manifest).")
-                                                                 : tr("The backup cannot be read: %1").arg(data.error());
+        *error = data.error() == QLatin1String("File not found") ? QCoreApplication::translate("Zero::Backup", "This is not a ZERO backup (no manifest).")
+                                                                 : QCoreApplication::translate("Zero::Backup", "The backup cannot be read: %1").arg(data.error());
         return false;
     }
     return parseManifest(*data, out, error);
@@ -240,7 +235,7 @@ bool hashFile(const QString& path, QString* sha, qint64* size, QString* error)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        *error = tr("Could not read %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
+        *error = QCoreApplication::translate("Zero::Backup", "Could not read %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
         return false;
     }
     QCryptographicHash hash(QCryptographicHash::Sha256);
@@ -249,7 +244,7 @@ bool hashFile(const QString& path, QString* sha, qint64* size, QString* error)
     for (;;) {
         const qint64 n = file.read(buffer.data(), buffer.size());
         if (n < 0) {
-            *error = tr("Could not read %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
+            *error = QCoreApplication::translate("Zero::Backup", "Could not read %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
             return false;
         }
         if (n == 0)
@@ -362,10 +357,10 @@ bool scanArchive(const QString& zipPath, Manifest* manifest, QHash<QString, Seen
     const std::function<Result<>(MMCZip::ArchiveReader::File*)> visit = [&](MMCZip::ArchiveReader::File* f) -> Result<> {
         const QString name = f->filename();
         if (!f->isFile())
-            return std::unexpected{ tr("The backup contains an unexpected entry: %1").arg(name) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains an unexpected entry: %1").arg(name) };
         if (name == QLatin1String(kManifestName)) {
             if (haveManifest)
-                return std::unexpected{ tr("The backup contains two manifests.") };
+                return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains two manifests.") };
             haveManifest = true;
             TRY(f->readBlocks([&](const char* data, qint64 len) {
                 manifestBytes.append(data, len);
@@ -374,12 +369,12 @@ bool scanArchive(const QString& zipPath, Manifest* manifest, QHash<QString, Seen
             return {};
         }
         if (!name.startsWith(QLatin1String(kWorldPrefix)))
-            return std::unexpected{ tr("The backup contains an unexpected entry: %1").arg(name) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains an unexpected entry: %1").arg(name) };
         const QString rel = name.mid(int(sizeof(kWorldPrefix)) - 1);
         if (!isSafeRelativePath(rel))
-            return std::unexpected{ tr("The backup contains an unsafe file path and was rejected: %1").arg(name) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains an unsafe file path and was rejected: %1").arg(name) };
         if (lowered.contains(rel.toLower()))
-            return std::unexpected{ tr("The backup contains the same file twice: %1").arg(rel) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains the same file twice: %1").arg(rel) };
         lowered.insert(rel.toLower());
 
         QCryptographicHash hash(QCryptographicHash::Sha256);
@@ -399,7 +394,7 @@ bool scanArchive(const QString& zipPath, Manifest* manifest, QHash<QString, Seen
         return false;
     }
     if (!haveManifest) {
-        *error = tr("This is not a ZERO backup (no manifest).");
+        *error = QCoreApplication::translate("Zero::Backup", "This is not a ZERO backup (no manifest).");
         return false;
     }
     return parseManifest(manifestBytes, manifest, error);
@@ -479,13 +474,13 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
     auto stopped = [&]() { return options.cancelled && options.cancelled(); };
     auto cancel = [&]() {
         result.cancelled = true;
-        return fail(tr("Cancelled."));
+        return fail(QCoreApplication::translate("Zero::Backup", "Cancelled."));
     };
 
     if (!QFileInfo(worldFolderPath).isDir())
-        return fail(tr("The world folder does not exist."));
+        return fail(QCoreApplication::translate("Zero::Backup", "The world folder does not exist."));
     if (!makePath(backupDir))
-        return fail(tr("Could not create the backup folder."));
+        return fail(QCoreApplication::translate("Zero::Backup", "Could not create the backup folder."));
 
     QList<FileItem> files = collectFiles(worldFolderPath, options.exclude);
     if (stopped())
@@ -493,14 +488,14 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
     qint64 total = 0;
     for (const FileItem& f : std::as_const(files)) {
         if (!isSafeRelativePath(f.rel))
-            return fail(options.unsafeName ? options.unsafeName(f.rel) : tr("This world contains a file name that cannot be backed up safely: %1").arg(f.rel));
+            return fail(options.unsafeName ? options.unsafeName(f.rel) : QCoreApplication::translate("Zero::Backup", "This world contains a file name that cannot be backed up safely: %1").arg(f.rel));
         total += f.size;
     }
 
     const qint64 needed = qint64(double(total) * 1.1) + kSlackBytes;
     const qint64 available = hooks.freeBytes(backupDir);
     if (available >= 0 && available < needed)
-        return fail(tr("Not enough free disk space for a backup (needs about %1).").arg(sizeText(needed)));
+        return fail(QCoreApplication::translate("Zero::Backup", "Not enough free disk space for a backup (needs about %1).").arg(sizeText(needed)));
 
     // hash first (streamed), so the manifest can be the first entry of the archive
     Manifest manifest;
@@ -528,7 +523,7 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
 
     const QString finalPath = options.fileName.isEmpty() ? uniqueZipPath(backupDir, kind) : QDir(backupDir).filePath(options.fileName);
     if (!options.fileName.isEmpty() && (QFileInfo::exists(finalPath) || QFileInfo::exists(finalPath + QStringLiteral(".part"))))
-        return fail(tr("The backup file already exists."));
+        return fail(QCoreApplication::translate("Zero::Backup", "The backup file already exists."));
     const QString partPath = finalPath + QStringLiteral(".part");
     auto discardPart = [&]() { QFile::remove(partPath); };
 
@@ -536,12 +531,12 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
         MMCZip::ArchiveWriter writer(partPath);
         if (auto r = writer.open(); !r) {
             discardPart();
-            return fail(tr("Could not write the backup: %1").arg(r.error()));
+            return fail(QCoreApplication::translate("Zero::Backup", "Could not write the backup: %1").arg(r.error()));
         }
         if (auto r = writer.addFile(QString::fromLatin1(kManifestName), manifestToJson(manifest)); !r) {
             writer.close();
             discardPart();
-            return fail(tr("Could not write the backup: %1").arg(r.error()));
+            return fail(QCoreApplication::translate("Zero::Backup", "Could not write the backup: %1").arg(r.error()));
         }
         for (const FileItem& f : std::as_const(files)) {
             if (stopped()) {
@@ -552,14 +547,14 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
             if (auto r = writer.addFile(f.abs, QString::fromLatin1(kWorldPrefix) + f.rel); !r) {
                 writer.close();
                 discardPart();
-                return fail(tr("Could not write the backup: %1").arg(r.error()));
+                return fail(QCoreApplication::translate("Zero::Backup", "Could not write the backup: %1").arg(r.error()));
             }
             done += f.size;
             report();
         }
         if (auto r = writer.close(); !r) {
             discardPart();
-            return fail(tr("Could not write the backup: %1").arg(r.error()));
+            return fail(QCoreApplication::translate("Zero::Backup", "Could not write the backup: %1").arg(r.error()));
         }
     }
 
@@ -571,11 +566,11 @@ BackupResult createBackup(const QString& worldFolderPath, const QString& backupD
     const VerifyResult verified = verifyBackup(partPath);
     if (!verified.ok) {
         discardPart();
-        return fail(tr("The backup could not be verified and was discarded: %1").arg(verified.error));
+        return fail(QCoreApplication::translate("Zero::Backup", "The backup could not be verified and was discarded: %1").arg(verified.error));
     }
     if (!QFile::rename(partPath, finalPath)) {
         discardPart();
-        return fail(tr("Could not finish the backup file."));
+        return fail(QCoreApplication::translate("Zero::Backup", "Could not finish the backup file."));
     }
     done = passTotal;
     report();
@@ -642,16 +637,16 @@ VerifyResult verifyBackup(const QString& zipPath)
     for (const ManifestFile& f : std::as_const(manifest.files)) {
         const auto it = seen.constFind(f.path);
         if (it == seen.constEnd()) {
-            result.error = tr("The backup is missing a file: %1").arg(f.path);
+            result.error = QCoreApplication::translate("Zero::Backup", "The backup is missing a file: %1").arg(f.path);
             return result;
         }
         if (it->size != f.size || it->sha256 != f.sha256) {
-            result.error = tr("The backup is damaged (checksum mismatch): %1").arg(f.path);
+            result.error = QCoreApplication::translate("Zero::Backup", "The backup is damaged (checksum mismatch): %1").arg(f.path);
             return result;
         }
     }
     if (seen.size() != manifest.files.size()) {
-        result.error = tr("The backup contains files that its manifest does not list.");
+        result.error = QCoreApplication::translate("Zero::Backup", "The backup contains files that its manifest does not list.");
         return result;
     }
     result.ok = true;
@@ -678,25 +673,25 @@ bool extractAndVerify(const QString& zipPath, const Manifest& manifest, const QS
         if (name == QLatin1String(kManifestName))
             return f->skip();
         if (!f->isFile() || !name.startsWith(QLatin1String(kWorldPrefix)))
-            return std::unexpected{ tr("The backup contains an unexpected entry: %1").arg(name) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains an unexpected entry: %1").arg(name) };
         const QString rel = name.mid(int(sizeof(kWorldPrefix)) - 1);
         if (!isSafeRelativePath(rel) || !wanted.contains(rel) || written.contains(rel))
-            return std::unexpected{ tr("The backup contains an unsafe or unexpected file path and was rejected: %1").arg(name) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains an unsafe or unexpected file path and was rejected: %1").arg(name) };
         const QString target = QDir::cleanPath(stagingClean + QLatin1Char('/') + rel);
         if (!target.startsWith(stagingClean + QLatin1Char('/')))  // belt and braces after isSafeRelativePath
-            return std::unexpected{ tr("The backup contains an unsafe file path and was rejected: %1").arg(name) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "The backup contains an unsafe file path and was rejected: %1").arg(name) };
         if (!makePath(QFileInfo(target).absolutePath()))
-            return std::unexpected{ tr("Could not create a folder for %1").arg(rel) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "Could not create a folder for %1").arg(rel) };
         QFile out(target);
         if (!out.open(QIODevice::WriteOnly))
-            return std::unexpected{ tr("Could not write %1: %2").arg(rel, out.errorString()) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "Could not write %1: %2").arg(rel, out.errorString()) };
         bool writeOk = true;
         TRY(f->readBlocks([&](const char* data, qint64 len) {
             writeOk = out.write(data, len) == len;
             return writeOk;
         }));
         if (!out.flush() || !writeOk) {
-            return std::unexpected{ tr("Could not write %1: %2").arg(rel, out.errorString()) };
+            return std::unexpected{ QCoreApplication::translate("Zero::Backup", "Could not write %1: %2").arg(rel, out.errorString()) };
         }
         out.close();
         written.insert(rel);
@@ -704,7 +699,7 @@ bool extractAndVerify(const QString& zipPath, const Manifest& manifest, const QS
     };
     const auto extracted = reader.parse(visit);
     if (!extracted) {
-        *error = extracted.error() == QLatin1String("Aborted") ? tr("Could not write the restored files (disk full?).") : extracted.error();
+        *error = extracted.error() == QLatin1String("Aborted") ? QCoreApplication::translate("Zero::Backup", "Could not write the restored files (disk full?).") : extracted.error();
         return false;
     }
 
@@ -714,11 +709,11 @@ bool extractAndVerify(const QString& zipPath, const Manifest& manifest, const QS
         qint64 size = 0;
         if (!QFileInfo(path).isFile() || !hashFile(path, &sha, &size, error)) {
             if (error->isEmpty())
-                *error = tr("The restored files are incomplete: %1").arg(f.path);
+                *error = QCoreApplication::translate("Zero::Backup", "The restored files are incomplete: %1").arg(f.path);
             return false;
         }
         if (size != f.size || sha != f.sha256) {
-            *error = tr("The restored files do not match the backup: %1").arg(f.path);
+            *error = QCoreApplication::translate("Zero::Backup", "The restored files do not match the backup: %1").arg(f.path);
             return false;
         }
     }
@@ -732,7 +727,7 @@ VerifyResult extractBackup(const QString& zipPath, const QString& stagingFolder)
     VerifyResult result;
     const VerifyResult verified = verifyBackup(zipPath);
     if (!verified.ok) {
-        result.error = tr("This backup is damaged and was not restored: %1").arg(verified.error);
+        result.error = QCoreApplication::translate("Zero::Backup", "This backup is damaged and was not restored: %1").arg(verified.error);
         return result;
     }
     Manifest manifest;
@@ -742,7 +737,7 @@ VerifyResult extractBackup(const QString& zipPath, const QString& stagingFolder)
         return result;
     }
     if (!makePath(stagingFolder)) {
-        result.error = tr("Could not create a temporary folder next to the world.");
+        result.error = QCoreApplication::translate("Zero::Backup", "Could not create a temporary folder next to the world.");
         return result;
     }
     if (!extractAndVerify(zipPath, manifest, stagingFolder, &error)) {
@@ -767,7 +762,7 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
     // a. verify the backup before anything else happens
     const VerifyResult verified = verifyBackup(zipPath);
     if (!verified.ok)
-        return fail(tr("This backup is damaged and was not restored: %1").arg(verified.error));
+        return fail(QCoreApplication::translate("Zero::Backup", "This backup is damaged and was not restored: %1").arg(verified.error));
     Manifest manifest;
     QString error;
     if (!readManifest(zipPath, &manifest, &error))
@@ -777,34 +772,34 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
     const QString saves = world.absolutePath();
     const QString folder = world.fileName();
     if (folder.isEmpty() || folder.startsWith(QStringLiteral(".zero-")))
-        return fail(tr("Invalid world folder."));
+        return fail(QCoreApplication::translate("Zero::Backup", "Invalid world folder."));
     if (!makePath(saves))
-        return fail(tr("Could not open the saves folder."));
+        return fail(QCoreApplication::translate("Zero::Backup", "Could not open the saves folder."));
 
     const QString stamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddHHmmsszzz"));
     const QString staging = QDir(saves).filePath(QStringLiteral(".zero-restore-%1-%2").arg(folder, stamp));
     const QString replaced = QDir(saves).filePath(QStringLiteral(".zero-replaced-%1-%2").arg(folder, stamp));
     if (QFileInfo::exists(staging) || QFileInfo::exists(replaced))
-        return fail(tr("A restore is already in progress for this world."));
+        return fail(QCoreApplication::translate("Zero::Backup", "A restore is already in progress for this world."));
 
     const qint64 needed = qint64(double(manifest.totalBytes) * 1.1) + kSlackBytes;
     const qint64 available = hooks.freeBytes(saves);
     if (available >= 0 && available < needed)
-        return fail(tr("Not enough free disk space to restore (needs about %1).").arg(sizeText(needed)));
+        return fail(QCoreApplication::translate("Zero::Backup", "Not enough free disk space to restore (needs about %1).").arg(sizeText(needed)));
 
     // b. the current world is saved first, verified like any other backup
     const bool hadWorld = world.exists();
     if (hadWorld) {
         const BackupResult safety = createBackup(worldFolderPath, backupDir, Kind::Safety, meta, hooks);
         if (!safety.ok)
-            return fail(tr("The current world could not be saved first, so nothing was changed: %1").arg(safety.error));
+            return fail(QCoreApplication::translate("Zero::Backup", "The current world could not be saved first, so nothing was changed: %1").arg(safety.error));
         result.safetyZip = safety.zipPath;
     }
 
     // c. extract into a sibling staging folder and verify what landed on disk
     auto dropStaging = [&]() { QDir(staging).removeRecursively(); };
     if (!makePath(staging))
-        return fail(tr("Could not create a temporary folder next to the world."));
+        return fail(QCoreApplication::translate("Zero::Backup", "Could not create a temporary folder next to the world."));
     if (!extractAndVerify(zipPath, manifest, staging, &error)) {
         dropStaging();
         return fail(error);
@@ -813,12 +808,12 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
     // d. swap with renames; the old world stays on disk until the new one is in place
     if (hadWorld && !hooks.rename(worldFolderPath, replaced)) {
         dropStaging();
-        return fail(tr("The current world could not be replaced. Is it open in another program?"));
+        return fail(QCoreApplication::translate("Zero::Backup", "The current world could not be replaced. Is it open in another program?"));
     }
     if (!hooks.rename(staging, worldFolderPath)) {
-        QString message = tr("The restored world could not be moved into place.");
+        QString message = QCoreApplication::translate("Zero::Backup", "The restored world could not be moved into place.");
         if (hadWorld && !hooks.rename(replaced, worldFolderPath)) {
-            message += QLatin1Char(' ') + tr("Your original world is in %1").arg(QDir::toNativeSeparators(replaced));
+            message += QLatin1Char(' ') + QCoreApplication::translate("Zero::Backup", "Your original world is in %1").arg(QDir::toNativeSeparators(replaced));
             qWarning() << "ZERO restore: rollback failed, original world is in" << replaced;
         }
         dropStaging();
@@ -829,7 +824,7 @@ RestoreResult restoreBackup(const QString& zipPath, const QString& worldFolderPa
     //    first, so the Recycle Bin shows which world it was (and "Restore" there brings it back as a separate world).
     if (hadWorld) {
         const QString readable = QDir(saves).filePath(
-            tr("%1 (replaced %2)").arg(folder, QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH.mm.ss"))));
+            QCoreApplication::translate("Zero::Backup", "%1 (replaced %2)").arg(folder, QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH.mm.ss"))));
         const bool renamed = !QFileInfo::exists(readable) && hooks.rename(replaced, readable);
         if (!hooks.trashPath(renamed ? readable : replaced)) {
             // Keep the leftover hidden (".zero-*", like an interrupted restore) instead of showing up as an extra world.
@@ -892,11 +887,11 @@ bool deleteBackup(const QString& zipPath, const QString& backupsRootDir, QString
     const QFileInfo info(zipPath);
     const QString path = QDir::cleanPath(info.absoluteFilePath());
     if (!path.startsWith(root + QLatin1Char('/'), Qt::CaseInsensitive) || info.suffix().compare(QLatin1String("zip"), Qt::CaseInsensitive) != 0)
-        return fail(tr("This file is not a ZERO backup."));
+        return fail(QCoreApplication::translate("Zero::Backup", "This file is not a ZERO backup."));
     if (!info.isFile() || info.isSymLink())
-        return fail(tr("The backup no longer exists."));
+        return fail(QCoreApplication::translate("Zero::Backup", "The backup no longer exists."));
     if (!hooks.trashPath(path))
-        return fail(tr("The backup could not be deleted."));
+        return fail(QCoreApplication::translate("Zero::Backup", "The backup could not be deleted."));
     return true;
 }
 

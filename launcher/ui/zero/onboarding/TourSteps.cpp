@@ -23,27 +23,23 @@ namespace Zero {
 namespace Onboarding {
 
 namespace {
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Onboarding::TourSteps", text);
-}
 }  // namespace
 
 QList<TourStepInfo> tourStepInfos()
 {
     return {
-        { QStringLiteral("home"), tr("Home"), tr("Jump back into your last game, see your favourites and what you played recently."),
+        { QStringLiteral("home"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "Home"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "Jump back into your last game, see your favourites and what you played recently."),
           TourSide::Right },
-        { QStringLiteral("library"), tr("Library"), tr("All your instances in one place. Star favourites, add tags and press Play."),
+        { QStringLiteral("library"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "Library"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "All your instances in one place. Star favourites, add tags and press Play."),
           TourSide::Right },
-        { QStringLiteral("new-instance"), tr("New instance"),
-          tr("Start fresh with vanilla, go modded with a loader, or install a modpack in one click."), TourSide::Below },
-        { QStringLiteral("discover"), tr("Discover"),
-          tr("Find modpacks, mods, resource packs, shaders and worlds. Add several to the cart and install them in one go."),
+        { QStringLiteral("new-instance"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "New instance"),
+          QCoreApplication::translate("Zero::Onboarding::TourSteps", "Start fresh with vanilla, go modded with a loader, or install a modpack in one click."), TourSide::Below },
+        { QStringLiteral("discover"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "Discover"),
+          QCoreApplication::translate("Zero::Onboarding::TourSteps", "Find modpacks, mods, resource packs, shaders and worlds. Add several to the cart and install them in one go."),
           TourSide::Right },
-        { QStringLiteral("search"), tr("Search anything"), tr("Press Ctrl+K to jump to an instance, a page or an action."), TourSide::Below },
-        { QStringLiteral("appearance"), tr("Make it yours"),
-          tr("Pick a theme or build your own: colours, background, icon and font."), TourSide::Right },
+        { QStringLiteral("search"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "Search anything"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "Press Ctrl+K to jump to an instance, a page or an action."), TourSide::Below },
+        { QStringLiteral("appearance"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "Make it yours"),
+          QCoreApplication::translate("Zero::Onboarding::TourSteps", "Pick a theme or build your own: colours, background, icon and font."), TourSide::Right },
     };
 }
 
@@ -52,10 +48,10 @@ PaletteCommand tourPaletteCommand(std::function<void()> run)
     PaletteCommand c;
     c.id = tourCommandId();
     c.kind = Palette::Kind::Action;
-    c.title = tr("Take the tour");
-    c.keywords = { tr("tour"), tr("help"), tr("guide"), tr("tutorial"), tr("welcome"), tr("intro") };
+    c.title = QCoreApplication::translate("Zero::Onboarding::TourSteps", "Take the tour");
+    c.keywords = { QCoreApplication::translate("Zero::Onboarding::TourSteps", "tour"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "help"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "guide"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "tutorial"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "welcome"), QCoreApplication::translate("Zero::Onboarding::TourSteps", "intro") };
     c.iconName = QStringLiteral("compass");
-    c.primaryLabel = tr("Start");
+    c.primaryLabel = QCoreApplication::translate("Zero::Onboarding::TourSteps", "Start");
     c.run = std::move(run);
     return c;
 }

@@ -66,8 +66,11 @@
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
 #include "ui/zero/ZeroStyle.h"
+#include "ui/zero/ZeroTokens.h"
 #include "zero/backup/BackupDestination.h"
 #include "zero/backup/ScheduledBackup.h"
+#include "ui/zero/instance/ModsDialogs.h"
+#include "zero/ZeroLanguage.h"
 #include "zero/backup/WorldBackupJobs.h"
 #include "zero/session/WhilePlaying.h"
 
@@ -216,9 +219,72 @@ LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::Launch
         ui->verticalLayout_8->insertWidget(4, box);
     }
 
+    // ZERO: "Language" (zero/ZeroLanguage.h): English or Español. The first group of the page. Switching needs a restart: no live
+    // retranslation.
+    {
+        auto* box = new QGroupBox(tr("Language"), ui->scrollAreaWidgetContents);
+        auto* lay = new QVBoxLayout(box);
+        auto* row = new QHBoxLayout();
+        m_language = new QComboBox(box);
+        for (const auto& choice : Zero::Language::choices())
+            m_language->addItem(choice.name, choice.code);  // each language is named in itself, never translated
+        row->addWidget(m_language);
+        row->addStretch(1);
+        lay->addLayout(row);
+        auto* caption = new QLabel(tr("ZERO restarts to switch the language."), box);
+        caption->setWordWrap(true);
+        Zero::Style::applyRole(caption, Zero::Role::Caption);
+        Zero::Style::setProperty(caption, "zeroTone", "secondary");
+        lay->addWidget(caption);
+        connect(m_language, QOverload<int>::of(&QComboBox::activated), this, [this]() { languageChosen(); });
+        ui->verticalLayout_8->insertWidget(0, box);
+    }
+
+    // ZERO: "Discord" (zero/discord): Rich Presence while a game runs. Saved at once; the presence reacts to the settings live.
+    {
+        auto* box = new QGroupBox(tr("Discord"), ui->scrollAreaWidgetContents);
+        auto* lay = new QVBoxLayout(box);
+        m_discord = new QCheckBox(tr("Show what you're playing on Discord"), box);
+        lay->addWidget(m_discord);
+        auto* indent = new QHBoxLayout();
+        indent->setContentsMargins(Zero::Tokens::spaceXl, 0, 0, 0);
+        m_discordInstance = new QCheckBox(tr("Show the instance name"), box);
+        indent->addWidget(m_discordInstance);
+        lay->addLayout(indent);
+        auto* caption = new QLabel(tr("Discord must be open on this computer."), box);
+        caption->setWordWrap(true);
+        Zero::Style::applyRole(caption, Zero::Role::Caption);
+        Zero::Style::setProperty(caption, "zeroTone", "secondary");
+        lay->addWidget(caption);
+        connect(m_discord, &QCheckBox::toggled, this, [this](bool on) {
+            m_discordInstance->setEnabled(on);
+            APPLICATION->settings()->set("ZeroDiscordPresence", on);
+        });
+        connect(m_discordInstance, &QCheckBox::toggled, this,
+                [](bool on) { APPLICATION->settings()->set("ZeroDiscordShowInstance", on); });
+        ui->verticalLayout_8->insertWidget(1, box);
+    }
+
     loadSettings();
 
     ui->updateSettingsBox->setHidden(!APPLICATION->updater());
+}
+
+void LauncherPage::languageChosen()
+{
+    const QString code = m_language->currentData().toString();
+    auto* s = APPLICATION->settings();
+    if (code == Zero::Language::initialCode(s->get("Language").toString(), QLocale::system()))
+        return;
+    s->set("Language", code);  // saved at once; it applies after the restart
+
+    Zero::ModsUi::ChoicePrompt ask;
+    ask.title = tr("Restart now?");
+    ask.body = tr("ZERO needs to restart to switch the language.");
+    ask.buttons = { { tr("Later"), Zero::ModsUi::ChoiceButton::Kind::Ghost }, { tr("Restart now"), Zero::ModsUi::ChoiceButton::Kind::Primary } };
+    ask.defaultButton = 1;
+    if (Zero::ModsUi::askWithDialog(this, ask) == 1)
+        APPLICATION->zeroRestart(window());
 }
 
 LauncherPage::~LauncherPage()
@@ -549,6 +615,14 @@ void LauncherPage::loadSettings()
             break;
     }
 
+    m_language->setCurrentIndex(qMax(0, m_language->findData(Zero::Language::initialCode(s->get("Language").toString(), QLocale::system()))));
+    {
+        const QSignalBlocker blockPresence(m_discord);
+        const QSignalBlocker blockInstance(m_discordInstance);
+        m_discord->setChecked(s->get("ZeroDiscordPresence").toBool());
+        m_discordInstance->setChecked(s->get("ZeroDiscordShowInstance").toBool());
+        m_discordInstance->setEnabled(m_discord->isChecked());
+    }
     m_checkMods->setChecked(s->get("ZeroPreLaunchCheck").toBool());
     m_autoCheckUpdates->setChecked(s->get("ZeroAutoCheckUpdates").toBool());
     m_backupAfterPlay->setChecked(s->get("ZeroAutoBackupWorlds").toBool());

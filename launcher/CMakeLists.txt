@@ -957,6 +957,8 @@ SET(LAUNCHER_SOURCES
     zero/diagnostics/CrashReportCollector.cpp
     zero/diagnostics/CrashReportCollector.h
     zero/diagnostics/DiagnosticsTypes.h
+    zero/discord/DiscordPresence.cpp
+    zero/discord/DiscordPresence.h
     zero/downloads/DownloadCenter.cpp
     zero/downloads/DownloadCenter.h
     zero/downloads/DownloadText.cpp
@@ -1030,7 +1032,10 @@ SET(LAUNCHER_SOURCES
     zero/palette/CommandMatcher.cpp
     zero/palette/CommandMatcher.h
     zero/profiles/InstanceProfile.cpp
+    zero/ZeroLanguage.cpp
     zero/ZeroLanguage.h
+    zero/ZeroRestart.cpp
+    zero/ZeroRestart.h
     zero/favorites/FavoriteStore.cpp
     zero/favorites/FavoriteStore.h
     zero/profiles/InstanceProfile.h
@@ -1697,11 +1702,28 @@ add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHE
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 
+# ZERO: its translation file. zero_es.ts is kept up to date with scripts/zero/i18n-update.sh; lrelease turns it into zero_es.qm (entries that
+# are not finished are left out, so a missing translation shows the English text) and the .qm is embedded as :/zero/i18n/zero_es.qm.
+# (A target of its own: qt_add_resources(<target>) uses the keyword form of target_link_libraries, which Launcher_logic's plain form below
+# cannot be mixed with.)
+add_library(Launcher_zero_i18n STATIC)
+qt_add_lrelease(Launcher_zero_i18n
+    TS_FILES resources/zero/i18n/zero_es.ts
+    QM_FILES_OUTPUT_VARIABLE ZERO_QM_FILES
+    LRELEASE_OPTIONS -nounfinished
+)
+qt_add_resources(Launcher_zero_i18n zero_i18n
+    PREFIX "/zero/i18n"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}"
+    FILES ${ZERO_QM_FILES}
+)
+
 if(${Launcher_USE_PCH})
     target_precompile_headers(Launcher_logic PRIVATE ${PRECOMPILED_HEADERS})
 endif()
 
 target_link_libraries(Launcher_logic
+    Launcher_zero_i18n
     Launcher_murmur2
     nbt++
     ${ZLIB_LIBRARIES}
@@ -1938,6 +1960,11 @@ endif()
 # Set basic compiler warning/error flags for all targets
 get_directory_property(Launcher_TARGETS BUILDSYSTEM_TARGETS)
 foreach(target ${Launcher_TARGETS})
+    # ZERO: the lrelease targets are custom targets: nothing to compile
+    get_target_property(target_type ${target} TYPE)
+    if(target_type STREQUAL "UTILITY")
+        continue()
+    endif()
     # TODO: Fix unused parameter warnings (/wd4100, -Wno-unused-parameter, etc)
     if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
         target_compile_options(${target} PRIVATE

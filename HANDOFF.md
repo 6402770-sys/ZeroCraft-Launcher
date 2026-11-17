@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-17 (session 17: Mission 004 **B4 done and committed** (scheduled backups + cloud folder, test copies, change timeline, per-instance Home video) — resume at "Mission 004" › 🔴 RESUME HERE (B5). Session 16: B2 + B3 + B4 task 1 (Playtime). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-17 (session 18: Mission 004 **B5 done and committed** — Spanish translation + language picker, Discord Rich Presence; Mission 004 complete, see "Mission 004". Session 17: B4 `26c833081`. Session 16: B2 + B3 + B4 task 1 (Playtime). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds; see "Session 15" before "Build & test". Session 14: **1.0.1 PUBLISHED**; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -766,8 +766,25 @@ Status per batch is logged below as it lands.
      `zero/mods/ModSnapshot`, pack order history, pack snapshots, Boost/Java args, Downloads history entries) with Undo where a mechanism
      already exists.
   5. ✅ **Per-instance video background** (session 17, done; uncommitted until the B4 commit; click-QA it, the real playback was not watched by hand): Library details panel "Set background video..." / "Remove video" (+ caption), file copied to `<instanceRoot>/.zero/background.<ext>` off the GUI thread (toast "Copying video..."), plays muted behind **Home only** while that instance is the Home hero (last played); every other page keeps the theme background; reduced motion = theme background (no decode); game running / minimized = paused still. Pure rule `ZeroShell::chooseVideo`, second player in ZeroShell, theme video paused meanwhile. Scrim = max(theme dim, new token `Tokens::pageVideoMinDim` 0.55). New `film.svg` icon. See ARCHITECTURE.md "Background video".
-- 🔴 **RESUME HERE: B5** (tree clean after the B4 commit). Then B5 (Discord RPC hidden until the owner sends the Application ID; full
-  Spanish translation + language picker). Discord Application ID still to come from the owner (feature hidden until then).
+- ✅ **B5 done** (session 18; 112/112 + FileSystem 25/25; one local commit). **Mission 004 is complete.**
+  - **Language support**: `kEnglishOnly` gone; English / Español picker first in Settings › Launcher (restart via `zero/ZeroRestart`, the successor
+    waits for the old pid); first start picks Spanish when Windows is Spanish; Prism's own es translation still downloads as upstream, ZERO's
+    `launcher/resources/zero/i18n/zero_es.ts` (lrelease `-nounfinished`, qrc `:/zero/i18n/zero_es.qm`) is installed last and wins; free `tr()`
+    helpers became `QCoreApplication::translate("<Context>", …)`. Rules + glossary: `docs/zero/I18N.md` (neutral Latin-American "tú",
+    "Agregar" never "Añadir", "equipo" for computer). Workflow: `scripts/zero/i18n-update.sh` (lupdate + counts) and `scripts/zero/i18n-merge.py`
+    (check/merge JSON chunks). State: **3,155 finished**, every `Zero::` context done (1,992); the 2,340 unfinished are upstream Prism strings that
+    Prism's downloaded es file covers (a fresh offline data dir shows some in English, e.g. Settings › General "User Interface" group).
+    New ZERO strings land as unfinished: translate them in the .ts (drop `type="unfinished"`), rerun the script.
+  - **Discord Rich Presence** (`zero/discord/DiscordPresence`, ARCHITECTURE.md "Discord Rich Presence"), visible, App ID 1572300937387581450,
+    asset key `zero` (art in `program_info/discord/`, `scripts/zero/discord-art.py`). Orchestrator review fixes: details/state kept within Discord's
+    2..128 characters (else Discord rejects the whole activity; test `textStaysWithinDiscordLimits`); indent uses `Tokens::spaceXl`; the flaky
+    `reconnectsAfterDiscordQuits` was a test race (the fake pipe kept listening, the 80 ms retry reconnected before the not-ready check) — the
+    fake now stops listening first; 24 parallel runs pass (was 4/12 failing).
+  - Spanish real-app check (screenshots of Home, Library, Tools, Settings at 1280x800, Minecraft theme): fixed the clipped Library "Agregar
+    etiqueta" tag field (width now follows the placeholder) and the Home "Carpeta de instancias" caption ("Abrir en el Explorador").
+  - **Not done / owner QA**: Rich Presence with the owner's real Discord open (upload `program_info/discord/zero-rich-presence-1024.png` as asset
+    `zero` in the Discord developer portal first); click through the language switch + restart; the rest of the app in Spanish (dialogs, Discover,
+    instance window) was not looked at screen by screen.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.
@@ -895,8 +912,8 @@ Start `scripts/zero/run-dev.cmd`. For animations: Appearance → Motion → **On
   Release blockers in `docs/zero/CREDENTIALS.md`. `curseforge:`/`modrinth:` handlers shared with Prism.
 - No updater, installer not built (NSIS template rebranded only; windeployqt not set up).
 - Library details panel: its own "● Running" badge also shows while Preparing (LaunchTask sets running early).
-- **English only**: ZERO has no translations yet, so every language setting is ignored (see `docs/zero/ARCHITECTURE.md`,
-  "English only for now"). Native Windows dialogs (file pickers) still follow the OS language.
+- Languages: English and Spanish only (B5). Upstream Prism strings in Spanish depend on Prism's downloaded es file; native Windows
+  dialogs (file pickers) follow the OS language.
 - Without a Microsoft account the Quick Setup wizard (login page) shows on every start (upstream Prism behaviour).
 - At 1100×700 the Library details panel scrolls ("Delete" below the fold); Appearance page scrolls at 1280×800.
 - `ZeroCard` hover shadow is drawn inside the card (a widget can't paint outside its rect); grid cards get a real lift.

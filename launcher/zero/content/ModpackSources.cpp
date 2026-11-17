@@ -25,10 +25,6 @@
 namespace Zero::Content {
 
 namespace {
-QString trText(const char* text)
-{
-    return QCoreApplication::translate("Zero::Content::ModpackSources", text);
-}
 }  // namespace
 
 // ---- NetSource ----
@@ -62,7 +58,7 @@ void NetSource::fetch(const QString& jobName, const QUrl& url, std::function<voi
     };
     connect(job.get(), &NetJob::succeeded, this, [answer, response] { answer(QByteArray(*response)); });
     connect(job.get(), &NetJob::failed, this, [answer](const QString& reason) { answer(std::unexpected(reason)); });
-    connect(job.get(), &NetJob::aborted, this, [answer] { answer(std::unexpected(trText("The request was cancelled."))); });
+    connect(job.get(), &NetJob::aborted, this, [answer] { answer(std::unexpected(QCoreApplication::translate("Zero::Content::ModpackSources", "The request was cancelled."))); });
     hold(job);
     job->start();
 }
@@ -104,7 +100,7 @@ void ResourceApiSource::search(const ResourceAPI::SearchArgs& args, quint64 gene
     });
     connect(raw, &NetJob::aborted, this, [this, raw, generation]() {
         release(raw);
-        emit searchFailed(generation, trText("The request was cancelled."));
+        emit searchFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "The request was cancelled."));
     });
     hold(job);
     job->start();
@@ -126,7 +122,7 @@ void ResourceApiSource::details(const ModpackItemPtr& item, quint64 generation)
     });
     connect(raw, &NetJob::aborted, this, [this, raw, generation]() {
         release(raw);
-        emit detailsFailed(generation, trText("The request was cancelled."));
+        emit detailsFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "The request was cancelled."));
     });
     hold(job);
     job->start();
@@ -135,7 +131,7 @@ void ResourceApiSource::details(const ModpackItemPtr& item, quint64 generation)
 void ResourceApiSource::versions(const ModpackItemPtr& item, quint64 generation)
 {
     if (!item->pack) {
-        emit versionsFailed(generation, trText("This pack has no version list."));
+        emit versionsFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "This pack has no version list."));
         return;
     }
     // ResourceAPI::getProjectVersions never calls back when the answer cannot be parsed: whatever happens first (answer,
@@ -168,7 +164,7 @@ void ResourceApiSource::versions(const ModpackItemPtr& item, quint64 generation)
             return;
         }
         *done = true;
-        emit versionsFailed(generation, trText("The request was cancelled."));
+        emit versionsFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "The request was cancelled."));
     };
     // Modpacks ask for every version; a section with a target instance (Mods) narrows the request to its Minecraft version and loaders.
     const VersionFilter& filter = versionFilter();
@@ -187,7 +183,7 @@ void ResourceApiSource::versions(const ModpackItemPtr& item, quint64 generation)
         { .pack = item->pack, .mcVersions = mcVersions, .loaders = loaders, .resourceType = m_type, .includeChangelog = false }, callbacks);
     if (!job) {
         *done = true;
-        emit versionsFailed(generation, trText("This pack has no version list."));
+        emit versionsFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "This pack has no version list."));
         return;
     }
     if (auto* net = dynamic_cast<NetJob*>(job.get())) {
@@ -201,7 +197,7 @@ void ResourceApiSource::versions(const ModpackItemPtr& item, quint64 generation)
             return;
         }
         *done = true;
-        emit versionsFailed(generation, trText("The provider did not answer in time."));
+        emit versionsFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "The provider did not answer in time."));
     });
 }
 
@@ -411,7 +407,7 @@ void TechnicSource::versions(const ModpackItemPtr& item, quint64 generation)
             return;
         }
         *pending.done = true;
-        emit versionsFailed(pending.generation, trText("The provider did not answer in time."));
+        emit versionsFailed(pending.generation, QCoreApplication::translate("Zero::Content::ModpackSources", "The provider did not answer in time."));
     });
     if (m_store->details(item->slug)) {
         answerVersions(pending);
@@ -473,7 +469,7 @@ void TechnicSource::answerVersions(const Pending& pending)
     const auto details = m_store->details(slug);
     if (!details) {
         *pending.done = true;
-        emit versionsFailed(pending.generation, trText("The pack details are not available."));
+        emit versionsFailed(pending.generation, QCoreApplication::translate("Zero::Content::ModpackSources", "The pack details are not available."));
         return;
     }
     if (!details->isSolder()) {

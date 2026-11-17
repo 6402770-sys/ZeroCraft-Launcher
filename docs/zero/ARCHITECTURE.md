@@ -24,12 +24,7 @@ install/launch, auth, mod platforms, tasks, networking) is kept and only changed
 - **Shared upstream infrastructure** (meta server, Prism MSA client ID, CurseForge key) is reused for dev builds only;
   `-DZERO_RELEASE_BUILD=ON` refuses to build with upstream credentials. See `docs/zero/CREDENTIALS.md`.
 - **No mock UI.** Navigation entries appear only when their feature works.
-- **English only for now** (`launcher/zero/ZeroLanguage.h`, `Zero::Language::kEnglishOnly`). ZERO's own strings have no
-  translations, so loading Prism's/Qt's translations mixed languages ("Cuentas" next to "Accounts", Spanish dates in
-  English sentences). `TranslationsModel::selectLanguage` always picks `en_US` (no translator, `QLocale` default en_US,
-  `UseSystemLocale` ignored), the translation index is not downloaded, and the Language settings page, its palette entry
-  and the setup wizard's language page are hidden. The saved `Language` setting is left untouched. To add translations
-  later: ship ZERO `.qm` files, install them next to Prism's translator, and flip the flag.
+- **Two languages: English and Español** (see "Languages" at the end).
 - **Default theme** = `Zero::kDefaultThemeId` (Minecraft). `Zero::appLogo()` / `Application::logo()` return the
   pixel mark under the Minecraft theme; `ThemeManager::setApplicationTheme` sets it as the application window icon on
   every switch (the main window has no own icon, so it follows).
@@ -595,3 +590,56 @@ Model: `zero/history/ChangeTimeline.{h,cpp}` (no widgets). `build(Sources)` take
 A rolled-back entry gets the caption tag "Undone" and the muted tone; a dismissed mod snapshot is only not undoable. Unfinished (`pending` / empty outcome) and unreadable snapshots are not listed. Boost / Java argument changes have no persisted history, so they are not on the timeline.
 
 The page shows the newest 100 entries and a "Show more" button (+100). It reads on open, when the game starts or stops, and when the session or downloads history changes (coalesced to the next event-loop turn, deferred while hidden). Undo buttons are disabled with the reason as tooltip while the instance is running / launching or has a background download. The Mods and Resource Packs pages refresh themselves after their own flows (`requestRollback`, `undo`), so they show no stale state; the modpack undo reloads the instance. Tests: `ChangeTimeline_test` (model), `ZeroTimelinePage_test` (widgets, PNGs with `ZERO_TIMELINE_SHOTS`).
+
+## Discord Rich Presence
+While a game runs, the Discord desktop client shows what is played. Nothing is shown (and no pipe is open) while no game runs. Code: `launcher/zero/discord/DiscordPresence.{h,cpp}` (no widgets, no `Application`), wired in `Application.cpp` next to the other ZERO services; tests: `DiscordPresence_test` (a `QLocalServer` plays Discord).
+
+- **Discord application.** Public Application ID `1572300937387581450` (`Zero::Discord::kClientId`). The art asset key `zero` is used as `large_image` (`large_text` "ZERO Launcher"); if the asset is missing Discord simply shows no image.
+- **Transport.** Discord's local IPC: Windows named pipes `discord-ipc-0` .. `discord-ipc-9` through `QLocalSocket` (all asynchronous, the GUI thread never blocks). Frames are little-endian `uint32` opcode + `uint32` length + UTF-8 JSON. Handshake (opcode 0) `{"v":1,"client_id":...}`, then wait for the `READY` dispatch; `SET_ACTIVITY` (opcode 1) with `args.pid` = the launcher's pid and a fresh `nonce`; clearing sends the same command with `"activity": null`, then opcode 2 (close) and the pipe is closed. PING (3) is answered with PONG (4) with the same payload; partial reads are buffered until a frame is complete; a frame over 1 MB is treated as garbage and the pipe is dropped.
+- **Connecting.** On the first running game the service tries pipe 0, then 1, ... up to 9 (a failed pipe moves to the next). If none answers it retries every 30 s (`Options::retryMs`, short in tests) while a game runs. If Discord quits, the pipe closes and the same retry applies. One `qInfo` line on connect and one on disconnect, nothing else is logged.
+- **What is shown.** `details` = the instance name (setting `ZeroDiscordShowInstance`), else "Playing Minecraft"; `state` = "Minecraft <version>" plus " · <loader>" for Fabric / Quilt / Forge / NeoForge (read with `Zero::Mods::readInstanceContext` from `mmc-pack.json`; no loader, no suffix); `timestamps.start` = epoch seconds when the game reached the Running phase; `assets` as above. With several games the most recently started one is shown; when it ends the previous still-running one takes over (the service keeps the running games oldest first). The same activity is never sent twice.
+- **Wiring.** `launchPhaseChanged` (Running) -> `gameStarted(Game)`, `launchEnded` -> `gameEnded(id)`. The settings `ZeroDiscordPresence` (default on) and `ZeroDiscordShowInstance` (default on) are watched live: turning the first off clears the presence and closes the pipe at once, turning it on while a game runs shows it at once.
+- **UI.** Settings > Launcher, group "Discord" after "Language": "Show what you're playing on Discord", under it (indented, disabled while the first is off) "Show the instance name", caption "Discord must be open on this computer." Both are saved on click.
+- **Not covered by tests.** A real Discord client (the fake only speaks the documented frames).
+
+## Languages
+Languages: **English** (`en_US`, the source language and the default) and **Español** (`es`). Owner decisions and the style of the Spanish
+text (neutral Spanish, "tú") are in `docs/zero/I18N.md`.
+
+- **Setting.** Prism's own `Language` setting is the store; ZERO understands two values, `en_US` and `es` (`launcher/zero/ZeroLanguage.h`,
+  `Zero::Language`). Any other value Prism may have saved (`es_ES`, `de_DE`) is read as the nearest of the two: a Spanish code is
+  Spanish, the rest is English. With nothing saved (first start) the launcher follows Windows: Spanish when
+  `QLocale::system().language() == QLocale::Spanish`, else English; `Application` saves the decision, so it is kept from then on
+  (`Language::initialCode`, covered by `ZeroLanguage_test`). Dates and numbers follow the language (`QLocale::setDefault`, `Language::localeFor`);
+  Prism's `UseSystemLocale` setting is not read any more.
+- **Switching.** Settings > Launcher, first group "Language": a combo with "English" / "Español" (each name in its own language, never
+  translated). Picking another one saves it at once and asks "Restart now?" (`ChoiceDialog`, buttons Later / Restart now). Restart is
+  `Application::zeroRestart`: a running game or running downloads stop it first (the same guards as quitting; the language still applies at
+  the next start), then `Zero::Restart::startSuccessor` starts the same exe (with `--dir` only when this run had one) with the variable
+  `ZERO_RESTART_WAIT_PID` set, and the launcher quits. The new process waits for that process id to end
+  (`Zero::Restart::waitForPredecessor`, called in the `Application` constructor before the single-instance lock, at most 20 s) so that it
+  does not just hand its start over to the old launcher. There is no live retranslation.
+- **Loading** (`TranslationsModel::selectLanguage`, called by `Application` at start and again whenever Prism's files change). English: no
+  translator at all. Español, in this order, each one installed on top of the previous one (the translator installed last is asked first):
+  Qt's own `qt_es` / `qtbase_es` when present (the Windows package ships none), Prism's translation for the screens ZERO did not touch
+  (Prism's index and `mmc_<key>.qm` / `<key>.po` are downloaded and installed exactly as upstream does; the key is chosen by
+  `Language::prismKey`: the system locale when Prism has it, Spain's for a Spanish-Spain system, otherwise `es_UY` "Latin American", then
+  `es_ES`), and **last** ZERO's own `:/zero/i18n/zero_es.qm`, so ZERO's text wins. If Prism's download fails or the machine is offline,
+  ZERO's strings are still translated. The model lists only English and the Spanish keys of Prism's index (Prism's Language page stays hidden).
+- **ZERO's catalogue** is `launcher/resources/zero/i18n/zero_es.ts`: every string of `launcher/` (ZERO's contexts and the upstream strings ZERO
+  changed; contexts as lupdate writes them, no file locations). The build compiles it with `lrelease -nounfinished` (`qt_add_lrelease` in
+  `launcher/CMakeLists.txt`, the static library `Launcher_zero_i18n`) into the app as `:/zero/i18n/zero_es.qm`. An entry that is still
+  `type="unfinished"` is not compiled, so an untranslated string shows in English (or in Prism's Spanish), never as an empty label.
+  `scripts/zero/i18n-update.sh` refreshes the `.ts` from the sources keeping the translations that still match (see I18N.md "How to update").
+- **Contexts must be the ones the code looks up.** At run time `tr()` uses the class name with its namespaces (`Zero::ModsUi::ModsPage`), which is
+  what lupdate writes. Rules that keep it so:
+  - A class that calls `tr()` needs `Q_OBJECT` (or `Q_DECLARE_TR_FUNCTIONS(<qualified name>)` followed by `public:` when it cannot have it: the macro
+    leaves the section private). Without one, `tr()` quietly resolves to the base class's context and the text is never found (lupdate warns
+    "lacks Q_OBJECT": `i18n-update.sh` repeats those warnings for ZERO sources).
+  - A `.cpp` without a class (the former free `tr()` helpers) writes `QCoreApplication::translate("<Context>", "text")` at every call. A
+    file-local `tr()` wrapper is invisible to lupdate. Tables of texts use `QT_TRANSLATE_NOOP("<Context>", "text")` and translate when they are
+    shown (`QCoreApplication::translate("<Context>", variable)`).
+  - Never translate at static-initialisation time (a namespace-level `static const QString`): the language is set later.
+  - Text the code compares with (`error.contains("running")`) must not be a translated string.
+- **Not translated on purpose:** log messages, setting keys, file names, JSON keys, the names of the languages in the picker, and the
+  diagnostic `error` texts of `StorageScanner` (the UI only shows counts).

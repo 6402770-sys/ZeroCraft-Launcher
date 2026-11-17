@@ -68,13 +68,13 @@ QString captionFor(const QList<UpdateEntry>& entries)
     }
     QStringList parts;
     if (mods > 0) {
-        parts << countText(mods, "1 mod", "%1 mods");
+        parts << countText(mods, QT_TRANSLATE_NOOP("Zero::Updates", "1 mod"), QT_TRANSLATE_NOOP("Zero::Updates", "%1 mods"));
     }
     if (shaders > 0) {
-        parts << countText(shaders, "1 shader pack", "%1 shader packs");
+        parts << countText(shaders, QT_TRANSLATE_NOOP("Zero::Updates", "1 shader pack"), QT_TRANSLATE_NOOP("Zero::Updates", "%1 shader packs"));
     }
     if (resources > 0) {
-        parts << countText(resources, "1 resource pack", "%1 resource packs");
+        parts << countText(resources, QT_TRANSLATE_NOOP("Zero::Updates", "1 resource pack"), QT_TRANSLATE_NOOP("Zero::Updates", "%1 resource packs"));
     }
     return parts.join(QStringLiteral(" · "));
 }

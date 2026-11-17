@@ -48,11 +48,6 @@ constexpr int kQrSize = 104;
 constexpr int kGlyphWidth = 24;
 constexpr int kGlyphHeight = 16;
 
-QString dtr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Accounts::AddAccountDialog", text);
-}
-
 QLabel* makeLabel(const QString& text, Role role, QWidget* parent, const char* tone = nullptr, bool wrap = true)
 {
     auto* label = new QLabel(text, parent);
@@ -286,7 +281,7 @@ class QrWidget : public QWidget {
     explicit QrWidget(QWidget* parent) : QWidget(parent)
     {
         setFixedSize(kQrSize, kQrSize);
-        setAccessibleName(dtr("QR code for the sign-in page"));
+        setAccessibleName(QCoreApplication::translate("Zero::Accounts::AddAccountDialog", "QR code for the sign-in page"));
         connect(&Theme::instance(), &Theme::changed, this, qOverload<>(&QWidget::update));
     }
     void setText(const QString& text)
@@ -429,10 +424,10 @@ class CodePanel : public ZeroCard {
         column->addStretch(1);
         m_code = new QLabel(this);
         m_code->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        m_code->setAccessibleName(dtr("Sign-in code"));
+        m_code->setAccessibleName(QCoreApplication::translate("Zero::Accounts::AddAccountDialog", "Sign-in code"));
         column->addWidget(m_code);
-        m_copy = new LinkButton(dtr("Copy code"), QStringLiteral("copy"), this);
-        m_copy->setAccessibleName(dtr("Copy code"));
+        m_copy = new LinkButton(QCoreApplication::translate("Zero::Accounts::AddAccountDialog", "Copy code"), QStringLiteral("copy"), this);
+        m_copy->setAccessibleName(QCoreApplication::translate("Zero::Accounts::AddAccountDialog", "Copy code"));
         column->addWidget(m_copy, 0, Qt::AlignLeft);
         column->addStretch(1);
         row->addLayout(column, 1);
@@ -455,7 +450,7 @@ class CodePanel : public ZeroCard {
     }
     void setCopied(bool copied)
     {
-        m_copy->setText(copied ? dtr("Copied") : dtr("Copy code"));
+        m_copy->setText(copied ? QCoreApplication::translate("Zero::Accounts::AddAccountDialog", "Copied") : QCoreApplication::translate("Zero::Accounts::AddAccountDialog", "Copy code"));
         m_copy->setIconName(copied ? QStringLiteral("check") : QStringLiteral("copy"));
         m_copy->updateGeometry();
         m_copy->update();

@@ -34,11 +34,6 @@ constexpr char kIndexDir[] = ".index";
 constexpr char kFilesDir[] = "files";
 constexpr char kStagingPrefix[] = ".zero-rollback-";
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Mods::Snapshot", text);
-}
-
 QString native(const QString& path)
 {
     return QDir::toNativeSeparators(path);
@@ -134,7 +129,7 @@ bool hashFile(const QString& path, QString* sha, qint64* size, QString* error)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        *error = tr("%1 could not be read (%2).").arg(native(path), file.errorString());
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be read (%2).").arg(native(path), file.errorString());
         return false;
     }
     QCryptographicHash hash(QCryptographicHash::Sha256);
@@ -143,7 +138,7 @@ bool hashFile(const QString& path, QString* sha, qint64* size, QString* error)
     for (;;) {
         const qint64 n = file.read(buffer.data(), buffer.size());
         if (n < 0) {
-            *error = tr("%1 could not be read (%2).").arg(native(path), file.errorString());
+            *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be read (%2).").arg(native(path), file.errorString());
             return false;
         }
         if (n == 0)
@@ -160,18 +155,18 @@ bool hashFile(const QString& path, QString* sha, qint64* size, QString* error)
 bool copyVerified(const QString& src, const QString& dst, QString* sha, qint64* size, QString* error)
 {
     if (QFileInfo::exists(dst) || QFileInfo::exists(dst + QStringLiteral(".part"))) {
-        *error = tr("%1 already exists.").arg(native(dst));
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 already exists.").arg(native(dst));
         return false;
     }
     QFile in(src);
     if (!in.open(QIODevice::ReadOnly)) {
-        *error = tr("%1 could not be read (%2).").arg(native(src), in.errorString());
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be read (%2).").arg(native(src), in.errorString());
         return false;
     }
     const QString part = dst + QStringLiteral(".part");
     QFile out(part);
     if (!out.open(QIODevice::WriteOnly)) {
-        *error = tr("%1 could not be written (%2).").arg(native(part), out.errorString());
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be written (%2).").arg(native(part), out.errorString());
         return false;
     }
     auto fail = [&](const QString& message) {
@@ -186,16 +181,16 @@ bool copyVerified(const QString& src, const QString& dst, QString* sha, qint64* 
     for (;;) {
         const qint64 n = in.read(buffer.data(), buffer.size());
         if (n < 0)
-            return fail(tr("%1 could not be read (%2).").arg(native(src), in.errorString()));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be read (%2).").arg(native(src), in.errorString()));
         if (n == 0)
             break;
         if (out.write(buffer.constData(), n) != n)
-            return fail(tr("%1 could not be written (%2).").arg(native(part), out.errorString()));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be written (%2).").arg(native(part), out.errorString()));
         hash.addData(QByteArrayView(buffer.constData(), n));
         total += n;
     }
     if (!out.flush())
-        return fail(tr("%1 could not be written (%2).").arg(native(part), out.errorString()));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be written (%2).").arg(native(part), out.errorString()));
     out.close();
     const QString readSha = QString::fromLatin1(hash.result().toHex());
     QString writtenSha;
@@ -208,12 +203,12 @@ bool copyVerified(const QString& src, const QString& dst, QString* sha, qint64* 
     }
     if (writtenSha != readSha || writtenSize != total) {
         QFile::remove(part);
-        *error = tr("The copy of %1 did not match the original.").arg(native(src));
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "The copy of %1 did not match the original.").arg(native(src));
         return false;
     }
     if (!QFile::rename(part, dst)) {
         QFile::remove(part);
-        *error = tr("%1 could not be put in place.").arg(native(dst));
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be put in place.").arg(native(dst));
         return false;
     }
     *sha = readSha;
@@ -266,12 +261,12 @@ bool writeInfo(const Info& info, QString* error)
 {
     QSaveFile file(QDir(info.dir).filePath(QString::fromLatin1(kFileName)));
     if (!file.open(QIODevice::WriteOnly)) {
-        *error = tr("%1 could not be written (%2).").arg(native(file.fileName()), file.errorString());
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be written (%2).").arg(native(file.fileName()), file.errorString());
         return false;
     }
     file.write(toJson(info));
     if (!file.commit()) {
-        *error = tr("%1 could not be written (%2).").arg(native(file.fileName()), file.errorString());
+        *error = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be written (%2).").arg(native(file.fileName()), file.errorString());
         return false;
     }
     return true;
@@ -369,24 +364,24 @@ Info readSnapshot(const QString& snapshotDir)
     info.id = QFileInfo(info.dir).fileName();
     QFile file(QDir(info.dir).filePath(QString::fromLatin1(kFileName)));
     if (!file.open(QIODevice::ReadOnly)) {
-        info.error = tr("snapshot.json could not be read.");
+        info.error = QCoreApplication::translate("Zero::Mods::Snapshot", "snapshot.json could not be read.");
         return info;
     }
     QJsonParseError parse;
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parse);
     if (parse.error != QJsonParseError::NoError || !doc.isObject()) {
-        info.error = tr("snapshot.json is not valid.");
+        info.error = QCoreApplication::translate("Zero::Mods::Snapshot", "snapshot.json is not valid.");
         return info;
     }
     const QJsonObject root = doc.object();
     if (root.value(QStringLiteral("format")).toInt() != kFormat) {
-        info.error = tr("snapshot.json has an unknown format.");
+        info.error = QCoreApplication::translate("Zero::Mods::Snapshot", "snapshot.json has an unknown format.");
         return info;
     }
     info.instanceId = root.value(QStringLiteral("instanceId")).toString();
     const QDateTime created = QDateTime::fromString(root.value(QStringLiteral("created")).toString(), Qt::ISODateWithMs);
     if (!created.isValid()) {
-        info.error = tr("snapshot.json has no valid time.");
+        info.error = QCoreApplication::translate("Zero::Mods::Snapshot", "snapshot.json has no valid time.");
         return info;
     }
     info.createdMs = created.toMSecsSinceEpoch();
@@ -402,7 +397,7 @@ Info readSnapshot(const QString& snapshotDir)
         f.size = o.value(QStringLiteral("size")).toVariant().toLongLong();
         f.sha256 = o.value(QStringLiteral("sha256")).toString();
         if (!isAllowedPath(f.path) || !isHex64(f.sha256) || f.size < 0 || seen.contains(f.path.toLower())) {
-            info.error = tr("snapshot.json lists a file that is not valid.");
+            info.error = QCoreApplication::translate("Zero::Mods::Snapshot", "snapshot.json lists a file that is not valid.");
             return info;
         }
         seen.insert(f.path.toLower());
@@ -421,7 +416,7 @@ Info readSnapshot(const QString& snapshotDir)
     info.added = stringList(root.value(QStringLiteral("added")));
     for (const QString& path : std::as_const(info.added)) {
         if (!isAllowedPath(path)) {
-            info.error = tr("snapshot.json lists a file that is not valid.");
+            info.error = QCoreApplication::translate("Zero::Mods::Snapshot", "snapshot.json lists a file that is not valid.");
             return info;
         }
     }
@@ -516,7 +511,7 @@ CreateResult createSnapshot(const QString& snapshotsDir, const QString& instance
         return result;
     };
     if (mods.isEmpty())
-        return fail(tr("There is nothing to save."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "There is nothing to save."));
 
     // Which files: only inside the mods folder, only the shapes a snapshot may hold, every mod has at least its jar.
     QList<FileRef> files;
@@ -531,12 +526,12 @@ CreateResult createSnapshot(const QString& snapshotsDir, const QString& instance
         for (const QString& absolute : mod.files) {
             const QString rel = relativeTo(modsDir, absolute);
             if (rel.isEmpty() || !isAllowedPath(rel))
-                return fail(tr("%1 is not a file of the mods folder.").arg(native(absolute)));
+                return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 is not a file of the mods folder.").arg(native(absolute)));
             const QFileInfo fi(absolute);
             if (!fi.exists())
                 continue;  // a packwiz entry that is not there
             if (!fi.isFile())
-                return fail(tr("%1 is not a file.").arg(native(absolute)));
+                return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 is not a file.").arg(native(absolute)));
             if (seen.contains(rel.toLower())) {
                 entry.files.append(rel);
                 continue;
@@ -550,15 +545,15 @@ CreateResult createSnapshot(const QString& snapshotsDir, const QString& instance
             entry.files.append(rel);
         }
         if (entry.files.isEmpty())
-            return fail(tr("The file of %1 was not found.").arg(mod.name));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The file of %1 was not found.").arg(mod.name));
         entries.append(entry);
     }
 
     if (!makePath(snapshotsDir))
-        return fail(tr("The snapshots folder could not be created."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The snapshots folder could not be created."));
     const qint64 free = hooks.freeBytes(snapshotsDir);
     if (free >= 0 && free < total + kSlackBytes)
-        return fail(tr("There is not enough free space on the disk."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "There is not enough free space on the disk."));
 
     result.before = listFolder(modsDir);
     const qint64 now = hooks.nowMs();
@@ -570,7 +565,7 @@ CreateResult createSnapshot(const QString& snapshotsDir, const QString& instance
         const QString dst = QDir(partDir).filePath(QString::fromLatin1(kFilesDir) + QLatin1Char('/') + ref.path);
         if (!makePath(QFileInfo(dst).absolutePath())) {
             cleanup();
-            return fail(tr("The snapshots folder could not be created."));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The snapshots folder could not be created."));
         }
         QString error;
         qint64 size = 0;
@@ -595,11 +590,11 @@ CreateResult createSnapshot(const QString& snapshotsDir, const QString& instance
     }
     if (!readSnapshot(partDir).valid) {
         cleanup();
-        return fail(tr("The snapshot could not be verified."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The snapshot could not be verified."));
     }
     if (!QDir().rename(partDir, finalDir)) {
         cleanup();
-        return fail(tr("The snapshot could not be put in place."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The snapshot could not be put in place."));
     }
     result.ok = true;
     result.dir = finalDir;
@@ -645,7 +640,7 @@ FinalizeResult finalizeSnapshot(const QString& snapshotDir, const QString& modsD
         result.pruned = QDir(info.dir).removeRecursively();
         result.ok = result.pruned;
         if (!result.ok)
-            result.error = tr("The snapshot folder could not be removed.");
+            result.error = QCoreApplication::translate("Zero::Mods::Snapshot", "The snapshot folder could not be removed.");
         return result;
     }
     info.outcome = QString::fromLatin1(success ? kOutcomeOk : kOutcomeFailed);
@@ -667,25 +662,25 @@ RollbackResult rollback(const Info& info, const QString& modsDir, const Hooks& h
         return result;
     };
     if (!info.valid)
-        return fail(tr("This snapshot cannot be read, so nothing was rolled back."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "This snapshot cannot be read, so nothing was rolled back."));
     if (info.rolledBack)
-        return fail(tr("This snapshot was rolled back already."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "This snapshot was rolled back already."));
     if (!QFileInfo(modsDir).isDir())
-        return fail(tr("The mods folder was not found."));
+        return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The mods folder was not found."));
 
     // 1. Every saved copy must still be what it was. Nothing is touched before this passes.
     for (const FileRef& f : info.files) {
         if (!isAllowedPath(f.path))
-            return fail(tr("This snapshot lists a file that is not valid, so nothing was rolled back."));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "This snapshot lists a file that is not valid, so nothing was rolled back."));
         QString sha, error;
         qint64 size = 0;
         const QString src = QDir(info.dir).filePath(QString::fromLatin1(kFilesDir) + QLatin1Char('/') + f.path);
         if (!QFileInfo(src).isFile() || !hashFile(src, &sha, &size, &error) || sha != f.sha256 || size != f.size)
-            return fail(tr("The saved copy of %1 is damaged, so nothing was rolled back.").arg(f.path));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The saved copy of %1 is damaged, so nothing was rolled back.").arg(f.path));
     }
     for (const QString& path : info.added) {
         if (!isAllowedPath(path))
-            return fail(tr("This snapshot lists a file that is not valid, so nothing was rolled back."));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "This snapshot lists a file that is not valid, so nothing was rolled back."));
     }
 
     // 2. The plan: what to restore, what has to go to the Recycle Bin first.
@@ -695,7 +690,7 @@ RollbackResult rollback(const Info& info, const QString& modsDir, const Hooks& h
     for (const FileRef& f : info.files) {
         const QFileInfo target(QDir(modsDir).filePath(f.path));
         if (target.isDir() && !target.isSymLink())
-            return fail(tr("%1 is a folder now, so nothing was rolled back.").arg(f.path));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 is a folder now, so nothing was rolled back.").arg(f.path));
         if (target.exists() || target.isSymLink()) {
             QString sha, error;
             qint64 size = 0;
@@ -727,7 +722,7 @@ RollbackResult rollback(const Info& info, const QString& modsDir, const Hooks& h
     if (!restore.isEmpty()) {
         const qint64 free = hooks.freeBytes(modsDir);
         if (free >= 0 && free < totalRestore + kSlackBytes)
-            return fail(tr("There is not enough free space on the disk, so nothing was rolled back."));
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "There is not enough free space on the disk, so nothing was rolled back."));
         for (int n = 1;; ++n) {
             staging = QDir(modsDir).filePath(QString::fromLatin1(kStagingPrefix) + QString::number(n));
             if (!QFileInfo::exists(staging))
@@ -745,7 +740,7 @@ RollbackResult rollback(const Info& info, const QString& modsDir, const Hooks& h
             }
             if (!makePath(QFileInfo(dst).absolutePath()) || !copyVerified(src, dst, &sha, &size, &error) || !ref || sha != ref->sha256) {
                 QDir(staging).removeRecursively();  // our own staging folder
-                return fail(tr("The saved copy of %1 could not be prepared, so nothing was rolled back.").arg(path));
+                return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "The saved copy of %1 could not be prepared, so nothing was rolled back.").arg(path));
             }
         }
     }
@@ -763,13 +758,13 @@ RollbackResult rollback(const Info& info, const QString& modsDir, const Hooks& h
             result.touched = !result.trashedPaths.isEmpty();
             QString state;
             if (result.trashedPaths.isEmpty()) {
-                state = tr("Nothing in the mods folder was changed.");
+                state = QCoreApplication::translate("Zero::Mods::Snapshot", "Nothing in the mods folder was changed.");
             } else {
-                state = tr("%1 file(s) had already gone to the Recycle Bin (%2) and none was put back, so some mods may be missing for now.")
+                state = QCoreApplication::translate("Zero::Mods::Snapshot", "%1 file(s) had already gone to the Recycle Bin (%2) and none was put back, so some mods may be missing for now.")
                             .arg(result.trashedPaths.size())
                             .arg(result.trashedPaths.mid(0, 3).join(QStringLiteral(", ")));
             }
-            return fail(tr("%1 could not be moved to the Recycle Bin, so the roll back stopped. %2 The saved copies are still here: close whatever uses "
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be moved to the Recycle Bin, so the roll back stopped. %2 The saved copies are still here: close whatever uses "
                            "the mods folder and click Roll back again.")
                             .arg(path, state));
         }
@@ -784,7 +779,7 @@ RollbackResult rollback(const Info& info, const QString& modsDir, const Hooks& h
         const QString target = QDir(modsDir).filePath(path);
         if (QFileInfo::exists(target) || !hooks.rename(staged, target)) {
             dropStaging();
-            return fail(tr("%1 could not be put back, so the roll back stopped. %2 file(s) went to the Recycle Bin and %3 were put back; the saved "
+            return fail(QCoreApplication::translate("Zero::Mods::Snapshot", "%1 could not be put back, so the roll back stopped. %2 file(s) went to the Recycle Bin and %3 were put back; the saved "
                            "copies are still here: close whatever uses the mods folder and click Roll back again.")
                             .arg(path)
                             .arg(result.trashed)
@@ -811,20 +806,20 @@ QString ageText(qint64 createdMs, qint64 nowMs)
 {
     const qint64 seconds = std::max<qint64>(0, (nowMs - createdMs) / 1000);
     if (seconds < 60)
-        return tr("just now");
+        return QCoreApplication::translate("Zero::Mods::Snapshot", "just now");
     if (seconds < 3600)
-        return tr("%1 min ago").arg(seconds / 60);
+        return QCoreApplication::translate("Zero::Mods::Snapshot", "%1 min ago").arg(seconds / 60);
     if (seconds < 86400)
-        return tr("%1 h ago").arg(seconds / 3600);
+        return QCoreApplication::translate("Zero::Mods::Snapshot", "%1 h ago").arg(seconds / 3600);
     if (seconds < 30LL * 86400)
-        return tr("%1 d ago").arg(seconds / 86400);
+        return QCoreApplication::translate("Zero::Mods::Snapshot", "%1 d ago").arg(seconds / 86400);
     return QLocale().toString(QDateTime::fromMSecsSinceEpoch(createdMs).date(), QLocale::ShortFormat);
 }
 
 QString noticeText(const Info& info, qint64 nowMs)
 {
     const int count = info.changedCount() > 0 ? info.changedCount() : int(info.mods.size());
-    const QString what = count == 1 ? tr("Updated 1 mod") : tr("Updated %1 mods").arg(count);
+    const QString what = count == 1 ? QCoreApplication::translate("Zero::Mods::Snapshot", "Updated 1 mod") : QCoreApplication::translate("Zero::Mods::Snapshot", "Updated %1 mods").arg(count);
     return what + QStringLiteral(" · ") + ageText(info.createdMs, nowMs);
 }
 

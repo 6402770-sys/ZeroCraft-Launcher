@@ -18,11 +18,6 @@ namespace SandboxUi {
 namespace {
 constexpr int kDialogWidth = 480;
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::SandboxUi", text);
-}
-
 const char* variantOf(ModsUi::ChoiceButton::Kind kind)
 {
     switch (kind) {
@@ -42,19 +37,19 @@ QString partLabel(Sandbox::Part part)
 {
     switch (part) {
         case Sandbox::Part::Mods:
-            return tr("Mods");
+            return QCoreApplication::translate("Zero::SandboxUi", "Mods");
         case Sandbox::Part::Config:
-            return tr("Config");
+            return QCoreApplication::translate("Zero::SandboxUi", "Config");
         case Sandbox::Part::ResourcePacks:
-            return tr("Resource packs");
+            return QCoreApplication::translate("Zero::SandboxUi", "Resource packs");
         case Sandbox::Part::ShaderPacks:
-            return tr("Shader packs");
+            return QCoreApplication::translate("Zero::SandboxUi", "Shader packs");
         case Sandbox::Part::GameVersion:
-            return tr("Game version and loader");
+            return QCoreApplication::translate("Zero::SandboxUi", "Game version and loader");
         case Sandbox::Part::Worlds:
             break;
     }
-    return tr("Worlds");
+    return QCoreApplication::translate("Zero::SandboxUi", "Worlds");
 }
 }  // namespace
 
@@ -194,11 +189,11 @@ CheckAnswer askChecksWithDialog(QWidget* parent, const CheckPrompt& prompt)
 CheckPrompt startPrompt(const QString& originalName)
 {
     CheckPrompt prompt;
-    prompt.title = tr("Try it in a copy");
-    prompt.body = tr("Make a test copy of %1. Change mods, versions or settings there, then bring the changes back to %1 or discard the copy. %1 stays as it is.")
+    prompt.title = QCoreApplication::translate("Zero::SandboxUi", "Try it in a copy");
+    prompt.body = QCoreApplication::translate("Zero::SandboxUi", "Make a test copy of %1. Change mods, versions or settings there, then bring the changes back to %1 or discard the copy. %1 stays as it is.")
                       .arg(originalName);
-    prompt.options = { { QString::fromLatin1(kOptionWorlds), tr("Copy worlds too"), {}, true, false } };
-    prompt.buttons = { { tr("Cancel"), ModsUi::ChoiceButton::Kind::Ghost }, { tr("Make test copy"), ModsUi::ChoiceButton::Kind::Primary } };
+    prompt.options = { { QString::fromLatin1(kOptionWorlds), QCoreApplication::translate("Zero::SandboxUi", "Copy worlds too"), {}, true, false } };
+    prompt.buttons = { { QCoreApplication::translate("Zero::SandboxUi", "Cancel"), ModsUi::ChoiceButton::Kind::Ghost }, { QCoreApplication::translate("Zero::SandboxUi", "Make test copy"), ModsUi::ChoiceButton::Kind::Primary } };
     prompt.defaultButton = 1;
     return prompt;
 }
@@ -214,22 +209,22 @@ CheckPrompt bringBackPrompt(const QString& originalName, const QList<Sandbox::Pa
         option.label = partLabel(change.part);
         if (change.part == Sandbox::Part::Worlds) {
             option.checked = false;
-            option.caption = tr("Replaces %1's worlds with the copy's. The old ones are kept as backups.").arg(originalName);
+            option.caption = QCoreApplication::translate("Zero::SandboxUi", "Replaces %1's worlds with the copy's. The old ones are kept as backups.").arg(originalName);
         }
         prompt.options.append(option);
     }
     if (prompt.options.isEmpty()) {
-        prompt.title = tr("No changes to bring back");
-        prompt.body = tr("The test copy and %1 are the same.").arg(originalName);
-        prompt.buttons = { { tr("Close"), ModsUi::ChoiceButton::Kind::Ghost }, { tr("Discard copy"), ModsUi::ChoiceButton::Kind::Secondary } };
+        prompt.title = QCoreApplication::translate("Zero::SandboxUi", "No changes to bring back");
+        prompt.body = QCoreApplication::translate("Zero::SandboxUi", "The test copy and %1 are the same.").arg(originalName);
+        prompt.buttons = { { QCoreApplication::translate("Zero::SandboxUi", "Close"), ModsUi::ChoiceButton::Kind::Ghost }, { QCoreApplication::translate("Zero::SandboxUi", "Discard copy"), ModsUi::ChoiceButton::Kind::Secondary } };
         prompt.defaultButton = 0;
         return prompt;
     }
-    prompt.title = tr("Bring changes back to %1?").arg(originalName);
-    prompt.body = tr("Choose what to bring back from the test copy.");
-    prompt.options.append({ QString::fromLatin1(kOptionDiscard), tr("Discard the test copy afterwards"), {}, true, true });
-    prompt.note = tr("A copy of %1 is saved first, so you can undo this.").arg(originalName);
-    prompt.buttons = { { tr("Cancel"), ModsUi::ChoiceButton::Kind::Ghost }, { tr("Bring changes back"), ModsUi::ChoiceButton::Kind::Primary } };
+    prompt.title = QCoreApplication::translate("Zero::SandboxUi", "Bring changes back to %1?").arg(originalName);
+    prompt.body = QCoreApplication::translate("Zero::SandboxUi", "Choose what to bring back from the test copy.");
+    prompt.options.append({ QString::fromLatin1(kOptionDiscard), QCoreApplication::translate("Zero::SandboxUi", "Discard the test copy afterwards"), {}, true, true });
+    prompt.note = QCoreApplication::translate("Zero::SandboxUi", "A copy of %1 is saved first, so you can undo this.").arg(originalName);
+    prompt.buttons = { { QCoreApplication::translate("Zero::SandboxUi", "Cancel"), ModsUi::ChoiceButton::Kind::Ghost }, { QCoreApplication::translate("Zero::SandboxUi", "Bring changes back"), ModsUi::ChoiceButton::Kind::Primary } };
     prompt.defaultButton = 0;  // Enter cancels
     return prompt;
 }

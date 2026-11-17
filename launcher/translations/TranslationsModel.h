@@ -49,6 +49,7 @@ class TranslationsModel : public QAbstractListModel {
     QList<Language>::Iterator findLanguage(const QString& key) const;
     std::optional<Language> findLanguageAsOptional(const QString& key) const;
     void reloadLocalFiles();
+    QString prismKeyOfSelection() const;  // ZERO: the key of Prism's translation that goes with the chosen language, empty for English
     void downloadTranslation(const QString& key);
     void downloadNext();
 

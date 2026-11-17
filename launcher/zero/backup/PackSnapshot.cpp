@@ -28,11 +28,6 @@ namespace {
 
 constexpr qint64 kSlackBytes = 50LL * 1024 * 1024;  // free space beyond the data itself
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Backup::Pack", text);
-}
-
 QString sizeText(qint64 bytes)
 {
     return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeTraditionalFormat);
@@ -332,7 +327,7 @@ CreateResult createSnapshot(const QString& instanceRoot, const QString& snapshot
         return result;
     };
     if (!QFileInfo(instanceRoot).isDir())
-        return fail(tr("The instance folder does not exist."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "The instance folder does not exist."));
 
     const qint64 now = hooks.nowMs();
     Backup::Hooks backupHooks;
@@ -344,8 +339,8 @@ CreateResult createSnapshot(const QString& instanceRoot, const QString& snapshot
     options.exclude = [gameDir](const QString& rel, bool) { return isExcluded(rel, gameDir); };
     options.fileName = uniqueName(snapshotsDir, now);
     options.unsafeName = [bringBack = meta.kind == QLatin1String(kKindBringBack)](const QString& rel) {  // ZERO: the same snapshot serves "Try it in a copy"
-        return bringBack ? tr("This instance contains a file Windows cannot copy: %1. Rename or remove it, then try again.").arg(rel)
-                         : tr("This instance contains a file Windows cannot copy: %1. Rename or remove it, then update again.").arg(rel);
+        return bringBack ? QCoreApplication::translate("Zero::Backup::Pack", "This instance contains a file Windows cannot copy: %1. Rename or remove it, then try again.").arg(rel)
+                         : QCoreApplication::translate("Zero::Backup::Pack", "This instance contains a file Windows cannot copy: %1. Rename or remove it, then update again.").arg(rel);
     };
     options.extra = metaToJson(meta, now);
     options.cancelled = control.cancelled;
@@ -362,7 +357,7 @@ CreateResult createSnapshot(const QString& instanceRoot, const QString& snapshot
     info.createdMs = now;
     if (!writeSidecar(info)) {
         QFile::remove(made.zipPath);  // ZERO's own copy
-        return fail(tr("Could not write the details of the saved copy."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "Could not write the details of the saved copy."));
     }
     applyRetention(snapshotsDir, { made.zipPath });
     result.ok = true;
@@ -576,34 +571,34 @@ RollbackResult rollback(const QString& instanceRootIn, const QString& zipPath, c
     const QString id = rootInfo.fileName();
     const QString parent = rootInfo.absolutePath();
     if (!rootInfo.isDir() || id.isEmpty() || id.startsWith(QLatin1String(".zero-")))
-        return fail(tr("The instance folder was not found."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "The instance folder was not found."));
 
     // a. the snapshot must be this instance's own, of this pack, and not used yet
     if (!samePath(QFileInfo(zipPath).absolutePath(), snapshotsDir) || !QFileInfo(zipPath).isFile())
-        return fail(tr("This saved copy does not belong to this instance."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "This saved copy does not belong to this instance."));
     const Info info = readInfo(zipPath);
     if (!info.valid)
-        return fail(tr("This saved copy cannot be read: %1").arg(info.error));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "This saved copy cannot be read: %1").arg(info.error));
     if (info.rolledBack)
-        return fail(tr("This update was rolled back already."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "This update was rolled back already."));
     if (!equalName(info.meta.instanceId, id))
-        return fail(tr("This saved copy does not belong to this instance."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "This saved copy does not belong to this instance."));
     if (!expectedPackId.isEmpty() && !info.meta.packId.isEmpty() && info.meta.packId != expectedPackId)
-        return fail(tr("This saved copy is of another modpack."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "This saved copy is of another modpack."));
     const Backup::ManifestInfo manifest = Backup::readBackupInfo(zipPath);
     if (!manifest.ok)
-        return fail(tr("This saved copy cannot be read: %1").arg(manifest.error));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "This saved copy cannot be read: %1").arg(manifest.error));
 
     const QString stamp = QDateTime::fromMSecsSinceEpoch(hooks.nowMs(), QTimeZone::utc()).toString(QStringLiteral("yyyyMMddHHmmsszzz"));
     const QString staging = QDir(parent).filePath(QStringLiteral(".zero-restore-%1-%2").arg(id, stamp));
     const QString replaced = QDir(parent).filePath(QStringLiteral(".zero-replaced-%1-%2").arg(id, stamp));
     if (QFileInfo::exists(staging) || QFileInfo::exists(replaced))
-        return fail(tr("A roll back is already in progress for this instance."));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "A roll back is already in progress for this instance."));
 
     const qint64 needed = qint64(double(manifest.totalBytes) * 1.1) + kSlackBytes;
     const qint64 available = hooks.freeBytes(parent);
     if (available >= 0 && available < needed)
-        return fail(tr("Not enough free disk space to roll back (needs about %1).").arg(sizeText(needed)));
+        return fail(QCoreApplication::translate("Zero::Backup::Pack", "Not enough free disk space to roll back (needs about %1).").arg(sizeText(needed)));
 
     // b. extract into the sibling staging folder and verify what landed on disk (the zip is verified first)
     auto dropStaging = [&]() { QDir(staging).removeRecursively(); };  // ZERO's own extracted copy, only before anything was moved into it
@@ -620,13 +615,13 @@ RollbackResult rollback(const QString& instanceRootIn, const QString& zipPath, c
         bool snapshotHas = false;
         if (!readFileBytes(stagedCfg, &snapshotCfg, &snapshotHas) || !snapshotHas) {
             dropStaging();
-            return fail(tr("The saved copy has no instance settings, so nothing was changed."));
+            return fail(QCoreApplication::translate("Zero::Backup::Pack", "The saved copy has no instance settings, so nothing was changed."));
         }
         QByteArray currentCfg;
         bool currentHas = false;
         if (!readFileBytes(QDir(instanceRoot).filePath(QStringLiteral("instance.cfg")), &currentCfg, &currentHas)) {
             dropStaging();
-            return fail(tr("The settings of the instance could not be read, so nothing was changed."));
+            return fail(QCoreApplication::translate("Zero::Backup::Pack", "The settings of the instance could not be read, so nothing was changed."));
         }
         if (currentHas) {
             // Latin-1 keeps every byte as it is; only ASCII keys are touched
@@ -634,7 +629,7 @@ RollbackResult rollback(const QString& instanceRootIn, const QString& zipPath, c
             QSaveFile out(stagedCfg);
             if (!out.open(QIODevice::WriteOnly) || out.write(merged) != merged.size() || !out.commit()) {
                 dropStaging();
-                return fail(tr("The settings of the instance could not be prepared, so nothing was changed."));
+                return fail(QCoreApplication::translate("Zero::Backup::Pack", "The settings of the instance could not be prepared, so nothing was changed."));
             }
         }
     }
@@ -645,10 +640,10 @@ RollbackResult rollback(const QString& instanceRootIn, const QString& zipPath, c
         const QStringList stuck = moveBack(moved, hooks);
         if (stuck.isEmpty()) {
             dropStaging();
-            return fail(message + QLatin1Char(' ') + tr("Your instance was not changed."));
+            return fail(message + QLatin1Char(' ') + QCoreApplication::translate("Zero::Backup::Pack", "Your instance was not changed."));
         }
         qWarning() << "ZERO roll back: could not move back" << stuck;
-        return fail(message + QLatin1Char(' ') + tr("Your worlds and other play data are in %1").arg(QDir::toNativeSeparators(staging)));
+        return fail(message + QLatin1Char(' ') + QCoreApplication::translate("Zero::Backup::Pack", "Your worlds and other play data are in %1").arg(QDir::toNativeSeparators(staging)));
     };
     for (const QString& rel : playDataFolders(info.meta.gameDir)) {
         const QString from = QDir(instanceRoot).filePath(rel);
@@ -656,10 +651,10 @@ RollbackResult rollback(const QString& instanceRootIn, const QString& zipPath, c
             continue;
         const QString to = QDir(staging).filePath(rel);
         if (QFileInfo::exists(to))
-            return abandon(tr("The saved copy holds a folder that must stay with the player: %1.").arg(rel));
+            return abandon(QCoreApplication::translate("Zero::Backup::Pack", "The saved copy holds a folder that must stay with the player: %1.").arg(rel));
         QDir().mkpath(QFileInfo(to).absolutePath());
         if (!hooks.rename(from, to))
-            return abandon(tr("Could not move %1. Is the game or another program using it?").arg(rel));
+            return abandon(QCoreApplication::translate("Zero::Backup::Pack", "Could not move %1. Is the game or another program using it?").arg(rel));
         moved.append({ from, to });
     }
 
@@ -673,20 +668,20 @@ RollbackResult rollback(const QString& instanceRootIn, const QString& zipPath, c
         }
         QDir().mkpath(QFileInfo(to).absolutePath());
         if (!hooks.rename(from, to))
-            return abandon(tr("Could not move the link %1. Is the game or another program using it?").arg(rel));
+            return abandon(QCoreApplication::translate("Zero::Backup::Pack", "Could not move the link %1. Is the game or another program using it?").arg(rel));
         moved.append({ from, to });
     }
 
     // e. the swap: two renames, the old instance stays on disk until the new one is in place
     if (!hooks.rename(instanceRoot, replaced))
-        return abandon(tr("The instance could not be replaced. Is it open in another program?"));
+        return abandon(QCoreApplication::translate("Zero::Backup::Pack", "The instance could not be replaced. Is it open in another program?"));
     if (!hooks.rename(staging, instanceRoot)) {
         if (!hooks.rename(replaced, instanceRoot)) {
             qWarning() << "ZERO roll back: could not put the instance back, it is in" << replaced;
-            return fail(tr("The saved copy could not be moved into place. Your instance is in %1 and your play data in %2")
+            return fail(QCoreApplication::translate("Zero::Backup::Pack", "The saved copy could not be moved into place. Your instance is in %1 and your play data in %2")
                             .arg(QDir::toNativeSeparators(replaced), QDir::toNativeSeparators(staging)));
         }
-        return abandon(tr("The saved copy could not be moved into place."));
+        return abandon(QCoreApplication::translate("Zero::Backup::Pack", "The saved copy could not be moved into place."));
     }
 
     // f. the instance is the old one now: record it, then the replaced folder goes to the Recycle Bin

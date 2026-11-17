@@ -7,10 +7,6 @@
 namespace Zero::Content {
 
 namespace {
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Content::ShaderMod", text);
-}
 }  // namespace
 
 ShaderModFacts shaderModFacts(const QStringList& modFileNames)
@@ -50,17 +46,17 @@ ShaderNotice shaderNoticeFor(const QString& instanceName, ModPlatform::ModLoader
     }
     if (loaders.testFlag(ModPlatform::Fabric) || loaders.testFlag(ModPlatform::Quilt) || loaders.testFlag(ModPlatform::NeoForge)) {
         notice.show = true;
-        notice.text = tr("%1 has no shader mod. Shaders need Iris.").arg(instanceName);
-        notice.buttonText = tr("Find Iris");
+        notice.text = QCoreApplication::translate("Zero::Content::ShaderMod", "%1 has no shader mod. Shaders need Iris.").arg(instanceName);
+        notice.buttonText = QCoreApplication::translate("Zero::Content::ShaderMod", "Find Iris");
         notice.searchQuery = QStringLiteral("Iris");
     } else if (loaders.testFlag(ModPlatform::Forge)) {
         notice.show = true;
-        notice.text = tr("%1 has no shader mod. Shaders need Oculus.").arg(instanceName);
-        notice.buttonText = tr("Find Oculus");
+        notice.text = QCoreApplication::translate("Zero::Content::ShaderMod", "%1 has no shader mod. Shaders need Oculus.").arg(instanceName);
+        notice.buttonText = QCoreApplication::translate("Zero::Content::ShaderMod", "Find Oculus");
         notice.searchQuery = QStringLiteral("Oculus");
     } else if (loaders == ModPlatform::ModLoaderTypes()) {
         notice.show = true;
-        notice.text = tr("Shaders need Iris or OptiFine, which need a modded instance.");
+        notice.text = QCoreApplication::translate("Zero::Content::ShaderMod", "Shaders need Iris or OptiFine, which need a modded instance.");
     }
     return notice;
 }

@@ -230,6 +230,9 @@ class Application : public QApplication {
     bool zeroConfirmQuitWithDownloads(QWidget* parent);
     /// ZERO: true when closing the main window now would end the process (the last window, no game running, no tray icon to keep it alive).
     bool zeroClosingMainWindowQuits() const;
+    /// Restarts the launcher (the language changes with a fresh start). False, with the reason shown, when it must not quit now: a game is
+    /// running, the downloads were kept or the new process could not be started. True = it is quitting.
+    bool zeroRestart(QWidget* parent);
     static QString updaterBinaryName();
 
     static QUrl normalizeImportUrl(const QString& url);

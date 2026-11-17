@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "SystemIndicators.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
@@ -46,7 +47,7 @@ QList<SystemTrace> findSystemTraces(const SystemEnv& env)
         const QFileInfo folder(QDir(env.localAppData).filePath(QStringLiteral("Microsoft Edge")));
         if (folder.isDir()) {
             found.append({ QStringLiteral("microsoft-edge-folder"), QDir::toNativeSeparators(folder.absoluteFilePath()),
-                           QStringLiteral("Fractureiser's second stage lives in this folder. The real Edge folders have no space in their name."),
+                           QCoreApplication::translate("Zero::Security::SystemIndicators", "Fractureiser's second stage lives in this folder. The real Edge folders have no space in their name."),
                            info });
         }
     }
@@ -55,7 +56,7 @@ QList<SystemTrace> findSystemTraces(const SystemEnv& env)
         const QFileInfo file(QDir(env.userProfile).filePath(QStringLiteral("AppData/LocalLow/Microsoft/Internet Explorer/DOMStore/microsoft-vm-core")));
         if (file.exists()) {
             found.append({ QStringLiteral("microsoft-vm-core"), QDir::toNativeSeparators(file.absoluteFilePath()),
-                           QStringLiteral("A file the third stage of fractureiser leaves to start itself with Windows."), info });
+                           QCoreApplication::translate("Zero::Security::SystemIndicators", "A file the third stage of fractureiser leaves to start itself with Windows."), info });
         }
     }
     // docs/tech.md, Stage 1/2: the stage 2 file `libWebGL64.jar` added to the Startup folder when the registry route failed.
@@ -63,7 +64,7 @@ QList<SystemTrace> findSystemTraces(const SystemEnv& env)
         const QFileInfo file(QDir(env.appData).filePath(QStringLiteral("Microsoft/Windows/Start Menu/Programs/Startup/libWebGL64.jar")));
         if (file.exists()) {
             found.append({ QStringLiteral("startup-libwebgl64"), QDir::toNativeSeparators(file.absoluteFilePath()),
-                           QStringLiteral("Fractureiser's second stage is in your Startup folder."), info });
+                           QCoreApplication::translate("Zero::Security::SystemIndicators", "Fractureiser's second stage is in your Startup folder."), info });
         }
     }
     // docs/tech.md, Stage 1: a value in HKCU\...\CurrentVersion\Run that starts the stage 2 file `libWebGL64.jar`.
@@ -72,7 +73,7 @@ QList<SystemTrace> findSystemTraces(const SystemEnv& env)
             if (value.contains(QLatin1String("libWebGL64"), Qt::CaseInsensitive)) {
                 found.append({ QStringLiteral("run-key-libwebgl64"),
                                QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-                               QStringLiteral("A startup entry runs fractureiser's second stage (libWebGL64.jar)."), info });
+                               QCoreApplication::translate("Zero::Security::SystemIndicators", "A startup entry runs fractureiser's second stage (libWebGL64.jar)."), info });
                 break;
             }
         }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ElyAuth.h"
 
+#include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrlQuery>
@@ -80,7 +81,7 @@ TokenResponse parseTokenResponse(const QByteArray& body, const QString& previous
     const auto doc = QJsonDocument::fromJson(body, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
         out.error = QStringLiteral("invalid_response");
-        out.errorDescription = QStringLiteral("The server's answer could not be read.");
+        out.errorDescription = QCoreApplication::translate("Zero::Auth::Ely", "The server's answer could not be read.");
         return out;
     }
     const auto obj = doc.object();
@@ -100,7 +101,7 @@ TokenResponse parseTokenResponse(const QByteArray& body, const QString& previous
 
     if (out.error.isEmpty() && out.errorDescription.isEmpty() && out.accessToken.isEmpty()) {
         out.error = QStringLiteral("invalid_response");
-        out.errorDescription = QStringLiteral("The server's answer has no access token.");
+        out.errorDescription = QCoreApplication::translate("Zero::Auth::Ely", "The server's answer has no access token.");
     }
     out.ok = out.error.isEmpty() && out.errorDescription.isEmpty() && !out.accessToken.isEmpty();
     return out;

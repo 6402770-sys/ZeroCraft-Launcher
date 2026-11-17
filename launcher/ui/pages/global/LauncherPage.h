@@ -86,6 +86,12 @@ class LauncherPage : public QWidget, public BasePage {
 
    private:
     Ui::LauncherPage* ui;
+    // ZERO: "Language" (the Language setting: en_US or es)
+    QComboBox* m_language = nullptr;
+    void languageChosen();
+    // ZERO: "Discord" (ZeroDiscordPresence, ZeroDiscordShowInstance)
+    QCheckBox* m_discord = nullptr;
+    QCheckBox* m_discordInstance = nullptr;
     // ZERO: "While playing" (ZeroWhilePlaying)
     QRadioButton* m_whileTray = nullptr;
     QRadioButton* m_whileOpen = nullptr;

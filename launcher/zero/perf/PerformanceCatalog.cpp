@@ -10,10 +10,6 @@
 namespace Zero::Perf {
 
 namespace {
-QString trText(const char* text)
-{
-    return QCoreApplication::translate("Zero::Perf::PerformanceCatalog", text);
-}
 }  // namespace
 
 ModrinthPerformanceCatalog::ModrinthPerformanceCatalog(QObject* parent)
@@ -23,7 +19,7 @@ ModrinthPerformanceCatalog::ModrinthPerformanceCatalog(QObject* parent)
     m_timeout.setSingleShot(true);
     connect(&m_timeout, &QTimer::timeout, this, [this]() {
         if (m_active) {
-            fail(trText("Modrinth did not answer in time."));
+            fail(QCoreApplication::translate("Zero::Perf::PerformanceCatalog", "Modrinth did not answer in time."));
         }
     });
     connect(m_source, &Content::ModpackSource::versionsFinished, this,

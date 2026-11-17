@@ -127,7 +127,6 @@
 #include "ui/zero/shell/DownloadFlow.h"
 #include "zero/session/PlayTracker.h"  // ZERO
 #include "zero/session/SessionSummary.h"  // ZERO
-#include "zero/ZeroLanguage.h"  // ZERO
 #include "zero/downloads/DownloadCenter.h"  // ZERO
 #include "zero/updates/UpdateSweep.h"       // ZERO
 #include "zero/backup/AutoBackup.h"  // ZERO
@@ -4399,8 +4398,7 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
         QStringList keywords;
     };
     const QList<SettingsPage> settingsPages = {
-        { "launcher-settings", tr("General"), { tr("launcher"), tr("startup"), tr("updates"), tr("console"), tr("logs"), tr("folders"), tr("paths") } },
-        { "language-settings", tr("Language"), { tr("translation"), tr("locale") } },
+        { "launcher-settings", tr("General"), { tr("launcher"), tr("startup"), tr("updates"), tr("console"), tr("logs"), tr("folders"), tr("paths"), tr("language") } },
         { "appearance-settings", tr("Appearance"), { tr("theme"), tr("icons"), tr("widgets"), tr("fonts") } },
         { "minecraft-settings", tr("Minecraft"), { tr("window"), tr("resolution"), tr("fullscreen"), tr("game"), tr("performance") } },
         { "java-settings", tr("Java"), { tr("memory"), tr("ram"), tr("jvm"), tr("heap"), tr("allocation"), tr("runtime"), tr("jdk") } },
@@ -4411,8 +4409,6 @@ QList<Zero::PaletteCommand> MainWindow::buildPaletteCommands()
     };
     for (const SettingsPage& s : settingsPages) {
         const QString pageId = QString::fromLatin1(s.id);
-        if (Zero::Language::kEnglishOnly && pageId == QLatin1String("language-settings"))
-            continue;  // the Language page is hidden while ZERO is English only
         PaletteCommand c;
         c.id = QStringLiteral("settings:") + pageId;
         c.kind = Kind::Setting;

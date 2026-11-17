@@ -377,6 +377,8 @@ if(Launcher_QT_VERSION_MAJOR EQUAL 6)
             $ENV{MINGW_PREFIX}/opt/qt/*/*/lib/cmake
     )
     find_package(Qt6 COMPONENTS DBus HINTS /opt/qt/*/*/lib/cmake)
+    # ZERO: lrelease compiles ZERO's translation file (launcher/resources/zero/i18n) into the app
+    find_package(Qt6 REQUIRED COMPONENTS LinguistTools)
     list(APPEND Launcher_QT_DBUS Qt6::DBus)
 else()
     message(FATAL_ERROR "Qt version ${Launcher_QT_VERSION_MAJOR} is not supported")

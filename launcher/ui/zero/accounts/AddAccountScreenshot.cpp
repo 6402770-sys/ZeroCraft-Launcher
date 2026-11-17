@@ -3,6 +3,7 @@
 #include "AddAccountScreenshot.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDebug>
 #include <QLineEdit>
 #include <QPushButton>
@@ -21,6 +22,9 @@ enum class Script { Wait, Fail, Succeed, TwoFactor, WrongCredentials };
 /// A flow that only plays a script: no steps, no network. It owns a dummy offline account data so the real steps are never built.
 class ScriptedFlow : public AuthFlow {
    public:
+    // No Q_OBJECT here: give tr() the same context lupdate records (the class name) instead of the base class's.
+    Q_DECLARE_TR_FUNCTIONS(Zero::Accounts::ScriptedFlow)
+   public:  // the macro leaves the section private
     ScriptedFlow(AccountData* real, Action action, Script script, bool ely)
         : AuthFlow(dummy(), action), m_real(real), m_action(action), m_script(script), m_ely(ely)
     {}

@@ -34,11 +34,6 @@ const QString kMcmodInfo = QStringLiteral("mcmod.info");
 const QString kManifest = QStringLiteral("META-INF/MANIFEST.MF");
 const QString kJarJar = QStringLiteral("META-INF/jarjar/metadata.json");
 
-QString tr(const char* s)
-{
-    return QCoreApplication::translate("ModHealth", s);
-}
-
 // ------------------------------------------------------------------------------------------------ archive access
 
 struct Source {
@@ -138,11 +133,11 @@ bool parseJsonObject(const QByteArray& contents, QJsonObject& out, QString& erro
     QJsonParseError pe;
     const QJsonDocument doc = QJsonDocument::fromJson(stripBom(contents), &pe);
     if (pe.error != QJsonParseError::NoError) {
-        error = tr("The metadata file is not valid JSON (%1).").arg(pe.errorString());
+        error = QCoreApplication::translate("ModHealth", "The metadata file is not valid JSON (%1).").arg(pe.errorString());
         return false;
     }
     if (!doc.isObject()) {
-        error = tr("The metadata file does not contain a JSON object.");
+        error = QCoreApplication::translate("ModHealth", "The metadata file does not contain a JSON object.");
         return false;
     }
     out = doc.object();
@@ -291,7 +286,7 @@ ParsedFile parseFabricModJson(const QByteArray& contents)
     e.format = LoaderFormat::Fabric;
     e.id = root.value(QStringLiteral("id")).toString().trimmed();
     if (e.id.isEmpty()) {
-        out.error = tr("fabric.mod.json has no mod id.");
+        out.error = QCoreApplication::translate("ModHealth", "fabric.mod.json has no mod id.");
         return out;
     }
     e.version = root.value(QStringLiteral("version")).toString().trimmed();
@@ -355,7 +350,7 @@ ParsedFile parseQuiltModJson(const QByteArray& contents)
     e.format = LoaderFormat::Quilt;
     e.id = loader.value(QStringLiteral("id")).toString().trimmed();
     if (e.id.isEmpty()) {
-        out.error = tr("quilt.mod.json has no mod id.");
+        out.error = QCoreApplication::translate("ModHealth", "quilt.mod.json has no mod id.");
         return out;
     }
     e.version = loader.value(QStringLiteral("version")).toString().trimmed();
@@ -388,12 +383,12 @@ ParsedFile parseModsToml(const QByteArray& contents, LoaderFormat format, const 
     ParsedFile out;
     toml::table root;
     if (!parseToml(contents, root)) {
-        out.error = tr("The metadata file is not valid TOML.");
+        out.error = QCoreApplication::translate("ModHealth", "The metadata file is not valid TOML.");
         return out;
     }
     const toml::array* modsArray = root.get_as<toml::array>("mods");
     if (!modsArray || modsArray->empty()) {
-        out.error = tr("The metadata file has no [[mods]] entry.");
+        out.error = QCoreApplication::translate("ModHealth", "The metadata file has no [[mods]] entry.");
         return out;
     }
     const bool neo = format == LoaderFormat::NeoForge;
@@ -416,7 +411,7 @@ ParsedFile parseModsToml(const QByteArray& contents, LoaderFormat format, const 
         out.mods.append(e);
     }
     if (out.mods.isEmpty()) {
-        out.error = tr("The metadata file has no usable [[mods]] entry.");
+        out.error = QCoreApplication::translate("ModHealth", "The metadata file has no usable [[mods]] entry.");
         return out;
     }
 
@@ -491,7 +486,7 @@ ParsedFile parseMcmodInfo(const QByteArray& contents)
     QJsonParseError pe;
     const QJsonDocument doc = QJsonDocument::fromJson(stripBom(contents), &pe);
     if (pe.error != QJsonParseError::NoError || (!doc.isArray() && !doc.isObject())) {
-        out.error = tr("mcmod.info is not valid JSON.");
+        out.error = QCoreApplication::translate("ModHealth", "mcmod.info is not valid JSON.");
         return out;
     }
     QJsonArray list;
@@ -581,7 +576,7 @@ ModMetadata parseSource(const Source& src, const QString& fileName, const QStrin
         },
         files);
     if (!openError.isEmpty()) {
-        md.parseError = tr("ZERO could not open this file as an archive.");
+        md.parseError = QCoreApplication::translate("ModHealth", "ZERO could not open this file as an archive.");
         return md;
     }
 
@@ -654,9 +649,9 @@ ModMetadata parseSource(const Source& src, const QString& fileName, const QStrin
             const bool mustBeMod = declaredByModLoader.contains(p);
             if (!blobs.contains(n)) {
                 if (mustBeMod)
-                    child.parseError = tr("A bundled jar listed in the metadata could not be read.");
+                    child.parseError = QCoreApplication::translate("ModHealth", "A bundled jar listed in the metadata could not be read.");
             } else if (budget.jarsLeft <= 0 || budget.bytesLeft < blobs.value(n).size()) {
-                child.parseError = tr("This jar bundles too many other jars to read them all.");
+                child.parseError = QCoreApplication::translate("ModHealth", "This jar bundles too many other jars to read them all.");
             } else {
                 --budget.jarsLeft;
                 budget.bytesLeft -= blobs.value(n).size();
@@ -665,7 +660,7 @@ ModMetadata parseSource(const Source& src, const QString& fileName, const QStrin
                 nestedSource.bytes = &bytes;
                 child = parseSource(nestedSource, fileNameOf(n), n, depth + 1, budget);
                 if (mustBeMod && child.mods.isEmpty() && child.parseError.isEmpty())
-                    child.parseError = tr("A bundled jar has no readable mod metadata.");
+                    child.parseError = QCoreApplication::translate("ModHealth", "A bundled jar has no readable mod metadata.");
             }
             md.nested.push_back(std::move(child));
         }

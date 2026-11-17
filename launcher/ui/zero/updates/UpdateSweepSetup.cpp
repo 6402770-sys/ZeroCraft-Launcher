@@ -2,6 +2,7 @@
 #include "UpdateSweepSetup.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QPointer>
@@ -35,6 +36,9 @@ using ModsUi::ModUpdateCheck;
 /// over them. An instance without such a mod finishes at once: ok, no updates.
 class InstanceModCheck : public ModUpdateCheck {
    public:
+    // No Q_OBJECT here: give tr() the same context lupdate records (the class name) instead of the base class's.
+    Q_DECLARE_TR_FUNCTIONS(Zero::Updates::InstanceModCheck)
+   public:  // the macro leaves the section private
     InstanceModCheck(MinecraftInstance* instance, QObject* parent)
         : ModUpdateCheck(parent), m_instance(instance), m_model(instance ? instance->loaderModList() : nullptr)
     {}

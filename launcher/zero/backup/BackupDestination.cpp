@@ -27,11 +27,6 @@ bool samePath(const QString& a, const QString& b)
     return a.compare(b, Qt::CaseInsensitive) == 0;
 }
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Backup::Destination", text);
-}
-
 Environment filled(Environment e)
 {
     const Environment real = systemEnvironment();
@@ -152,23 +147,23 @@ Probe probeFolder(const QString& chosenFolder)
 {
     const QString folder = clean(chosenFolder);
     if (folder.isEmpty())
-        return { false, tr("No folder was chosen.") };
+        return { false, QCoreApplication::translate("Zero::Backup::Destination", "No folder was chosen.") };
     if (!QFileInfo(folder).isDir())
-        return { false, tr("The folder does not exist.") };
+        return { false, QCoreApplication::translate("Zero::Backup::Destination", "The folder does not exist.") };
     const QString root = rootInFolder(folder);
     if (!QDir().mkpath(root))
-        return { false, tr("ZERO cannot create its backup folder there.") };
+        return { false, QCoreApplication::translate("Zero::Backup::Destination", "ZERO cannot create its backup folder there.") };
     const QString probe = root + QStringLiteral("/.zero-probe-") + QUuid::createUuid().toString(QUuid::Id128);
     {
         QFile f(probe);
         if (!f.open(QIODevice::WriteOnly) || f.write("zero", 4) != 4) {
             f.close();
             QFile::remove(probe);
-            return { false, tr("The folder is not writable.") };
+            return { false, QCoreApplication::translate("Zero::Backup::Destination", "The folder is not writable.") };
         }
     }
     if (!QFile::remove(probe))
-        return { false, tr("The folder is not writable.") };
+        return { false, QCoreApplication::translate("Zero::Backup::Destination", "The folder is not writable.") };
     return { true, {} };
 }
 
@@ -193,7 +188,7 @@ Resolved resolveRoot(const QString& defaultRoot, const QString& chosenFolder)
 
 QString fallbackMessage(const QString& chosenFolder)
 {
-    return tr("Saved in the ZERO folder: %1 isn't reachable").arg(QDir::toNativeSeparators(clean(chosenFolder)));
+    return QCoreApplication::translate("Zero::Backup::Destination", "Saved in the ZERO folder: %1 isn't reachable").arg(QDir::toNativeSeparators(clean(chosenFolder)));
 }
 
 QStringList mergeRoots(const QString& defaultRoot, const QStringList& extra, const QString& active)

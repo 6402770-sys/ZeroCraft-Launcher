@@ -11,11 +11,6 @@ namespace Downloads {
 
 namespace {
 
-QString tr(const char* s)
-{
-    return QCoreApplication::translate("Zero::Downloads", s);
-}
-
 }  // namespace
 
 QString kindToString(Kind kind)
@@ -74,13 +69,13 @@ QString stateText(DownloadResult::State state)
 {
     switch (state) {
         case DownloadResult::State::Done:
-            return tr("Done");
+            return QCoreApplication::translate("Zero::Downloads", "Done");
         case DownloadResult::State::Failed:
-            return tr("Failed");
+            return QCoreApplication::translate("Zero::Downloads", "Failed");
         case DownloadResult::State::Cancelled:
-            return tr("Cancelled");
+            return QCoreApplication::translate("Zero::Downloads", "Cancelled");
     }
-    return tr("Failed");
+    return QCoreApplication::translate("Zero::Downloads", "Failed");
 }
 
 QString sizeText(qint64 bytes)
@@ -92,12 +87,12 @@ QString sizeText(qint64 bytes)
 
 QString speedText(double bytesPerSecond)
 {
-    return tr("%1/s").arg(sizeText(qint64(bytesPerSecond)));
+    return QCoreApplication::translate("Zero::Downloads", "%1/s").arg(sizeText(qint64(bytesPerSecond)));
 }
 
 QString progressText(qint64 done, qint64 total, double speed)
 {
-    QString text = total > 0 ? tr("%1 of %2").arg(sizeText(done), sizeText(total)) : sizeText(done);
+    QString text = total > 0 ? QCoreApplication::translate("Zero::Downloads", "%1 of %2").arg(sizeText(done), sizeText(total)) : sizeText(done);
     if (speed >= 1.0)
         text += QStringLiteral(" · ") + speedText(speed);
     return text;
@@ -111,9 +106,9 @@ QString activeCaption(const ActiveDownload& job)
     if (job.bytesKnown())
         parts << progressText(job.bytesDone, job.bytesTotal, job.speed);
     else if (job.fraction >= 0)
-        parts << tr("%1%").arg(qRound(job.fraction * 100));
+        parts << QCoreApplication::translate("Zero::Downloads", "%1%").arg(qRound(job.fraction * 100));
     else
-        parts << tr("Preparing...");
+        parts << QCoreApplication::translate("Zero::Downloads", "Preparing...");
     return parts.join(QStringLiteral(" · "));
 }
 
@@ -158,65 +153,65 @@ QString summaryText(const QList<ActiveDownload>& jobs)
 {
     if (jobs.isEmpty())
         return {};
-    QString text = jobs.size() == 1 ? tr("Downloading 1 item") : tr("Downloading %1 items").arg(jobs.size());
+    QString text = jobs.size() == 1 ? QCoreApplication::translate("Zero::Downloads", "Downloading 1 item") : QCoreApplication::translate("Zero::Downloads", "Downloading %1 items").arg(jobs.size());
     const double f = overallFraction(jobs);
     if (f >= 0)
-        text += QStringLiteral(" · ") + tr("%1%").arg(qRound(f * 100));
+        text += QStringLiteral(" · ") + QCoreApplication::translate("Zero::Downloads", "%1%").arg(qRound(f * 100));
     return text;
 }
 
 QString startedToastText(const QString& title)
 {
-    return tr("Downloading %1…").arg(title);
+    return QCoreApplication::translate("Zero::Downloads", "Downloading %1…").arg(title);
 }
 
 QString failedToastText(const QString& title)
 {
-    return tr("Couldn't download %1").arg(title);
+    return QCoreApplication::translate("Zero::Downloads", "Couldn't download %1").arg(title);
 }
 
 QString warningsToastText()
 {
-    return tr("Downloaded with warnings");
+    return QCoreApplication::translate("Zero::Downloads", "Downloaded with warnings");
 }
 
 QString downloadsActionText()
 {
-    return tr("Downloads");
+    return QCoreApplication::translate("Zero::Downloads", "Downloads");
 }
 
 QString instanceBusyText()
 {
-    return tr("Files for this instance are still downloading. Try again when they finish.");
+    return QCoreApplication::translate("Zero::Downloads", "Files for this instance are still downloading. Try again when they finish.");
 }
 
 QString modTitleText(const QString& name, int dependencyCount)
 {
     if (dependencyCount <= 0)
         return name;
-    const QString deps = dependencyCount == 1 ? tr("1 dependency") : tr("%1 dependencies").arg(dependencyCount);
-    return tr("%1 and %2").arg(name, deps);
+    const QString deps = dependencyCount == 1 ? QCoreApplication::translate("Zero::Downloads", "1 dependency") : QCoreApplication::translate("Zero::Downloads", "%1 dependencies").arg(dependencyCount);
+    return QCoreApplication::translate("Zero::Downloads", "%1 and %2").arg(name, deps);
 }
 
 QString updateTitleText(const QStringList& names)
 {
     if (names.size() == 1)
         return names.first();
-    return tr("Update %1 mods").arg(names.size());
+    return QCoreApplication::translate("Zero::Downloads", "Update %1 mods").arg(names.size());
 }
 
 QString contentTitleText(int mods, int resourcePacks, int shaders)
 {
     QStringList parts;
     if (mods > 0)
-        parts << (mods == 1 ? tr("1 mod") : tr("%1 mods").arg(mods));
+        parts << (mods == 1 ? QCoreApplication::translate("Zero::Downloads", "1 mod") : QCoreApplication::translate("Zero::Downloads", "%1 mods").arg(mods));
     if (resourcePacks > 0)
-        parts << (resourcePacks == 1 ? tr("1 resource pack") : tr("%1 resource packs").arg(resourcePacks));
+        parts << (resourcePacks == 1 ? QCoreApplication::translate("Zero::Downloads", "1 resource pack") : QCoreApplication::translate("Zero::Downloads", "%1 resource packs").arg(resourcePacks));
     if (shaders > 0)
-        parts << (shaders == 1 ? tr("1 shader") : tr("%1 shaders").arg(shaders));
+        parts << (shaders == 1 ? QCoreApplication::translate("Zero::Downloads", "1 shader") : QCoreApplication::translate("Zero::Downloads", "%1 shaders").arg(shaders));
     if (parts.size() <= 1)
         return parts.join(QString());
-    return parts.mid(0, parts.size() - 1).join(QStringLiteral(", ")) + tr(" and ") + parts.last();
+    return parts.mid(0, parts.size() - 1).join(QStringLiteral(", ")) + QCoreApplication::translate("Zero::Downloads", " and ") + parts.last();
 }
 
 }  // namespace Downloads

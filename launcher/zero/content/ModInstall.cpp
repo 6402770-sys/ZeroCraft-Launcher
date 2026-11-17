@@ -9,10 +9,6 @@
 namespace Zero::Content {
 
 namespace {
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Content::ModInstall", text);
-}
 }  // namespace
 
 // ---- compatibility ----
@@ -136,52 +132,52 @@ QStringList alreadyInstalledNames(ModPlatform::ResourceProvider provider, const 
 
 QString dependencyCountText(int count)
 {
-    return count == 1 ? tr("1 dependency") : tr("%1 dependencies").arg(count);
+    return count == 1 ? QCoreApplication::translate("Zero::Content::ModInstall", "1 dependency") : QCoreApplication::translate("Zero::Content::ModInstall", "%1 dependencies").arg(count);
 }
 
 QString primaryActionText(int modCount, bool update)
 {
     if (update) {
         if (modCount <= 1) {
-            return tr("Update");
+            return QCoreApplication::translate("Zero::Content::ModInstall", "Update");
         }
         const int added = modCount - 1;
-        return added == 1 ? tr("Update and add 1 mod") : tr("Update and add %1 mods").arg(added);
+        return added == 1 ? QCoreApplication::translate("Zero::Content::ModInstall", "Update and add 1 mod") : QCoreApplication::translate("Zero::Content::ModInstall", "Update and add %1 mods").arg(added);
     }
-    return modCount <= 1 ? tr("Add mod") : tr("Add %1 mods").arg(modCount);
+    return modCount <= 1 ? QCoreApplication::translate("Zero::Content::ModInstall", "Add mod") : QCoreApplication::translate("Zero::Content::ModInstall", "Add %1 mods").arg(modCount);
 }
 
 QString packPrimaryActionText(bool update)
 {
-    return update ? tr("Update") : tr("Add pack");
+    return update ? QCoreApplication::translate("Zero::Content::ModInstall", "Update") : QCoreApplication::translate("Zero::Content::ModInstall", "Add pack");
 }
 
 QString shaderPrimaryActionText(bool update)
 {
-    return update ? tr("Update") : tr("Add shader");
+    return update ? QCoreApplication::translate("Zero::Content::ModInstall", "Update") : QCoreApplication::translate("Zero::Content::ModInstall", "Add shader");
 }
 
 QString addedToastText(const QString& modName, const QString& instanceName, int dependencyCount)
 {
-    QString text = tr("Added %1 to %2").arg(modName, instanceName);
+    QString text = QCoreApplication::translate("Zero::Content::ModInstall", "Added %1 to %2").arg(modName, instanceName);
     if (dependencyCount > 0) {
-        text += tr(" and %1").arg(dependencyCountText(dependencyCount));
+        text += QCoreApplication::translate("Zero::Content::ModInstall", " and %1").arg(dependencyCountText(dependencyCount));
     }
     return text;
 }
 
 QString updatedToastText(const QString& modName, const QString& instanceName, int dependencyCount)
 {
-    QString text = tr("Updated %1 in %2").arg(modName, instanceName);
+    QString text = QCoreApplication::translate("Zero::Content::ModInstall", "Updated %1 in %2").arg(modName, instanceName);
     if (dependencyCount > 0) {
-        text += tr(" and added %1").arg(dependencyCountText(dependencyCount));
+        text += QCoreApplication::translate("Zero::Content::ModInstall", " and added %1").arg(dependencyCountText(dependencyCount));
     }
     return text;
 }
 
 QString requiredByText(const QStringList& names)
 {
-    return names.isEmpty() ? QString() : tr("Required by %1").arg(names.join(QStringLiteral(", ")));
+    return names.isEmpty() ? QString() : QCoreApplication::translate("Zero::Content::ModInstall", "Required by %1").arg(names.join(QStringLiteral(", ")));
 }
 
 }  // namespace Zero::Content

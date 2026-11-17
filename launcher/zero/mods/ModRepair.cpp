@@ -16,11 +16,6 @@ namespace Mods {
 
 namespace {
 
-QString T(const char* text)
-{
-    return QCoreApplication::translate("ModRepair", text);
-}
-
 const ModMetadata* findJar(const QList<ModMetadata>& jars, const QString& fileName)
 {
     for (const ModMetadata& jar : jars)
@@ -76,16 +71,16 @@ RepairResult refuse(const QString& fileName, const QString& error)
 QString checkSource(const QString& modsDir, const QString& fileName)
 {
     if (!isPlainFileName(fileName))
-        return T("\"%1\" is not a file name in the mods folder.").arg(fileName);
+        return QCoreApplication::translate("ModRepair", "\"%1\" is not a file name in the mods folder.").arg(fileName);
     if (modsDir.isEmpty() || !QFileInfo(modsDir).isDir())
-        return T("The mods folder does not exist.");
+        return QCoreApplication::translate("ModRepair", "The mods folder does not exist.");
     const QFileInfo info(QDir(modsDir).filePath(fileName));
     if (info.isSymLink())
-        return T("%1 is a link, ZERO does not rename links.").arg(fileName);
+        return QCoreApplication::translate("ModRepair", "%1 is a link, ZERO does not rename links.").arg(fileName);
     if (!info.exists())
-        return T("%1 no longer exists in the mods folder.").arg(fileName);
+        return QCoreApplication::translate("ModRepair", "%1 no longer exists in the mods folder.").arg(fileName);
     if (!info.isFile())
-        return T("%1 is not a regular file.").arg(fileName);
+        return QCoreApplication::translate("ModRepair", "%1 is not a regular file.").arg(fileName);
     return {};
 }
 
@@ -95,7 +90,7 @@ RepairResult renameFile(const QString& modsDir, const QString& from, const QStri
     const QDir dir(modsDir);
     const QString toPath = dir.filePath(to);
     if (QFileInfo::exists(toPath) || QFileInfo(toPath).isSymLink())
-        return refuse(from, T("%1 already exists in the mods folder.").arg(to));
+        return refuse(from, QCoreApplication::translate("ModRepair", "%1 already exists in the mods folder.").arg(to));
     QFile file(dir.filePath(from));
     for (int attempt = 0; attempt < 3; ++attempt) {
         if (file.rename(toPath)) {
@@ -109,7 +104,7 @@ RepairResult renameFile(const QString& modsDir, const QString& from, const QStri
             break;
         QThread::msleep(150);
     }
-    return refuse(from, T("Could not rename %1: %2").arg(from, file.errorString()));
+    return refuse(from, QCoreApplication::translate("ModRepair", "Could not rename %1: %2").arg(from, file.errorString()));
 }
 
 }  // namespace
@@ -174,7 +169,7 @@ QList<RepairAction> actionsFor(const Finding& finding, const QList<ModMetadata>&
                     continue;
                 RepairAction a;
                 a.fileName = jars[i]->fileName;
-                a.reason = T("Older copy of %1 (keeping %2)").arg(name, jars[newest]->fileName);
+                a.reason = QCoreApplication::translate("ModRepair", "Older copy of %1 (keeping %2)").arg(name, jars[newest]->fileName);
                 out.append(a);
             }
             return out;
@@ -193,7 +188,7 @@ RepairResult disableJar(const QString& modsDir, const QString& fileName)
     if (const QString error = checkSource(modsDir, fileName); !error.isEmpty())
         return refuse(fileName, error);
     if (!fileName.endsWith(QLatin1String(".jar"), Qt::CaseInsensitive))
-        return refuse(fileName, T("%1 is not a .jar file.").arg(fileName));
+        return refuse(fileName, QCoreApplication::translate("ModRepair", "%1 is not a .jar file.").arg(fileName));
     return renameFile(modsDir, fileName, fileName + QStringLiteral(".disabled"));
 }
 
@@ -203,7 +198,7 @@ RepairResult enableJar(const QString& modsDir, const QString& disabledFileName)
         return refuse(disabledFileName, error);
     static const QString suffix = QStringLiteral(".disabled");
     if (!disabledFileName.endsWith(suffix, Qt::CaseInsensitive) || disabledFileName.size() <= suffix.size())
-        return refuse(disabledFileName, T("%1 is not a disabled mod.").arg(disabledFileName));
+        return refuse(disabledFileName, QCoreApplication::translate("ModRepair", "%1 is not a disabled mod.").arg(disabledFileName));
     return renameFile(modsDir, disabledFileName, disabledFileName.left(disabledFileName.size() - suffix.size()));
 }
 

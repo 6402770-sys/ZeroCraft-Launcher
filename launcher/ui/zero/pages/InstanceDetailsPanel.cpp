@@ -295,7 +295,8 @@ InstanceDetailsPanel::InstanceDetailsPanel(QWidget* parent) : ZeroCard(parent)
     m_tagInput = new QLineEdit(m_tagsHost);
     m_tagInput->setPlaceholderText(tr("Add tag"));
     m_tagInput->setMaxLength(Profile::kMaxTagLength);
-    m_tagInput->setFixedSize(96, 24);
+    // wide enough for the placeholder in every language (padding 8 px each side + frame)
+    m_tagInput->setFixedSize(qMax(96, m_tagInput->fontMetrics().horizontalAdvance(m_tagInput->placeholderText()) + Tokens::spaceXl + Tokens::spaceXs), 24);
     m_tagInput->setStyleSheet(QStringLiteral("QLineEdit { min-height: 0px; padding: 0 8px; }"));
     m_tagInput->installEventFilter(this);
     m_tagFlow->addWidget(m_tagInput);

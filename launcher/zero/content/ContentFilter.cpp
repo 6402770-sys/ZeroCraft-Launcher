@@ -15,11 +15,6 @@ namespace Zero::Content {
 
 namespace {
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Content::ContentFilter", text);
-}
-
 // Modrinth header names (the `/tag/category` `header` field).
 const QString kHeaderCategories = QStringLiteral("categories");
 const QString kHeaderFeatures = QStringLiteral("features");
@@ -42,20 +37,20 @@ QString profileLabel(int rank)
 {
     switch (rank) {
         case 0:
-            return tr("Lightweight");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "Lightweight");
         case 1:
-            return tr("Balanced");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "Balanced");
         case 2:
-            return tr("High quality");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "High quality");
         default:
-            return tr("Cinematic");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "Cinematic");
     }
 }
 
 QString performanceOptionLabel(const QString& tag)
 {
     if (tag == QLatin1String("potato")) {
-        return tr("Potato");  // Modrinth's own word; the profile label groups it with "low"
+        return QCoreApplication::translate("Zero::Content::ContentFilter", "Potato");  // Modrinth's own word; the profile label groups it with "low"
     }
     for (const auto& [name, rank] : kPerformance) {
         if (tag == name) {
@@ -93,10 +88,10 @@ QString categoryLabel(const ModPlatform::Category& cat)
 QString resolutionLabel(const QString& tag)
 {
     if (tag == QLatin1String("8x-")) {
-        return tr("8x or lower");
+        return QCoreApplication::translate("Zero::Content::ContentFilter", "8x or lower");
     }
     if (tag == QLatin1String("512x+")) {
-        return tr("512x or higher");
+        return QCoreApplication::translate("Zero::Content::ContentFilter", "512x or higher");
     }
     return tag;
 }
@@ -141,7 +136,7 @@ Facet providerFacet(Kind kind)
     if (kind == Kind::Modpack) {
         options.append({ providerId(Provider::Technic), providerName(Provider::Technic), QString() });
     }
-    return makeFacet(FacetId::provider, tr("Provider"), FacetKind::Single, FacetSide::Server, options);
+    return makeFacet(FacetId::provider, QCoreApplication::translate("Zero::Content::ContentFilter", "Provider"), FacetKind::Single, FacetSide::Server, options);
 }
 
 Facet versionFacet(const FacetContext& ctx)
@@ -152,12 +147,12 @@ Facet versionFacet(const FacetContext& ctx)
             options.append({ v, v, QString() });
         }
     }
-    return makeFacet(FacetId::mcVersion, tr("Minecraft version"), FacetKind::Multi, FacetSide::Server, options);
+    return makeFacet(FacetId::mcVersion, QCoreApplication::translate("Zero::Content::ContentFilter", "Minecraft version"), FacetKind::Multi, FacetSide::Server, options);
 }
 
 Facet loaderFacet()
 {
-    return makeFacet(FacetId::loader, tr("Loader"), FacetKind::Multi, FacetSide::Server,
+    return makeFacet(FacetId::loader, QCoreApplication::translate("Zero::Content::ContentFilter", "Loader"), FacetKind::Multi, FacetSide::Server,
                      { { QStringLiteral("fabric"), QStringLiteral("Fabric"), QString() },
                        { QStringLiteral("forge"), QStringLiteral("Forge"), QString() },
                        { QStringLiteral("neoforge"), QStringLiteral("NeoForge"), QString() },
@@ -166,19 +161,19 @@ Facet loaderFacet()
 
 Facet platformFacet()
 {
-    return makeFacet(FacetId::platform, tr("Platform"), FacetKind::Multi, FacetSide::Server,
+    return makeFacet(FacetId::platform, QCoreApplication::translate("Zero::Content::ContentFilter", "Platform"), FacetKind::Multi, FacetSide::Server,
                      { { QStringLiteral("iris"), QStringLiteral("Iris"), QString() },
                        { QStringLiteral("optifine"), QStringLiteral("OptiFine"), QString() },
                        { QStringLiteral("canvas"), QStringLiteral("Canvas"), QString() },
-                       { QStringLiteral("vanilla"), tr("Vanilla"), QString() } });
+                       { QStringLiteral("vanilla"), QCoreApplication::translate("Zero::Content::ContentFilter", "Vanilla"), QString() } });
 }
 
 Facet environmentFacet()
 {
-    return makeFacet(FacetId::environment, tr("Environment"), FacetKind::Single, FacetSide::Server,
-                     { { QStringLiteral("client"), tr("Client"), QString() },
-                       { QStringLiteral("server"), tr("Server"), QString() },
-                       { QStringLiteral("both"), tr("Client and server"), QString() } });
+    return makeFacet(FacetId::environment, QCoreApplication::translate("Zero::Content::ContentFilter", "Environment"), FacetKind::Single, FacetSide::Server,
+                     { { QStringLiteral("client"), QCoreApplication::translate("Zero::Content::ContentFilter", "Client"), QString() },
+                       { QStringLiteral("server"), QCoreApplication::translate("Zero::Content::ContentFilter", "Server"), QString() },
+                       { QStringLiteral("both"), QCoreApplication::translate("Zero::Content::ContentFilter", "Client and server"), QString() } });
 }
 
 /// Category-like facet from the provider categories: `features` header -> the feature facet; resolutions and performance
@@ -199,7 +194,7 @@ Facet categoryFacet(const QString& id, const FacetContext& ctx)
         }
         options.append({ cat.id, categoryLabel(cat), cat.header.isEmpty() ? QString() : humanize(cat.header) });
     }
-    return makeFacet(id, id == FacetId::feature ? tr("Features") : tr("Category"), FacetKind::Multi, FacetSide::Server, options);
+    return makeFacet(id, id == FacetId::feature ? QCoreApplication::translate("Zero::Content::ContentFilter", "Features") : QCoreApplication::translate("Zero::Content::ContentFilter", "Category"), FacetKind::Multi, FacetSide::Server, options);
 }
 
 /// A facet over a fixed Modrinth vocabulary, plus any extra tags of that header the provider lists.
@@ -242,28 +237,28 @@ QString disabledReasonFor(const QString& facetId, Kind kind, const FacetContext&
 {
     if (ctx.provider == Provider::Technic &&
         (facetId == FacetId::mcVersion || facetId == FacetId::loader || facetId == FacetId::category)) {
-        return tr("Technic can only be searched by name");
+        return QCoreApplication::translate("Zero::Content::ContentFilter", "Technic can only be searched by name");
     }
     if (ctx.provider == Provider::CurseForge) {
         if (facetId == FacetId::environment) {
-            return tr("CurseForge has no environment data");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "CurseForge has no environment data");
         }
         if (facetId == FacetId::resolution) {
-            return tr("CurseForge has no resolution data");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "CurseForge has no resolution data");
         }
         if (facetId == FacetId::feature) {
-            return tr("CurseForge has no feature tags");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "CurseForge has no feature tags");
         }
         if (facetId == FacetId::platform) {
-            return tr("CurseForge has no shader platform data");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "CurseForge has no shader platform data");
         }
         if (facetId == FacetId::performance) {
-            return tr("CurseForge has no performance data");
+            return QCoreApplication::translate("Zero::Content::ContentFilter", "CurseForge has no performance data");
         }
     }
     if (kind != Kind::Modpack && !ctx.hasTarget &&
         (facetId == FacetId::installed || facetId == FacetId::updates || facetId == FacetId::hideInstalled)) {
-        return tr("Choose a target instance first");
+        return QCoreApplication::translate("Zero::Content::ContentFilter", "Choose a target instance first");
     }
     return QString();
 }
@@ -367,7 +362,7 @@ QList<Facet> facetsFor(Kind kind, const FacetContext& ctx)
     switch (kind) {
         case Kind::Modpack:
             facets = { providerFacet(kind), versionFacet(ctx), loaderFacet(), categoryFacet(FacetId::category, ctx),
-                       toggleFacet(FacetId::installed, tr("Installed")) };
+                       toggleFacet(FacetId::installed, QCoreApplication::translate("Zero::Content::ContentFilter", "Installed")) };
             break;
         case Kind::Mod:
             facets = { providerFacet(kind),
@@ -375,28 +370,28 @@ QList<Facet> facetsFor(Kind kind, const FacetContext& ctx)
                        loaderFacet(),
                        categoryFacet(FacetId::category, ctx),
                        environmentFacet(),
-                       toggleFacet(FacetId::installed, tr("Installed in target")),
-                       toggleFacet(FacetId::updates, tr("Update available")),
-                       toggleFacet(FacetId::hideInstalled, tr("Hide installed")) };
+                       toggleFacet(FacetId::installed, QCoreApplication::translate("Zero::Content::ContentFilter", "Installed in target")),
+                       toggleFacet(FacetId::updates, QCoreApplication::translate("Zero::Content::ContentFilter", "Update available")),
+                       toggleFacet(FacetId::hideInstalled, QCoreApplication::translate("Zero::Content::ContentFilter", "Hide installed")) };
             break;
         case Kind::ResourcePack:
             facets = { providerFacet(kind),
                        versionFacet(ctx),
-                       vocabularyFacet(FacetId::resolution, tr("Resolution"), resolutionVocabulary(), kHeaderResolutions, ctx,
+                       vocabularyFacet(FacetId::resolution, QCoreApplication::translate("Zero::Content::ContentFilter", "Resolution"), resolutionVocabulary(), kHeaderResolutions, ctx,
                                        &resolutionLabel),
                        categoryFacet(FacetId::category, ctx),
                        categoryFacet(FacetId::feature, ctx),
-                       toggleFacet(FacetId::installed, tr("Installed in target")) };
+                       toggleFacet(FacetId::installed, QCoreApplication::translate("Zero::Content::ContentFilter", "Installed in target")) };
             break;
         case Kind::Shader:
             // No provider facet: platform and performance data exist only on Modrinth (docs/zero/CONTENT.md).
             facets = { versionFacet(ctx),
                        platformFacet(),
-                       vocabularyFacet(FacetId::performance, tr("Performance impact"), performanceVocabulary(), kHeaderPerformance,
+                       vocabularyFacet(FacetId::performance, QCoreApplication::translate("Zero::Content::ContentFilter", "Performance impact"), performanceVocabulary(), kHeaderPerformance,
                                        ctx, &performanceOptionLabel),
                        categoryFacet(FacetId::feature, ctx),
                        categoryFacet(FacetId::category, ctx),
-                       toggleFacet(FacetId::installed, tr("Installed in target")) };
+                       toggleFacet(FacetId::installed, QCoreApplication::translate("Zero::Content::ContentFilter", "Installed in target")) };
             break;
         case Kind::World:
             // CurseForge only (Modrinth hosts no worlds): no provider facet. Worlds carry no metadata in the instance, so there is
@@ -579,17 +574,17 @@ QList<SortOption> sortOptions(Kind /*kind*/, Provider provider)
 {
     switch (provider) {
         case Provider::Modrinth:
-            return { { QStringLiteral("relevance"), tr("Relevance") },
-                     { QStringLiteral("downloads"), tr("Downloads") },
-                     { QStringLiteral("follows"), tr("Follows") },
-                     { QStringLiteral("newest"), tr("Newest") },
-                     { QStringLiteral("updated"), tr("Recently updated") } };
+            return { { QStringLiteral("relevance"), QCoreApplication::translate("Zero::Content::ContentFilter", "Relevance") },
+                     { QStringLiteral("downloads"), QCoreApplication::translate("Zero::Content::ContentFilter", "Downloads") },
+                     { QStringLiteral("follows"), QCoreApplication::translate("Zero::Content::ContentFilter", "Follows") },
+                     { QStringLiteral("newest"), QCoreApplication::translate("Zero::Content::ContentFilter", "Newest") },
+                     { QStringLiteral("updated"), QCoreApplication::translate("Zero::Content::ContentFilter", "Recently updated") } };
         case Provider::CurseForge:
-            return { { QStringLiteral("featured"), tr("Featured") },
-                     { QStringLiteral("popularity"), tr("Popularity") },
-                     { QStringLiteral("downloads"), tr("Downloads") },
-                     { QStringLiteral("updated"), tr("Recently updated") },
-                     { QStringLiteral("name"), tr("Name") } };
+            return { { QStringLiteral("featured"), QCoreApplication::translate("Zero::Content::ContentFilter", "Featured") },
+                     { QStringLiteral("popularity"), QCoreApplication::translate("Zero::Content::ContentFilter", "Popularity") },
+                     { QStringLiteral("downloads"), QCoreApplication::translate("Zero::Content::ContentFilter", "Downloads") },
+                     { QStringLiteral("updated"), QCoreApplication::translate("Zero::Content::ContentFilter", "Recently updated") },
+                     { QStringLiteral("name"), QCoreApplication::translate("Zero::Content::ContentFilter", "Name") } };
         case Provider::Technic:
             return {};
     }

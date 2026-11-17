@@ -37,6 +37,8 @@
 #include "TranslationsModel.h"
 
 #include <QDebug>
+#include <QLibraryInfo>
+#include <QTranslator>
 #include <algorithm>
 #include <memory>
 #include <utility>
@@ -162,9 +164,11 @@ struct TranslationsModel::Private {
     // initial state is just english
     QList<Language> m_languages = { Language(g_defaultLangCode) };
 
-    QString m_selectedLanguage = g_defaultLangCode;
+    QString m_selectedLanguage = g_defaultLangCode;  // ZERO: a ZERO code (en_US or es), see zero/ZeroLanguage.h
     std::unique_ptr<QTranslator> m_qtTranslator;
+    std::unique_ptr<QTranslator> m_qtBaseTranslator;  // ZERO: qtbase_<lang>.qm, where Qt 6 keeps the texts of its standard dialogs
     std::unique_ptr<QTranslator> m_appTranslator;
+    std::unique_ptr<QTranslator> m_zeroTranslator;  // ZERO: its own strings, installed after the others so that they win
 
     Net::Request* m_indexTask = nullptr;
     QString m_downloadingTranslation;
@@ -181,7 +185,8 @@ TranslationsModel::TranslationsModel(const QString& path, QObject* parent) : QAb
 {
     d = std::make_unique<Private>();
     d->m_dir.setPath(path);
-    d->m_selectedLanguage = APPLICATION->settings()->get("Language").toString();
+    // ZERO: only English and Español; whatever Prism saved is read as the nearest of the two
+    d->m_selectedLanguage = Zero::Language::initialCode(APPLICATION->settings()->get("Language").toString(), QLocale::system());
     FS::ensureFolderPathExists(path);
     reloadLocalFiles();
 
@@ -207,18 +212,12 @@ void TranslationsModel::indexReceived()
     d->m_indexJob.reset();
     reloadLocalFiles();
 
-    if (d->m_noLanguageSet) {
-        auto language = getSystemLocaleName();
-        if (!findLanguageAsOptional(language).has_value()) {
-            language = getSystemLanguage();
-        }
-        selectLanguage(language);
-        APPLICATION->settings()->set("Language", selectedLanguage());
-        d->m_noLanguageSet = false;
-    }
-
-    if (selectedLanguage() != g_defaultLangCode) {
-        updateLanguage(selectedLanguage());
+    // ZERO: Prism's index is here. Install Prism's file when it is already on disk (ZERO's translator goes on top again) and download
+    // it when it is not. Which language is chosen is ZERO's decision, not the system's (see zero/ZeroLanguage.h).
+    const QString prismKey = prismKeyOfSelection();
+    if (!prismKey.isEmpty()) {
+        selectLanguage(selectedLanguage());
+        updateLanguage(prismKey);
     }
 }
 
@@ -266,10 +265,18 @@ void TranslationsModel::reloadLocalFiles()
 
     const auto indexPath = d->m_dir.absoluteFilePath("index_v2.json");
     if (!QFileInfo::exists(indexPath)) {
-        downloadIndex();
+        if (Zero::Language::isSpanish(d->m_selectedLanguage))  // ZERO: English needs nothing from Prism's index
+            downloadIndex();
         return;
     }
     readIndex(indexPath, languages);
+    // ZERO: only English and Español are offered; Prism's other languages are dropped from the list
+    for (auto it = languages.begin(); it != languages.end();) {
+        if (it.key() != g_defaultLangCode && !Zero::Language::isSpanish(it.key()))
+            it = languages.erase(it);
+        else
+            ++it;
+    }
     auto entries = d->m_dir.entryInfoList({ "mmc_*.qm", "*.po" }, QDir::Files | QDir::NoDotAndDotDot);
     for (auto& entry : entries) {
         auto completeSuffix = entry.completeSuffix();
@@ -285,6 +292,8 @@ void TranslationsModel::reloadLocalFiles()
             continue;
         }
 
+        if (langCode != g_defaultLangCode && !Zero::Language::isSpanish(langCode))
+            continue;  // ZERO: a file of a language ZERO does not offer
         auto langIter = languages.find(langCode);
         if (langIter != languages.end()) {
             auto& language = *langIter;
@@ -435,41 +444,36 @@ std::optional<Language> TranslationsModel::findLanguageAsOptional(const QString&
 
 void TranslationsModel::setUseSystemLocale(const bool useSystemLocale) const
 {
+    // ZERO: dates and numbers follow the chosen language (the setting stays what Prism saved, but is not read any more)
     APPLICATION->settings()->set("UseSystemLocale", useSystemLocale);
-    if (Zero::Language::kEnglishOnly) {
-        QLocale::setDefault(QLocale(Zero::Language::kEnglishCode));
-        return;
+    QLocale::setDefault(Zero::Language::localeFor(d->m_selectedLanguage, QLocale::system()));
+}
+
+QString TranslationsModel::prismKeyOfSelection() const
+{
+    QStringList available;
+    for (const auto& language : d->m_languages) {
+        available.append(language.key);
     }
-    QLocale::setDefault(useSystemLocale ? QLocale::system() : QLocale(selectedLanguage()));
+    return Zero::Language::prismKey(d->m_selectedLanguage, QLocale::system(), available);
 }
 
 bool TranslationsModel::selectLanguage(QString key) const
 {
-    // ZERO: English only until ZERO has its own translations (see zero/ZeroLanguage.h).
-    if (Zero::Language::kEnglishOnly)
-        key = Zero::Language::kEnglishCode;
-    QString& langCode = key;
-    auto langPtr = findLanguageAsOptional(key);
-
-    if (langCode.isEmpty()) {
-        d->m_noLanguageSet = true;
-    }
-
-    if (!langPtr.has_value()) {
-        qWarning() << "Selected invalid language" << key << ", defaulting to" << g_defaultLangCode;
-        langCode = g_defaultLangCode;
-    } else {
-        langCode = langPtr->key;
-    }
+    // ZERO: there are two languages, English and Español. `key` is a ZERO code ("en_US", "es"), a value Prism saved ("es_ES",
+    // "de_DE": the nearest of the two is taken) or empty (follow Windows). Prism's own translation is found through its index and
+    // installed as upstream does; ZERO's own translator goes on top of everything (zero/ZeroLanguage.h).
+    d->m_selectedLanguage = Zero::Language::initialCode(key, QLocale::system());
+    const QString zeroCode = d->m_selectedLanguage;
+    const QString langCode = prismKeyOfSelection();
+    const auto langPtr = langCode.isEmpty() ? std::optional<Language>() : findLanguageAsOptional(langCode);
 
     // uninstall existing translators if there are any
-    if (d->m_appTranslator) {
-        QCoreApplication::removeTranslator(d->m_appTranslator.get());
-        d->m_appTranslator.reset();
-    }
-    if (d->m_qtTranslator) {
-        QCoreApplication::removeTranslator(d->m_qtTranslator.get());
-        d->m_qtTranslator.reset();
+    for (auto* translator : { &d->m_zeroTranslator, &d->m_appTranslator, &d->m_qtBaseTranslator, &d->m_qtTranslator }) {
+        if (*translator) {
+            QCoreApplication::removeTranslator(translator->get());
+            translator->reset();
+        }
     }
 
     /*
@@ -477,32 +481,34 @@ bool TranslationsModel::selectLanguage(QString key) const
      * In a multithreaded application, the default locale should be set at application startup, before any non-GUI threads are created.
      * This function is not reentrant.
      */
-    const bool useSystemLocale = !Zero::Language::kEnglishOnly && APPLICATION->settings()->get("UseSystemLocale").toBool();
-    QLocale::setDefault(useSystemLocale ? QLocale::system() : QLocale(langCode));
+    QLocale::setDefault(Zero::Language::localeFor(zeroCode, QLocale::system()));
 
-    // if it's the default UI language, finish
-    if (langCode == g_defaultLangCode) {
-        d->m_selectedLanguage = langCode;
+    // if it's the default UI language, finish: English has no translator at all
+    if (!Zero::Language::isSpanish(zeroCode)) {
         return true;
     }
 
     // otherwise install new translations
     bool successful = false;
-    // FIXME: this is likely never present. FIX IT.
-    d->m_qtTranslator = std::make_unique<QTranslator>();
-    if (d->m_qtTranslator->load("qt_" + langCode, QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
-        qDebug() << "Loading Qt Language File for" << langCode.toLocal8Bit().constData() << "...";
-        if (!QCoreApplication::installTranslator(d->m_qtTranslator.get())) {
+    // Qt's own texts (the standard buttons and dialogs). The Windows package ships no Qt translations, so this is often absent.
+    const auto loadQt = [&successful, &zeroCode](std::unique_ptr<QTranslator>& slot, const QString& baseName) {
+        slot = std::make_unique<QTranslator>();
+        if (slot->load(baseName + zeroCode, QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+            qDebug() << "Loading Qt Language File" << (baseName + zeroCode);
+            if (QCoreApplication::installTranslator(slot.get())) {
+                successful = true;
+                return;
+            }
             qCritical() << "Loading Qt Language File failed.";
-            d->m_qtTranslator.reset();
-        } else {
-            successful = true;
         }
-    } else {
-        d->m_qtTranslator.reset();
-    }
+        slot.reset();
+    };
+    loadQt(d->m_qtTranslator, QStringLiteral("qt_"));
+    loadQt(d->m_qtBaseTranslator, QStringLiteral("qtbase_"));
 
-    if (langPtr->localFileType == FileType::Po) {
+    if (!langPtr.has_value()) {
+        qDebug() << "Prism's translation for" << zeroCode << "is not known yet (its index is not here); ZERO's own strings are still translated";
+    } else if (langPtr->localFileType == FileType::Po) {
         qDebug() << "Loading Application Language File for" << langCode.toLocal8Bit().constData() << "...";
         d->m_appTranslator = std::make_unique<POTranslator>(FS::PathCombine(d->m_dir.path(), langCode + ".po"));
         if (!d->m_appTranslator->isEmpty()) {
@@ -532,13 +538,23 @@ bool TranslationsModel::selectLanguage(QString key) const
     } else {
         d->m_appTranslator.reset();
     }
-    d->m_selectedLanguage = langCode;
+
+    // ZERO's own strings last: the translator installed last is asked first
+    d->m_zeroTranslator = Zero::Language::loadZeroTranslator(zeroCode);
+    if (d->m_zeroTranslator) {
+        if (QCoreApplication::installTranslator(d->m_zeroTranslator.get())) {
+            successful = true;
+        } else {
+            qCritical() << "Installing ZERO's translation failed.";
+            d->m_zeroTranslator.reset();
+        }
+    }
     return successful;
 }
 
 QModelIndex TranslationsModel::selectedIndex() const
 {
-    auto found = findLanguage(d->m_selectedLanguage);
+    auto found = findLanguage(prismKeyOfSelection());
     if (found != d->m_languages.end()) {
         return index(std::distance(d->m_languages.begin(), found), 0, QModelIndex());
     }
@@ -633,7 +649,7 @@ void TranslationsModel::dlGood()
 {
     qDebug() << "Got translation:" << d->m_downloadingTranslation;
 
-    if (d->m_downloadingTranslation == d->m_selectedLanguage) {
+    if (d->m_downloadingTranslation == prismKeyOfSelection()) {
         selectLanguage(d->m_selectedLanguage);
     }
     d->m_downloadJob.reset();

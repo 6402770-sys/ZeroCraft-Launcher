@@ -14,11 +14,6 @@ namespace Drop {
 
 namespace {
 
-QString tr(const char* text)
-{
-    return QCoreApplication::translate("Zero::Content::Drop", text);
-}
-
 ModPlatform::ModLoaderTypes loaderOf(Mods::LoaderFormat format)
 {
     switch (format) {
@@ -89,17 +84,17 @@ QString kindLabel(Kind kind)
 {
     switch (kind) {
         case Kind::Mod:
-            return tr("Mod");
+            return QCoreApplication::translate("Zero::Content::Drop", "Mod");
         case Kind::ResourcePack:
-            return tr("Resource pack");
+            return QCoreApplication::translate("Zero::Content::Drop", "Resource pack");
         case Kind::ShaderPack:
-            return tr("Shader pack");
+            return QCoreApplication::translate("Zero::Content::Drop", "Shader pack");
         case Kind::World:
-            return tr("World");
+            return QCoreApplication::translate("Zero::Content::Drop", "World");
         case Kind::DataPack:
-            return tr("Data pack");
+            return QCoreApplication::translate("Zero::Content::Drop", "Data pack");
         case Kind::TexturePack:
-            return tr("Texture pack");
+            return QCoreApplication::translate("Zero::Content::Drop", "Texture pack");
     }
     return {};
 }
@@ -171,7 +166,7 @@ QString fitCaption(const DropFile& file, const TargetInstance& target)
         return {};
     }
     if (file.mod.loaders.toInt() != 0 && target.loaders.toInt() != 0 && !loadersFit(file.mod.loaders, target.loaders)) {
-        return tr("Made for %1 — this instance uses %2")
+        return QCoreApplication::translate("Zero::Content::Drop", "Made for %1 — this instance uses %2")
             .arg(loaderDisplayNames(file.mod.loaders).join(QStringLiteral(", ")),
                  target.loaderText.isEmpty() ? loaderDisplayNames(target.loaders).join(QStringLiteral(", ")) : target.loaderText);
     }
@@ -187,7 +182,7 @@ QString fitCaption(const DropFile& file, const TargetInstance& target)
         }
         if (allNo) {
             const auto& first = file.mod.minecraft.first();
-            return tr("Made for Minecraft %1 — this instance is %2")
+            return QCoreApplication::translate("Zero::Content::Drop", "Made for Minecraft %1 — this instance is %2")
                 .arg(Mods::describePredicate(first.predicate, first.maven), target.mcVersion);
         }
     }
@@ -200,7 +195,7 @@ QString replaceCaption(const DropFile& file, const QString& folder)
         return {};
     }
     if (QFileInfo::exists(QDir(folder).filePath(file.fileName))) {
-        return tr("Replaces the file with the same name");
+        return QCoreApplication::translate("Zero::Content::Drop", "Replaces the file with the same name");
     }
     return {};
 }
@@ -208,37 +203,37 @@ QString replaceCaption(const DropFile& file, const QString& folder)
 QString notInstallableCaption(const DropFile& file)
 {
     if (file.kind == Kind::DataPack) {
-        return tr("Data packs go inside a world. Open the world's folder to add it.");
+        return QCoreApplication::translate("Zero::Content::Drop", "Data packs go inside a world. Open the world's folder to add it.");
     }
     return {};
 }
 
 QString titleText(int count)
 {
-    return count == 1 ? tr("Add 1 file") : tr("Add %1 files").arg(count);
+    return count == 1 ? QCoreApplication::translate("Zero::Content::Drop", "Add 1 file") : QCoreApplication::translate("Zero::Content::Drop", "Add %1 files").arg(count);
 }
 
 QString summaryText(int ticked)
 {
     if (ticked <= 0) {
-        return tr("Nothing to add");
+        return QCoreApplication::translate("Zero::Content::Drop", "Nothing to add");
     }
-    return ticked == 1 ? tr("Adds 1 file") : tr("Adds %1 files").arg(ticked);
+    return ticked == 1 ? QCoreApplication::translate("Zero::Content::Drop", "Adds 1 file") : QCoreApplication::translate("Zero::Content::Drop", "Adds %1 files").arg(ticked);
 }
 
 QString primaryText(const QString& instanceName)
 {
-    return tr("Add to %1").arg(instanceName);
+    return QCoreApplication::translate("Zero::Content::Drop", "Add to %1").arg(instanceName);
 }
 
 QString addedToastText(int count, const QString& instanceName)
 {
-    return count == 1 ? tr("Added 1 file to %1").arg(instanceName) : tr("Added %1 files to %2").arg(count).arg(instanceName);
+    return count == 1 ? QCoreApplication::translate("Zero::Content::Drop", "Added 1 file to %1").arg(instanceName) : QCoreApplication::translate("Zero::Content::Drop", "Added %1 files to %2").arg(count).arg(instanceName);
 }
 
 QString failedToastText(const QString& fileName)
 {
-    return tr("Could not add %1").arg(fileName);
+    return QCoreApplication::translate("Zero::Content::Drop", "Could not add %1").arg(fileName);
 }
 
 QString openPage(const QList<DropFile>& added)

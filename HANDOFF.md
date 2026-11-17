@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-16 (session 16, LIMIT NEAR: Mission 004 B2 + B3 committed; B4 task 1 (Playtime) done in a checkpoint commit — resume at "Mission 004" › 🔴 RESUME HERE (B4). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-16 (session 16 ended: Mission 004 B2 + B3 committed, B4 task 1 (Playtime) committed `d83115e72` — resume at "Mission 004" › 🔴 RESUME HERE (B4). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds, committed; see "Session 15" before "Build & test". Earlier: session 14: **1.0.1 PUBLISHED** with tester bug fixes; see "Session 14" inside Mission 003 › item 9 Release; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -746,7 +746,7 @@ Status per batch is logged below as it lands.
   GUI thread so Prism tasks are never destroyed on a pool thread. Not driven by hand: real drops, real installs/updates in the background,
   Minecraft theme look (owner QA below). Tests: DropPlan, ZeroDropAddDialog, DownloadCenter, ZeroDownloadsPanel, UpdateSweep,
   ZeroHomeUpdatesSection (PNG env vars `ZERO_DROP_SHOTS`, `ZERO_DOWNLOADS_SHOTS`, `ZERO_UPDATES_SHOTS`).
-- 🔴 **RESUME HERE: B4, start at task 2**. Commits so far: `94378325e` (B2), `8894f9a2d` (B3), B4 task 1 checkpoint. B4 plan, one worker at a time, decided designs:
+- 🔴 **RESUME HERE: B4, start at task 2**. Commits so far: `94378325e` (B2), `8894f9a2d` (B3), `d83115e72` (B4 task 1 Playtime, checkpoint). Session 16 ended here by the owner: tree clean, no worker running. B4 plan, one worker at a time, decided designs:
   1. ✅ **Playtime stats** (done + reviewed, checkpoint commit; 100/100 + 25/25): pure `zero/history/PlaytimeStats` + Tools › Playtime
      `ui/zero/pages/PlaytimeView` (tiles, 14-day chart, by instance), palette "Playtime", tests `PlaytimeStats_test`,
      `ZeroPlaytimeView_test` (`ZERO_PLAYTIME_SHOTS`). Notes: other-day bars = accent at 55% (no subtle-accent token); "Last played" uses

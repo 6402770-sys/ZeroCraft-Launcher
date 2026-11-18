@@ -898,6 +898,8 @@ SET(LAUNCHER_SOURCES
     zero/backup/PackSnapshot.h
     zero/backup/PackSnapshotTasks.cpp
     zero/backup/PackSnapshotTasks.h
+    zero/backup/WatchPause.cpp
+    zero/backup/WatchPause.h
     zero/backup/ScheduledBackup.cpp
     zero/backup/ScheduledBackup.h
     zero/backup/WorldBackup.cpp
@@ -933,6 +935,8 @@ SET(LAUNCHER_SOURCES
     zero/content/ModTarget.cpp
     zero/content/ShaderMod.cpp
     zero/content/ShaderMod.h
+    zero/content/ShaderPackIcons.cpp
+    zero/content/ShaderPackIcons.h
     zero/content/WorldInstall.cpp
     zero/content/WorldInstall.h
     zero/content/ModTarget.h

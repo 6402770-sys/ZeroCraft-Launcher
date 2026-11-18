@@ -196,6 +196,16 @@ class ModpackSource : public QObject {
     /// Loads the versions of `item`. Answers versionsFinished() / versionsFailed(); a provider that never answers is covered by
     /// the source's own timeout (versionsFailed "timed out").
     virtual void versions(const ModpackItemPtr& item, quint64 generation) = 0;
+    /// Loads the versions of `item` under `filter` instead of the source's own versionFilter() (the install cart reviews items against
+    /// ITS target instance, which need not be the one the section is filtered for). Answers versionsForFinished() with the raw
+    /// versions, or versionsFailed(); it never touches `item->pack->versions` / `versionsLoaded` (that cache belongs to the section's
+    /// filter). The default fails at once.
+    virtual void versionsFor(const ModpackItemPtr& item, quint64 generation, const VersionFilter& filter)
+    {
+        Q_UNUSED(item)
+        Q_UNUSED(filter)
+        emit versionsFailed(generation, QStringLiteral("Not supported."));
+    }
     /// Loads the changelog of one version, on demand. Answers changelogFinished() / changelogFailed().
     virtual void changelog(const ModpackItemPtr& item, const QString& versionId, quint64 generation) = 0;
     /// Loads the provider's modpack categories (once). Answers categoriesReady(); categories() holds them afterwards.
@@ -213,6 +223,7 @@ class ModpackSource : public QObject {
     void detailsFailed(quint64 generation, const QString& error);
     void versionsFinished(quint64 generation, const Zero::Content::ModpackItemPtr& item, const QList<Zero::Content::ModpackVersion>& versions);
     void versionsFailed(quint64 generation, const QString& error);
+    void versionsForFinished(quint64 generation, const Zero::Content::ModpackItemPtr& item, const QList<ModPlatform::IndexedVersion>& versions);
     void changelogFinished(quint64 generation, const QString& versionId, const QString& changelog);
     void changelogFailed(quint64 generation, const QString& versionId, const QString& error);
     void categoriesReady();

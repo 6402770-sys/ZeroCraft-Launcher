@@ -93,6 +93,7 @@ class WorldList : public QAbstractListModel {
 
     void startWatching();
     void stopWatching();
+    bool isWatching() const { return m_isWatching; }  // ZERO: the roll back of a modpack update lets go of the folder for a moment
 
     virtual bool isValid();
 

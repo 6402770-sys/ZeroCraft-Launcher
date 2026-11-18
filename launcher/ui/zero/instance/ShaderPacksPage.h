@@ -25,6 +25,7 @@
 #include "ui/zero/instance/ModsList.h"
 #include "zero/content/ModTarget.h"
 #include "zero/content/ShaderMod.h"
+#include "zero/content/ShaderPackIcons.h"
 
 class MinecraftInstance;
 class QAction;
@@ -37,6 +38,7 @@ class QToolButton;
 
 namespace Zero {
 
+class RemoteImageCache;
 class ZeroEmptyState;
 class ZeroSkeleton;
 namespace Content {
@@ -60,6 +62,8 @@ struct ShadersPageEnvironment {
     std::function<QString(QWidget* parent)> pickFolder;     ///< "Add folder": the folder to add; default: a folder dialog
     std::function<void(QWidget* parent)> checkUpdates;      ///< "Check for updates" (Prism's checker dialog); empty hides the entry
     std::function<void(QWidget* parent)> openClassic;       ///< the classic page in a dialog; empty hides the menu entry
+    ShaderIcons::Lookup iconLookup;                         ///< project icon URLs of the platform packs; empty = every row keeps the sun
+    Zero::RemoteImageCache* images = nullptr;               ///< null = RemoteImageCache::instance()
 };
 
 class ShaderPacksPage : public QWidget, public BasePage {
@@ -132,6 +136,8 @@ class ShaderPacksPage : public QWidget, public BasePage {
     void rebuild();
     void applyView();
     void updateChrome();
+    /// Asks (once per session and project) for the icon URLs of the packs with platform metadata.
+    void requestIcons(const QList<ShaderIcons::Ref>& refs);
     void setView(View view);
     /// A row of the list and the Prism pack behind it, checked: `pack` is null when the Prism model moved on since the row was read.
     struct Picked {
@@ -171,6 +177,7 @@ class ShaderPacksPage : public QWidget, public BasePage {
     QList<Mods::Installed::Row> m_rows;  ///< every pack, in the Prism model's order
     QList<quintptr> m_tokens;            ///< the Prism packs of m_rows (compared, never dereferenced)
     QList<int> m_sourceRows;
+    QHash<QString, QString> m_iconKeys;  ///< row id -> ShaderIcons key of the pack's platform project
     Content::ShaderModFacts m_shaderMod;
     QString m_query;
     View m_view = View::Loading;

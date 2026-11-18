@@ -161,6 +161,8 @@ class ModHealthTest : public QObject {
         row("maven-or-semver-qualifier", "1.20.1-47.1.0", "1.20.1", 99);
         row("unknown-word-qualifier", "1.0-foo", "1.0", 99);
         row("different-core-decides", "1.20.1-47.1.0", "1.20.2", -1);
+        row("year-scheme-newer-than-1.21", "26.3", "1.21.11", 1);
+        row("year-scheme-order", "26.2", "26.3", -1);
     }
     void compare()
     {
@@ -250,6 +252,11 @@ class ModHealthTest : public QObject {
         row("lowest-range-upper", "1.21", ">=1.19.4- <1.21-", "N");
         row("lowest-caret", "1.20.1", "^1.19.4-", "Y");
         row("lowest-snapshot", "23w13a", ">=1.19.4-", "U");
+        row("year-exact", "26.3", "26.3", "Y");
+        row("year-ge-older-year", "26.3", ">=26.2", "Y");
+        row("year-ge-legacy", "26.3", ">=1.21.5", "Y");
+        row("year-tilde-other-minor", "26.3", "~26.2", "N");
+        row("year-legacy-wildcard", "26.3", "1.21.x", "N");
     }
     void fabricPredicate()
     {

@@ -126,7 +126,8 @@ void PackSnapshotTask::finishWith(const Pack::CreateResult& result)
 
 // ---------------------------------------------------------------- roll back
 
-PackRollbackTask::PackRollbackTask(QString instanceRoot, QString zipPath, QString snapshotsDir, QString expectedPackId, Pack::Hooks hooks, BusyCheck busy)
+PackRollbackTask::PackRollbackTask(QString instanceRoot, QString zipPath, QString snapshotsDir, QString expectedPackId, Pack::Hooks hooks, BusyCheck busy,
+                                   PauseWatching pause)
     : Task(false)
     , m_instanceRoot(std::move(instanceRoot))
     , m_zipPath(std::move(zipPath))
@@ -135,11 +136,16 @@ PackRollbackTask::PackRollbackTask(QString instanceRoot, QString zipPath, QStrin
     , m_instanceId(QFileInfo(m_instanceRoot).fileName())
     , m_hooks(std::move(hooks))
     , m_busy(std::move(busy))
+    , m_pause(std::move(pause))
 {
 }
 
 PackRollbackTask::~PackRollbackTask()
 {
+    if (m_resume) {
+        m_resume();
+        m_resume = nullptr;
+    }
     if (m_locked)
         WorldBackupJobs::unlockInstance(m_instanceId);
 }
@@ -155,6 +161,8 @@ void PackRollbackTask::executeTask()
     setProgress(0, 0);  // no steps to count: a busy bar
     WorldBackupJobs::lockInstance(m_instanceId);
     m_locked = true;
+    if (m_pause)
+        m_resume = m_pause();  // on the GUI thread: the watchers are QObjects. Until finishWith the instance folder can be renamed.
 
     const QString root = m_instanceRoot;
     const QString zip = m_zipPath;
@@ -179,6 +187,10 @@ void PackRollbackTask::executeTask()
 
 void PackRollbackTask::finishWith(const Pack::RollbackResult& result)
 {
+    if (m_resume) {  // before the result is announced: whoever reacts to it finds the watchers running again
+        m_resume();
+        m_resume = nullptr;
+    }
     if (m_locked) {
         WorldBackupJobs::unlockInstance(m_instanceId);
         m_locked = false;

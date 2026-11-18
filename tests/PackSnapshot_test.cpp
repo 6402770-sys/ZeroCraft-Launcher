@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <QTest>
 
+#include "minecraft/mod/ModFolderModel.h"
 #include "zero/backup/PackSnapshot.h"
 #include "zero/backup/PackSnapshotTasks.h"
 #include "zero/backup/WorldBackup.h"
@@ -1031,6 +1032,153 @@ class PackSnapshotTest : public QObject {
         QCOMPARE(rig.content(S(".minecraft/mods/a.jar")), QByteArray("a old"));
         QCOMPARE(rig.content(S(".minecraft/saves/World2/level.dat")), QByteArray("world two"));
         QVERIFY(!WorldBackupJobs::isInstanceLocked(S("inst")));
+    }
+
+    // ---------------------------------------------------------------- the launcher watches the instance's folders
+
+    // Windows refuses to rename a folder while something below it is watched (the Mods page's ModFolderModel watches mods/ and mods/.index),
+    // so the swap of the instance folder failed ("The instance could not be replaced") whenever the launcher itself looked at the instance.
+    // The roll back task now asks for the watchers to be paused for the swap and started again afterwards.
+    void aModelWatchingTheModsStopsTheSwapUnlessItIsPaused()
+    {
+        Rig rig;
+        rig.put(S(".minecraft/mods/.index/a.pw.toml"), "index");
+        const CreateResult snap = rig.snapshot();
+        QVERIFY(snap.ok);
+        rig.doUpdate();
+        ModFolderModel model(QDir(rig.p(S(".minecraft/mods"))), nullptr, false, false);
+        {
+            QSignalSpy loaded(&model, &ResourceFolderModel::updateFinished);
+            QVERIFY(model.startWatching());
+            QVERIFY(loaded.count() || loaded.wait(10000));
+        }
+#ifdef Q_OS_WIN
+        // the cause, shown: the instance folder cannot be renamed while the model watches mods/.index
+        QVERIFY(!QDir().rename(rig.inst, rig.inst + S("-moved")));
+        // and without the pause the roll back refuses, and changes nothing
+        const RollbackResult refused = rollback(rig.inst, snap.zipPath, rig.snaps, S("PACKID"), rig.hooks());
+        QVERIFY(!refused.ok);
+        QCOMPARE(rig.content(S("mmc-pack.json")), QByteArray("pack new"));
+        QVERIFY(rig.leftovers().isEmpty());
+        QVERIFY(rig.trashed.isEmpty());
+#endif
+
+        QStringList events;
+        QByteArray packAtPause, packAtResume;
+        PackRollbackTask task(rig.inst, snap.zipPath, rig.snaps, S("PACKID"), rig.hooks(), {}, [&]() -> ResumeWatching {
+            events << S("pause");
+            packAtPause = rig.content(S("mmc-pack.json"));
+            ResumeWatching resume = pauseWatching({ &model });
+            return [&, resume]() {
+                events << S("resume");
+                packAtResume = rig.content(S("mmc-pack.json"));
+                resume();
+            };
+        });
+        QSignalSpy finished(&task, &Task::finished);
+        task.start();
+        QTRY_VERIFY_WITH_TIMEOUT(task.isFinished(), 15000);
+        QVERIFY2(task.wasSuccessful(), qPrintable(task.failReason()));
+        // paused before the swap (the instance was still the updated one), resumed after it (the old one is in place), once each
+        QCOMPARE(events, QStringList({ S("pause"), S("resume") }));
+        QCOMPARE(packAtPause, QByteArray("pack new"));
+        QCOMPARE(packAtResume, QByteArray("pack old"));
+        QCOMPARE(rig.content(S(".minecraft/mods/a.jar")), QByteArray("a old"));
+        QVERIFY(!rig.has(S(".minecraft/mods/b.jar")));
+        QCOMPARE(rig.content(S(".minecraft/saves/World2/level.dat")), QByteArray("world two"));
+        QCOMPARE(rig.trashed.size(), 1);
+        QVERIFY(rig.leftovers().isEmpty());
+        QVERIFY(!WorldBackupJobs::isInstanceLocked(S("inst")));
+
+        // the model watches again (the instance folder cannot be renamed again) and shows the restored mods by itself
+#ifdef Q_OS_WIN
+        QVERIFY(!QDir().rename(rig.inst, rig.inst + S("-moved")));
+#endif
+        auto names = [&model]() {
+            QStringList out;
+            for (Resource* r : model.allResources())
+                out << r->fileinfo().fileName();
+            out.sort();
+            return out;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(names().contains(S("a.jar")) && !names().contains(S("b.jar")), 10000);
+        model.stopWatching();
+    }
+
+    void theWatchersComeBackWhenTheRollBackFails()
+    {
+        Rig rig;
+        const CreateResult snap = rig.snapshot();
+        QVERIFY(snap.ok);
+        rig.doUpdate();
+        rig.failRename = [&rig](const QString& from, const QString&) { return from == rig.inst; };  // the swap cannot step aside
+        int paused = 0, resumed = 0;
+        PackRollbackTask task(rig.inst, snap.zipPath, rig.snaps, S("PACKID"), rig.hooks(), {}, [&]() -> ResumeWatching {
+            ++paused;
+            return [&]() { ++resumed; };
+        });
+        task.start();
+        QTRY_VERIFY_WITH_TIMEOUT(task.isFinished(), 15000);
+        QVERIFY(!task.wasSuccessful());
+        QCOMPARE(paused, 1);
+        QCOMPARE(resumed, 1);
+        QCOMPARE(rig.content(S("mmc-pack.json")), QByteArray("pack new"));  // nothing changed
+        QVERIFY(rig.leftovers().isEmpty());
+        QVERIFY(!WorldBackupJobs::isInstanceLocked(S("inst")));
+    }
+
+    void aRefusedRollBackDoesNotPauseAnything()
+    {
+        Rig rig;
+        const CreateResult snap = rig.snapshot();
+        QVERIFY(snap.ok);
+        int paused = 0;
+        PackRollbackTask task(rig.inst, snap.zipPath, rig.snaps, S("PACKID"), rig.hooks(), []() { return S("Close the game first."); },
+                              [&]() -> ResumeWatching {
+                                  ++paused;
+                                  return {};
+                              });
+        task.start();
+        QTRY_VERIFY_WITH_TIMEOUT(task.isFinished(), 5000);
+        QVERIFY(!task.wasSuccessful());
+        QCOMPARE(paused, 0);
+    }
+
+    void pausingLeavesAModelThatDoesNotWatchAloneAndResumingIsIdempotent()
+    {
+        QTemporaryDir dir;
+        const QString watchedDir = dir.filePath(S("watched"));
+        const QString idleDir = dir.filePath(S("idle"));
+        QVERIFY(QDir().mkpath(watchedDir + S("/.index")));
+        QVERIFY(QDir().mkpath(idleDir + S("/.index")));
+        ModFolderModel watched(QDir(watchedDir), nullptr, false, false);
+        ModFolderModel idle(QDir(idleDir), nullptr, false, false);
+        QVERIFY(watched.startWatching());
+#ifdef Q_OS_WIN
+        QVERIFY(!QDir().rename(watchedDir, watchedDir + S("-moved")));
+#endif
+        const ResumeWatching resume = pauseWatching({ &watched, &idle, nullptr });
+#ifdef Q_OS_WIN
+        QVERIFY(QDir().rename(watchedDir, watchedDir + S("-moved")));  // let go
+        QVERIFY(QDir().rename(watchedDir + S("-moved"), watchedDir));
+#endif
+        resume();
+        resume();  // does nothing the second time
+        QVERIFY(!watched.startWatching());  // already watching again
+        QVERIFY(idle.startWatching());      // was never watching, so the resume did not start it
+        watched.stopWatching();
+        idle.stopWatching();
+    }
+
+    void aModelThatIsGoneWhenTheWatchersComeBackIsSkipped()
+    {
+        QTemporaryDir dir;
+        QVERIFY(QDir().mkpath(dir.filePath(S("mods/.index"))));
+        auto* model = new ModFolderModel(QDir(dir.filePath(S("mods"))), nullptr, false, false);
+        QVERIFY(model->startWatching());
+        const ResumeWatching resume = pauseWatching({ model });
+        delete model;
+        resume();  // must not touch the deleted model
     }
 
     void worldBackupsStillWorkWithTheNewOptionsDefaults()

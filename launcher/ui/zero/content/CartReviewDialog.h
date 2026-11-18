@@ -172,6 +172,7 @@ class CartReviewDialog : public QDialog {
     void requestVersions(Row& row);
     void connectSource(ModpackSource* source);
     void onVersionsFinished(quint64 generation, const ContentItemPtr& item);
+    void onVersionsForFinished(quint64 generation, const ContentItemPtr& item, const QList<ModPlatform::IndexedVersion>& versions);
     void onVersionsFailed(quint64 generation);
     void setRowVersions(Row& row, const QList<ModPlatform::IndexedVersion>& all);
     void setRowState(Row& row, RowState state);

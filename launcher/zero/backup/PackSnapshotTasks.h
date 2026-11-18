@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include "PackSnapshot.h"
+#include "WatchPause.h"
 #include "tasks/Task.h"
 
 namespace Zero {
@@ -49,8 +50,10 @@ class PackSnapshotTask : public Task {
 class PackRollbackTask : public Task {
     Q_OBJECT
    public:
+    /// `pause`: asked on the GUI thread right before the roll back starts (after the busy check); what it returns is called when the roll back ended,
+    /// success or failure. The window uses it to stop the instance's folder watchers, which stop Windows from renaming the instance folder.
     PackRollbackTask(QString instanceRoot, QString zipPath, QString snapshotsDir, QString expectedPackId, Pack::Hooks hooks = {},
-                     BusyCheck busy = {});
+                     BusyCheck busy = {}, PauseWatching pause = {});
     ~PackRollbackTask() override;
 
     const Pack::RollbackResult& result() const { return m_result; }
@@ -68,6 +71,8 @@ class PackRollbackTask : public Task {
     QString m_instanceId;
     Pack::Hooks m_hooks;
     BusyCheck m_busy;
+    PauseWatching m_pause;
+    ResumeWatching m_resume;  ///< set while the watchers are paused
     Pack::RollbackResult m_result;
     bool m_locked = false;
 };

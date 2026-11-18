@@ -5,7 +5,9 @@
 // and no-match states, the running lock, Remove through an injected trash, Add file. Offscreen, no network, parallel-safe.
 // Screenshots (only with ZERO_SHADER_SHOTS=<dir>): the page with two packs and empty, in the Obsidian and Minecraft themes.
 #include <QApplication>
+#include <QBuffer>
 #include <QDir>
+#include <QImage>
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
@@ -19,12 +21,16 @@
 #include <memory>
 
 #include "archive/ArchiveWriter.h"
+#include "minecraft/MinecraftInstance.h"
+#include "settings/INISettingsObject.h"
 #include "minecraft/mod/ShaderPackFolderModel.h"
+#include "modplatform/packwiz/Packwiz.h"
 #include "ui/zero/ZeroEmptyState.h"
 #include "ui/zero/ZeroSkeleton.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "ui/zero/ZeroToast.h"
+#include "ui/zero/content/RemoteImageCache.h"
 #include "ui/zero/content/ShaderModNotice.h"
 #include "ui/zero/instance/InstancePageParts.h"
 #include "ui/zero/instance/ShaderPacksPage.h"
@@ -74,10 +80,42 @@ QStringList toastTexts(QWidget* window)
     return out;
 }
 
+/// `<root>/<id>` with an instance.cfg (and the global settings BaseInstance overrides): a real MinecraftInstance without components.
+struct InstanceFixture {
+    explicit InstanceFixture(const QString& root)
+    {
+        global = std::make_unique<INISettingsObject>(root + S("/global.cfg"));
+        for (const char* name : { "ShowGameTime", "RecordGameTime", "ShowConsole", "AutoCloseConsole", "ShowConsoleOnError", "LogPrePostOutput",
+                                  "ConsoleOverflowStop" })
+            global->registerSetting(name, false);
+        for (const char* name : { "PreLoadCommand", "PreLaunchCommand", "WrapperCommand", "PostExitCommand" })
+            global->registerSetting(name, QString());
+        global->registerSetting("ConsoleMaxLines", 100000);
+        // MinecraftInstance::loadSpecificSettings() overrides these (the pack profile asks for the instance settings on its first turn)
+        for (const char* name : { "CloseAfterLaunch", "CustomGLFWPath", "CustomOpenALPath", "CustomSDLPath", "EnableFeralGamemode", "EnableMangoHud",
+                                  "Env", "IgnoreJavaCompatibility", "JavaArchitecture", "JavaPath", "JavaRealArchitecture", "JavaSignature",
+                                  "JavaVendor", "JavaVersion", "JvmArgs", "LaunchMaximized", "LowMemWarning", "MaxMemAlloc", "MinMemAlloc",
+                                  "MinecraftWinHeight", "MinecraftWinWidth", "OnlineFixes", "PermGen", "QuitAfterGameStop", "UseDiscreteGpu",
+                                  "UseNativeGLFW", "UseNativeOpenAL", "UseNativeSDL", "UseZink" })
+            global->registerSetting(name, QString());
+        const QString dir = root + S("/inst");
+        QDir().mkpath(dir);
+        QFile cfg(dir + S("/instance.cfg"));
+        if (cfg.open(QIODevice::WriteOnly)) {
+            cfg.write("[General]\nname=Test Instance\n");
+        }
+        cfg.close();
+        instance = std::make_unique<MinecraftInstance>(global.get(), std::make_unique<INISettingsObject>(dir + S("/instance.cfg")), dir);
+    }
+    std::unique_ptr<SettingsObject> global;
+    std::unique_ptr<MinecraftInstance> instance;
+};
+
 struct Rig {
     QTemporaryDir root;
     QDir shaders{ root.path() + S("/.minecraft/shaderpacks") };
     QDir mods{ root.path() + S("/.minecraft/mods") };
+    std::unique_ptr<InstanceFixture> fixture;  ///< only when a test needs metadata: Resource::updateIssues() asks the instance
     std::unique_ptr<ShaderPackFolderModel> model;
     std::unique_ptr<ShaderPacksPage> page;
 
@@ -91,6 +129,29 @@ struct Rig {
     QStringList findCalls;
     bool withAdd = true;
     ModPlatform::ModLoaderTypes loaders = ModPlatform::Fabric;
+    Zero::ShaderIcons::Lookup iconLookup;     ///< empty = no icons
+    Zero::RemoteImageCache* images = nullptr;
+
+    /// The packwiz entry of `fileName` (shaderpacks/.index), as a pack installed from a platform has it.
+    void addMetadata(const QString& fileName, const QString& projectId, ModPlatform::ResourceProvider provider)
+    {
+        Packwiz::V1::Mod meta;
+        meta.slug = QFileInfo(fileName).completeBaseName().toLower();
+        meta.name = meta.slug;
+        meta.filename = fileName;
+        meta.mode = S("url");
+        meta.url = QUrl(S("https://cdn.test/") + fileName);
+        meta.hashFormat = S("sha1");
+        meta.hash = S("0000");
+        meta.provider = provider;
+        meta.fileId = provider == ModPlatform::ResourceProvider::FLAME ? QVariant(777) : QVariant(S("FILE1"));
+        meta.projectId = projectId;
+        meta.versionNumber = S("1.0");
+        meta.lockUpdate = false;
+        QDir index(shaders.filePath(S(".index")));
+        QDir().mkpath(index.absolutePath());
+        Packwiz::V1::updateModIndex(index, meta);
+    }
 
     Rig()
     {
@@ -123,6 +184,8 @@ struct Rig {
             return target;
         };
         env.isRunning = [this]() { return running; };
+        env.iconLookup = iconLookup;
+        env.images = images;
         env.trash = [this](const QString& path) {
             trashCalls.append(QFileInfo(path).fileName());
             if (failTrash.contains(QFileInfo(path).fileName())) {
@@ -143,7 +206,7 @@ struct Rig {
 
     void build()
     {
-        model = std::make_unique<ShaderPackFolderModel>(shaders.absolutePath(), nullptr, true, true);
+        model = std::make_unique<ShaderPackFolderModel>(shaders.absolutePath(), fixture ? fixture->instance.get() : nullptr, true, true);
         page = std::make_unique<ShaderPacksPage>(environment(), model.get());
         page->resize(1000, 640);
     }
@@ -481,6 +544,72 @@ class ZeroShaderPacksPageTest : public QObject {
         QCOMPARE(removeConfirm({ S("a"), S("b") }, Noun::Packs).title, S("Remove 2 packs?"));
         QCOMPARE(removeResult({ S("a"), S("b") }, {}, Noun::Shaders).text, S("Removed 2 shader packs"));
         QCOMPARE(removeResult({}, { S("a"), S("b") }, Noun::Shaders).text, S("Couldn't move 2 shader packs to the Recycle Bin"));
+    }
+
+    // ---- project icons ---------------------------------------------------------------------------------------------------------
+
+    void platformPacksShowTheirProjectIconAndLocalOnesKeepTheSun()
+    {
+        Zero::ShaderIcons::sessionUrls().clear();
+        Zero::ShaderIcons::sessionAsked().clear();
+        const QColor mark(255, 0, 255);
+        QImage picture(64, 64, QImage::Format_ARGB32);
+        picture.fill(mark);
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        picture.save(&buffer, "PNG");
+        QStringList fetched;
+        Zero::RemoteImageCache images([&](const QString& url, std::function<void(const Zero::RemoteImageCache::FetchResult&)> done) {
+            fetched.append(url);
+            Zero::RemoteImageCache::FetchResult result;
+            result.ok = true;
+            result.data = png;
+            done(result);
+        });
+        int lookups = 0;
+        Zero::ShaderIcons::Ids asked;
+        Rig rig;
+        rig.images = &images;
+        rig.fixture = std::make_unique<InstanceFixture>(rig.root.path());
+        rig.iconLookup = [&](const Zero::ShaderIcons::Ids& ids, std::function<void(const QHash<QString, QString>&)> done) {
+            ++lookups;
+            asked = ids;
+            done({ { S("modrinth:PROJ1"), S("https://cdn.test/icon.png") } });
+        };
+        rig.addZip(S("Platform.zip"));
+        rig.addZip(S("Local.zip"));
+        rig.addMetadata(S("Platform.zip"), S("PROJ1"), ModPlatform::ResourceProvider::MODRINTH);
+        rig.build();
+        QVERIFY(rig.open(2));
+        QTRY_VERIFY_WITH_TIMEOUT(rig.page->listModel()->rowCount() == 2 && (rig.page->listModel()->rowAt(0).hasMetadata ||
+                                                                              rig.page->listModel()->rowAt(1).hasMetadata), 5000);
+        const int platformRow = rig.page->listModel()->rowAt(0).hasMetadata ? 0 : 1;
+        const int localRow = 1 - platformRow;
+        QVERIFY(rig.page->listModel()->rowAt(platformRow).hasIcon);
+        QVERIFY(!rig.page->listModel()->rowAt(localRow).hasIcon);
+        auto* list = rig.page->listView();
+        const auto markedPixels = [&](int rowIndex) {
+            const QImage shot = list->viewport()->grab().toImage().convertToFormat(QImage::Format_ARGB32);
+            const QRect row = list->visualRect(rig.page->listModel()->index(rowIndex));
+            int count = 0;
+            for (int y = row.top(); y < row.bottom() && y < shot.height(); ++y) {
+                for (int x = row.left(); x < row.left() + 80 && x < shot.width(); ++x) {
+                    count += shot.pixelColor(x, y) == mark ? 1 : 0;
+                }
+            }
+            return count;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(markedPixels(platformRow) > 100, 5000);
+        QCOMPARE(markedPixels(localRow), 0);
+        QCOMPARE(asked.modrinth, QStringList({ S("PROJ1") }));  // one batch, only the pack with metadata
+        QVERIFY(asked.curseforge.isEmpty());
+        QCOMPARE(fetched, QStringList({ S("https://cdn.test/icon.png") }));
+
+        // reopening in the same session asks nobody again
+        rig.page->rebuildNow();
+        rig.page->rebuildNow();
+        QCOMPARE(lookups, 1);
     }
 
     // ---- Screenshots (only with ZERO_SHADER_SHOTS=<dir>) ---------------------------------------------------------------------

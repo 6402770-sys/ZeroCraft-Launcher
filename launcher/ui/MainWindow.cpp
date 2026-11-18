@@ -1652,7 +1652,9 @@ void MainWindow::rollBackModpackUpdate(const QString& instanceId)
     }
 
     unique_qobject_ptr<Zero::Backup::PackRollbackTask> task(new Zero::Backup::PackRollbackTask(
-        root, snapshot.zipPath, dir, packId, {}, [instanceId]() { return packBusyReason(instanceId); }));
+        root, snapshot.zipPath, dir, packId, {}, [instanceId]() { return packBusyReason(instanceId); },
+        // Windows cannot rename the instance folder while the launcher watches a folder in it (Mods page, worlds): let go for the swap
+        [instanceId]() { return Zero::Backup::pauseInstanceWatching(APPLICATION->instances()->getInstanceById(instanceId)); }));
     ProgressDialog dialog(this);
     dialog.execWithTask(task.get());
     const bool bringBackKind = snapshot.meta.kind == QLatin1String(Zero::Backup::Pack::kKindBringBack);  // ZERO: wording only

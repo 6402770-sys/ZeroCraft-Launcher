@@ -208,6 +208,8 @@ class ZeroModInstallTest : public QObject {
         QCOMPARE(compatibleVersions({ fits, oldMc }, QString(), ModPlatform::ModLoaderTypes()).size(), 2);
         QVERIFY(versionFitsTarget(fits, S("1.21.1"), ModPlatform::ModLoaderTypes()));
         QVERIFY(!versionFitsTarget(oldMc, S("1.21.1"), kFabric));
+        // The 26.x scheme: a 26.3 build does not fit a 26.2 instance.
+        QVERIFY(!versionFitsTarget(ver(S("y"), S("y"), Release::Release, 1, { S("26.3") }), S("26.2"), kFabric));
         // A version that names no Minecraft version fits (the Mods section's rule).
         QVERIFY(versionFitsTarget(ver(S("z"), S("z"), Release::Release, 1, {}), S("1.21.1"), kFabric));
     }

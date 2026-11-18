@@ -5,6 +5,7 @@
 // text, Clear, one cart for the three sections, the slide). Part B: the review dialog (row defaults, skipped rows, remove, the ONE
 // dependency run, merge and dedupe, Checking, stale answers, turn-on), the pure plan / merge / text core and the pack turn-on helper.
 // Offscreen, with fake sources and resolvers and hand-built TargetInstances: no network, no instances, no APPLICATION.
+#include <optional>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -74,6 +75,11 @@ class FakeSource : public ModpackSource {
     void details(const ModpackItemPtr& item, quint64 generation) override { detailCalls.append({ item, generation }); }
     void versions(const ModpackItemPtr& item, quint64 generation) override { versionCalls.append({ item, generation }); }
     void changelog(const ModpackItemPtr&, const QString&, quint64) override {}
+    void versionsFor(const ModpackItemPtr& item, quint64 generation, const VersionFilter& filter) override
+    {
+        versionsForCalls.append({ item, generation });
+        versionsForFilters.append(filter);
+    }
 
     void answerSearch(int call, const QList<ModpackItemPtr>& items)
     {
@@ -87,6 +93,8 @@ class FakeSource : public ModpackSource {
     QList<SearchCall> searches;
     QList<ItemCall> detailCalls;
     QList<ItemCall> versionCalls;
+    QList<ItemCall> versionsForCalls;
+    QList<VersionFilter> versionsForFilters;
 
    private:
     Provider m_provider;
@@ -348,12 +356,24 @@ struct ReviewRig {
     bool dependencyCheck = true;
     int delayMs = 20;
     int dependencyTimeoutMs = 0;  ///< 0 = the environment's default
+    TargetInstance target = fabric121();
+    std::optional<VersionFilter> sectionFilter;  ///< the filter of the section's source; unset = the one of the target (a section for the same instance)
 
     CartReviewEnvironment environment()
     {
         CartReviewEnvironment env;
         env.images = &images;
-        env.sourceFor = [this](const CartEntry&) -> ModpackSource* { return &modrinth; };
+        env.sourceFor = [this](const CartEntry& entry) -> ModpackSource* {
+            if (sectionFilter) {
+                modrinth.setVersionFilter(*sectionFilter);
+            } else {
+                VersionFilter filter;
+                filter.mcVersions = { target.mcVersion };
+                filter.loaders = entry.kind == Kind::Mod ? target.loaders : ModPlatform::ModLoaderTypes();
+                modrinth.setVersionFilter(filter);
+            }
+            return &modrinth;
+        };
         env.makeResolver = [this](QObject* parent) -> DependencyResolver* {
             resolver = new FakeResolver(cancelCounter);
             resolver->setParent(parent);
@@ -388,9 +408,14 @@ struct ReviewRig {
         cart.add(Kind::Shader, item);
         return item;
     }
-    std::unique_ptr<CartReviewDialog> open(const TargetInstance& target = fabric121())
+    std::unique_ptr<CartReviewDialog> open()
     {
         return std::make_unique<CartReviewDialog>(environment(), &cart, target);
+    }
+    std::unique_ptr<CartReviewDialog> open(const TargetInstance& other)
+    {
+        target = other;
+        return open();
     }
 };
 
@@ -1248,6 +1273,58 @@ class ZeroInstallCartTest : public QObject {
         QCOMPARE(dialog->rowState(modKey(S("1"))), CartReviewDialog::RowState::Ready);
         QCOMPARE(dialog->versionBox(modKey(S("1")))->currentText(), S("2.0"));
         QTRY_COMPARE(rig.resolver->requests.size(), 1);  // the dependency run starts once nothing is loading
+    }
+
+    // The owner's "No version for Fabric 26.2" for a mod that has 26.2 builds: the section was filtered for another instance (26.3),
+    // so the item carried 26.3 versions only. The review asks under the CART target's filter and leaves the section's cache alone.
+    void otherSectionFilterIsNotUsedForTheReview()
+    {
+        ReviewRig rig;
+        rig.target = makeTarget(S("t"), S("Target"), S("26.2"), ModPlatform::Fabric);
+        VersionFilter section;
+        section.mcVersions = { S("26.3") };
+        section.loaders = ModPlatform::Fabric;
+        rig.sectionFilter = section;
+        const auto item = rig.addMod(S("1"), S("JEI"), { ver(S("n1"), S("9.0"), Release::Release, { S("26.3") }) });
+        const auto dialog = rig.open();
+        QCOMPARE(rig.modrinth.versionCalls.size(), 0);  // the 26.3-only cache is not used
+        QCOMPARE(rig.modrinth.versionsForCalls.size(), 1);
+        QCOMPARE(rig.modrinth.versionsForFilters.at(0).mcVersions, QStringList{ S("26.2") });
+        QCOMPARE(rig.modrinth.versionsForFilters.at(0).loaders, ModPlatform::ModLoaderTypes(ModPlatform::Fabric));
+        QCOMPARE(dialog->rowState(modKey(S("1"))), CartReviewDialog::RowState::Loading);
+
+        emit rig.modrinth.versionsForFinished(rig.modrinth.versionsForCalls.at(0).generation, item,
+                                              { ver(S("o1"), S("8.0"), Release::Release, { S("26.2") }) });
+        QCOMPARE(dialog->rowState(modKey(S("1"))), CartReviewDialog::RowState::Ready);
+        QCOMPARE(dialog->versionBox(modKey(S("1")))->currentText(), S("8.0"));
+        QCOMPARE(item->pack->versions.size(), 1);  // the section's cache is untouched
+        QCOMPARE(item->pack->versions.first().fileId, S("n1"));
+        QVERIFY(item->pack->versionsLoaded);
+    }
+
+    void sameSectionFilterReusesTheCache()
+    {
+        ReviewRig rig;
+        rig.target = makeTarget(S("t"), S("Target"), S("26.2"), ModPlatform::Fabric);
+        rig.addMod(S("1"), S("JEI"), { ver(S("o1"), S("8.0"), Release::Release, { S("26.2") }) });
+        const auto dialog = rig.open();
+        QCOMPARE(rig.modrinth.versionsForCalls.size(), 0);
+        QCOMPARE(rig.modrinth.versionCalls.size(), 0);
+        QCOMPARE(dialog->rowState(modKey(S("1"))), CartReviewDialog::RowState::Ready);
+    }
+
+    void resourcePackReviewFilterHasNoLoaders()
+    {
+        ReviewRig rig;
+        rig.target = makeTarget(S("t"), S("Target"), S("26.2"), ModPlatform::Fabric);
+        VersionFilter section;
+        section.mcVersions = { S("26.3") };
+        rig.sectionFilter = section;
+        rig.addPack(S("20"), S("Faithful"));
+        const auto dialog = rig.open();
+        QCOMPARE(rig.modrinth.versionsForCalls.size(), 1);
+        QCOMPARE(rig.modrinth.versionsForFilters.at(0).mcVersions, QStringList{ S("26.2") });
+        QCOMPARE(rig.modrinth.versionsForFilters.at(0).loaders, ModPlatform::ModLoaderTypes());
     }
 
     void dependencyRunWaitsForEveryRowToLoad()

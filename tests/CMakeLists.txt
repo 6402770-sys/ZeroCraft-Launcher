@@ -91,6 +91,7 @@ set(TEST_SOURCES
     PackRollback_test.cpp
     ZeroResourcePacksPage_test.cpp
     ZeroShaderPacksPage_test.cpp
+    ShaderPackIcons_test.cpp
     JvmArgsAdvisor_test.cpp
     PreLaunchCheck_test.cpp
     PlaytimeStats_test.cpp

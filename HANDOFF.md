@@ -785,6 +785,30 @@ Status per batch is logged below as it lands.
   - **Not done / owner QA**: Rich Presence with the owner's real Discord open (upload `program_info/discord/zero-rich-presence-1024.png` as asset
     `zero` in the Discord developer portal first); click through the language switch + restart; the rest of the app in Spanish (dialogs, Discover,
     instance window) was not looked at screen by screen.
+- ✅ **Owner QA round after B5** (session 18; 113/113 + FileSystem 25/25; commits `f33fdfc9e` + the next one). Owner results: Discord RPC,
+  language switch, Now playing, pre-launch warning, drag & drop, Downloads center, scheduled backups, Playtime all OK. Fixed:
+  - **Spanish everywhere**: all 5,488 strings translated (the ~2,340 upstream Prism strings too; Prism's downloaded es file did not cover them).
+    `i18n-merge.py export <ts> <prefix> <n>` writes the unfinished entries as chunks. Glossary: "Browse" file picker = "Examinar".
+  - **Test copy "Bring changes back" failed** ("Could not replace mods"): Windows refuses to rename a folder while anything below it is
+    watched, and the launcher's own `ResourceFolderModel`s watch `mods/` + `mods/.index`. `SandboxApply` now moves only the differing
+    entries inside kept folders (same all-or-nothing + rollback + Recycle Bin). Compact banner in the instance window is vertical (title,
+    then two full-width 28 px buttons) and never widens the 252 px column. Shared `ui/zero/ZeroCompactButton.h` (sm buttons with
+    `setFixedHeight(28)` were really 18 px because the sm qss resets min-height).
+  - **Pack roll back / Undo** had the same Windows problem (whole instance root rename): `PackRollbackTask` pauses the instance's own
+    watchers around the swap (`zero/backup/WatchPause`), all other guarantees unchanged. Other holders (Explorer, antivirus, classic
+    Screenshots/Servers/Logs pages of an open instance window) still give the safe "could not be replaced, nothing changed" failure.
+  - Tray menu: favorites only (hint when none). Before you play: "Move to Recycle Bin" next to "Disable" on mod findings. Timeline page icon.
+    Home "Updates" section always visible (up to date / not checked yet + "Check now").
+  - **Per-instance background video REMOVED** (owner: not useful); theme video untouched.
+  - **JEI "not for 26.x"**: not a version-parsing bug (26.x audited, handled everywhere). The cart reviewed against its target instance
+    (26.2) but fetched versions with the Discover section's filter (another instance on 26.3), so JEI was skipped. Cart now asks
+    `ModpackSource::versionsFor(target filter)` when the filters differ. Owner has two instances both named "Axas Perfect Pack" (26.2 and
+    26.3): the cart bar shows only the name, which is ambiguous (UX idea, not done).
+  - **Shader packs page icons**: rows with Modrinth/CurseForge metadata show the project icon (`zero/content/ShaderPackIcons`, one batched
+    API call per provider per session, `RemoteImageCache`). Checked against the real Modrinth API; CurseForge shape not checked live.
+  - Flaky under parallel load, not investigated: `ZeroResourcePacksPage` segfaulted once (passes alone and on rerun).
+  - Owner QA still open: Undo of a modpack update with the instance window open on Mods; bring changes back again; tray favorites; the
+    two pre-launch buttons; shader icons on the real instance; the cart with JEI on the 26.2 instance.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.

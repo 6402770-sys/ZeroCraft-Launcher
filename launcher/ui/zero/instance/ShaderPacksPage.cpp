@@ -39,6 +39,7 @@
 #include "ui/zero/ZeroSkeleton.h"
 #include "ui/zero/ZeroStyle.h"
 #include "ui/zero/ZeroThemeState.h"
+#include "ui/zero/content/RemoteImageCache.h"
 #include "ui/zero/content/ShaderModNotice.h"
 #include "ui/zero/shell/DownloadFlow.h"
 #include "ui/zero/instance/InstancePageParts.h"
@@ -84,6 +85,7 @@ Row rowFromPack(const ShaderPack& pack)
     row.homepage = pack.homepage();
     if (const auto metadata = pack.metadata()) {
         row.hasMetadata = true;
+        row.hasIcon = !metadata->projectId.toString().trimmed().isEmpty();  // the project's icon (ShaderPackIcons); the sun until it arrives
         row.source = metadata->provider == ModPlatform::ResourceProvider::FLAME ? Mods::Installed::Source::CurseForge
                                                                                  : Mods::Installed::Source::Modrinth;
     }
@@ -166,6 +168,7 @@ ShadersPageEnvironment environmentFor(MinecraftInstance* inst)
             Downloads::startFlow(parent, std::move(job));
         }
     };
+    env.iconLookup = ShaderIcons::networkLookup();
     env.openClassic = [guarded](QWidget* parent) {
         if (!guarded) {
             return;
@@ -372,6 +375,20 @@ void ShaderPacksPage::build()
     m_list->setModel(m_listModel);
     m_list->setAccessibleName(tr("Shader packs"));
     m_list->rowDelegate()->setFallbackIcon(QStringLiteral("sun"));
+    // The project icon of a pack with platform metadata; a null pixmap (not there yet, or never) keeps the sun.
+    m_list->rowDelegate()->setIconProvider([this](const QString& id, int px, qreal dpr) -> QPixmap {
+        const QString key = m_iconKeys.value(id);
+        const QString url = key.isEmpty() ? QString() : ShaderIcons::sessionUrls().value(key);
+        if (url.isEmpty()) {
+            return {};
+        }
+        Zero::RemoteImageCache* images = m_env.images ? m_env.images : Zero::RemoteImageCache::instance();
+        QPixmap pixmap = images->request(url, Zero::RemoteImageCache::bucketFor(px, dpr), this);
+        pixmap.setDevicePixelRatio(dpr);
+        return pixmap;
+    });
+    connect(m_env.images ? m_env.images : Zero::RemoteImageCache::instance(), &Zero::RemoteImageCache::imageReady, this,
+            [this]() { m_list->viewport()->update(); });
     m_stack->addWidget(m_list);
 
     m_empty = new ZeroEmptyState(QStringLiteral("sun"), tr("No shader packs yet"), QString(), QString(), m_stack);
@@ -503,6 +520,8 @@ void ShaderPacksPage::rebuild()
     m_rows.clear();
     m_tokens.clear();
     m_sourceRows.clear();
+    m_iconKeys.clear();
+    QList<ShaderIcons::Ref> refs;
     const QList<Resource*> all = m_model->allResources();
     for (int i = 0; i < all.size(); ++i) {
         auto* pack = static_cast<ShaderPack*>(all.at(i));
@@ -510,12 +529,44 @@ void ShaderPacksPage::rebuild()
             continue;
         }
         m_rows.append(rowFromPack(*pack));
+        if (const auto metadata = pack->metadata(); metadata && m_rows.last().hasIcon) {
+            const QString project = metadata->projectId.toString().trimmed();
+            m_iconKeys.insert(m_rows.last().id, ShaderIcons::keyOf(metadata->provider, project));
+            refs.append({ metadata->provider, project });
+        }
         m_tokens.append(reinterpret_cast<quintptr>(pack));
         m_sourceRows.append(i);
     }
     const QString modsDir = m_env.target().modsDir;
     m_shaderMod = modsDir.isEmpty() ? Content::ShaderModFacts{ true, {} } : Content::shaderModFacts(Content::modFileNamesIn(modsDir));  // unknown folder: no strip
     applyView();
+    requestIcons(refs);
+}
+
+void ShaderPacksPage::requestIcons(const QList<ShaderIcons::Ref>& refs)
+{
+    if (!m_env.iconLookup) {
+        return;
+    }
+    auto& known = ShaderIcons::sessionUrls();
+    auto& asked = ShaderIcons::sessionAsked();
+    const ShaderIcons::Ids ids = ShaderIcons::collectIds(refs, known, asked);
+    if (ids.isEmpty()) {
+        return;
+    }
+    for (const QString& id : ids.modrinth) {
+        asked.insert(ShaderIcons::keyOf(ModPlatform::ResourceProvider::MODRINTH, id));
+    }
+    for (const QString& id : ids.curseforge) {
+        asked.insert(ShaderIcons::keyOf(ModPlatform::ResourceProvider::FLAME, id));
+    }
+    QPointer<ShaderPacksPage> guard(this);
+    m_env.iconLookup(ids, [guard](const QHash<QString, QString>& urls) {
+        ShaderIcons::sessionUrls().insert(urls);  // kept even when the page is gone: the next one starts with them
+        if (guard) {
+            guard->m_list->viewport()->update();  // the provider requests the pictures while the rows paint
+        }
+    });
 }
 
 void ShaderPacksPage::applyView()

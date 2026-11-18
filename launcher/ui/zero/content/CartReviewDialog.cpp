@@ -407,6 +407,10 @@ void CartReviewDialog::connectSource(ModpackSource* source)
     m_connected.append(source);
     connect(source, &ModpackSource::versionsFinished, this,
             [this](quint64 generation, const ContentItemPtr& item, const QList<ModpackVersion>&) { onVersionsFinished(generation, item); });
+    connect(source, &ModpackSource::versionsForFinished, this,
+            [this](quint64 generation, const ContentItemPtr& item, const QList<ModPlatform::IndexedVersion>& versions) {
+                onVersionsForFinished(generation, item, versions);
+            });
     connect(source, &ModpackSource::versionsFailed, this, [this](quint64 generation, const QString&) { onVersionsFailed(generation); });
 }
 
@@ -414,19 +418,38 @@ void CartReviewDialog::requestVersions(Row& row)
 {
     row.generation = 0;
     setRowState(row, RowState::Loading);
-    // What the item already carries (the details panel loaded it under the target's filter) needs no request.
-    if (row.entry.item->pack && row.entry.item->pack->versionsLoaded) {
-        setRowVersions(row, row.entry.item->pack->versions);
-        return;
-    }
     ModpackSource* source = m_env.sourceFor ? m_env.sourceFor(row.entry) : nullptr;
     if (!source || !row.entry.item->pack) {
         setRowState(row, RowState::Failed);
         return;
     }
+    // The review is about the CART's target instance, which need not be the one the section is filtered for: the versions the item
+    // (or a plain versions() request) carries answer the section's filter, so they count only when it is the target's filter.
+    VersionFilter want;
+    want.mcVersions = { m_target.mcVersion };
+    want.loaders = row.entry.kind == Kind::Mod ? m_target.loaders : ModPlatform::ModLoaderTypes();
+    const bool sameFilter = source->versionFilter() == want;
+    if (sameFilter && row.entry.item->pack->versionsLoaded) {
+        setRowVersions(row, row.entry.item->pack->versions);
+        return;
+    }
     connectSource(source);
     row.generation = ++m_nextGeneration;
-    source->versions(row.entry.item, row.generation);  // may answer at once (a fake does)
+    if (sameFilter) {
+        source->versions(row.entry.item, row.generation);  // may answer at once (a fake does)
+    } else {
+        source->versionsFor(row.entry.item, row.generation, want);
+    }
+}
+
+void CartReviewDialog::onVersionsForFinished(quint64 generation, const ContentItemPtr& item, const QList<ModPlatform::IndexedVersion>& versions)
+{
+    Row* r = rowByGeneration(generation);
+    if (!r || r->entry.item != item) {
+        return;
+    }
+    r->generation = 0;
+    setRowVersions(*r, versions);
 }
 
 void CartReviewDialog::onVersionsFinished(quint64 generation, const ContentItemPtr& item)

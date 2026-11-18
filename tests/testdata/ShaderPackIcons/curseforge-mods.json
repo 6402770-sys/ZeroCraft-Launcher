@@ -1,0 +1,8 @@
+{
+  "data": [
+    { "id": 123456, "name": "BSL Shaders", "logo": { "id": 1, "modId": 123456, "title": "logo.png",
+      "thumbnailUrl": "https://media.forgecdn.net/avatars/thumbnails/1/2/256/256/bsl.png", "url": "https://media.forgecdn.net/avatars/1/2/bsl.png" } },
+    { "id": 777, "name": "Only full logo", "logo": { "thumbnailUrl": "", "url": "https://media.forgecdn.net/avatars/9/9/full.png" } },
+    { "id": 888, "name": "No logo" }
+  ]
+}

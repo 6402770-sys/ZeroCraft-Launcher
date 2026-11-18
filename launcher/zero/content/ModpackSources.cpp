@@ -130,6 +130,16 @@ void ResourceApiSource::details(const ModpackItemPtr& item, quint64 generation)
 
 void ResourceApiSource::versions(const ModpackItemPtr& item, quint64 generation)
 {
+    requestVersions(item, generation, versionFilter(), true);
+}
+
+void ResourceApiSource::versionsFor(const ModpackItemPtr& item, quint64 generation, const VersionFilter& filter)
+{
+    requestVersions(item, generation, filter, false);
+}
+
+void ResourceApiSource::requestVersions(const ModpackItemPtr& item, quint64 generation, const VersionFilter& filter, bool cache)
+{
     if (!item->pack) {
         emit versionsFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "This pack has no version list."));
         return;
@@ -138,12 +148,17 @@ void ResourceApiSource::versions(const ModpackItemPtr& item, quint64 generation)
     // failure, timeout) settles the request, and the timer settles it as a failure.
     auto done = std::make_shared<bool>(false);
     ResourceAPI::Callback<QVector<ModPlatform::IndexedVersion>> callbacks;
-    callbacks.onSucceed = [this, item, generation, done](QVector<ModPlatform::IndexedVersion>& found) {
+    callbacks.onSucceed = [this, item, generation, done, cache](QVector<ModPlatform::IndexedVersion>& found) {
         if (*done) {
             return;
         }
         *done = true;
-        item->pack->versions = QList<ModPlatform::IndexedVersion>(found.begin(), found.end());
+        const QList<ModPlatform::IndexedVersion> raw(found.begin(), found.end());
+        if (!cache) {
+            emit versionsForFinished(generation, item, raw);
+            return;
+        }
+        item->pack->versions = raw;
         item->pack->versionsLoaded = true;
         QList<ModpackVersion> out;
         out.reserve(found.size());
@@ -167,7 +182,6 @@ void ResourceApiSource::versions(const ModpackItemPtr& item, quint64 generation)
         emit versionsFailed(generation, QCoreApplication::translate("Zero::Content::ModpackSources", "The request was cancelled."));
     };
     // Modpacks ask for every version; a section with a target instance (Mods) narrows the request to its Minecraft version and loaders.
-    const VersionFilter& filter = versionFilter();
     std::optional<std::vector<Version>> mcVersions;
     if (!filter.mcVersions.isEmpty()) {
         mcVersions.emplace();

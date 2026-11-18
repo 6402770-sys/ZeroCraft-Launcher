@@ -250,6 +250,14 @@ staging folder, verify again) and `renamePath`.
   the swap is not a failure: the instance is the old one, the replaced folder stays where it is (renamed `.zero-leftover-<id>-<ts>` so that recovery cannot take it for a cut-off roll back and bring a deleted
   instance back) and the toast says where. Everything else the player did after the update outside those folders (options.txt,
   servers.dat, mods added since) is the snapshot's again, and what was replaced is in the Recycle Bin.
+- **Watchers paused for the swap** (`launcher/zero/backup/WatchPause`, `PackRollbackTask`'s `PauseWatching` argument): Windows cannot rename a folder while something below it is watched (or open), and the launcher watches
+  folders of the instance it is rolling back: `ResourceFolderModel::startWatching` watches `mods/` AND `mods/.index` (same for resource / shader / data packs), `WorldList` watches `saves/`. So the instance
+  folder rename (step 5) and the play-data renames (step 4) failed ("The instance could not be replaced") whenever the Mods / Resource Packs / Shader Packs / Worlds page of that instance was loaded.
+  `PackRollbackTask::executeTask` (GUI thread, after the busy check, before the pool job) calls `pause()`; `MainWindow::rollBackModpackUpdate` passes `pauseInstanceWatching(instance)`, which stops the
+  watchers of the instance's own `resourceLists()` and `worldList()` that are watching now (those that were not are left alone) and returns a resume callback; the task calls it in `finishWith` (success or failure;
+  also in the destructor, once) so a failed roll back leaves the pages live, and after a success the models read the restored folders again (the instance is then reloaded anyway). Chosen over moving entries
+  inside the folders both sides have (as `SandboxApply` does) because that would give up the two-rename swap and its startup recovery (a cut-off entry-wise swap leaves a mixed instance). The pause only covers
+  the instance's own models; anything else that holds a handle (an Explorer window, antivirus, a watcher of a classic page such as Screenshots / Servers / Logs) still ends in the safe failure above.
 - **Startup recovery** (`Pack::recoverInterrupted(instancesDir)`, run by the `InstanceList` constructor for every instances folder, before the first discovery; one `// ZERO` block): a crash or power
   loss during a roll back would leave the worlds in a hidden `.zero-restore-<id>-<ts>` folder or the instance only as `.zero-replaced-<id>-<ts>`. Per id: replaced exists and the instance does not -> renamed
   back; the instance and a staging folder -> every play-data folder and link of the staging folder whose place is free in the instance moves back, and the staging folder (ZERO's extracted copy) is removed
@@ -263,7 +271,7 @@ staging folder, verify again) and `renamePath`.
   "Roll back X to <old version>?" / "Your worlds, screenshots and play time stay. The updated files go to the Recycle Bin." (`ModsUi::ChoiceDialog`, Cancel / Roll back, Enter cancels); a modal progress while it
   runs; toast "Rolled back X" or the error. Dev aids: `ZERO_SCREENSHOT_PACK_SNAPSHOT=<instance id>` (+ `ZERO_SCREENSHOT_PACK_NEW_VERSION`) takes a snapshot, `ZERO_SCREENSHOT_PACK_ROLLBACK=<instance id>` grabs the question.
 - Tests: `tests/PackSnapshot_test.cpp` (exclude rules, cfg merge, snapshot contents and meta, retention, listing, happy-path roll back, every failure path with injected rename / trash / free-space hooks,
-  corrupt zips, the tasks: failure gates the update, cancel, refusal while running or locked). Known limits: a crash between the carry-over and the swap leaves the player's folders in the hidden `.zero-restore-*`
+  corrupt zips, the tasks: failure gates the update, cancel, refusal while running or locked, the watcher pause: a real `ModFolderModel` watching `mods/.index` blocks the swap, the pause lets it through and resumes it, also on failure). Known limits: a crash between the carry-over and the swap leaves the player's folders in the hidden `.zero-restore-*`
   folder (named in the log); the copy is as big as the instance without its play data (mods and resource packs can be gigabytes); a task that is cancelled while it verifies finishes that step first.
 
 ## Test copies ("Try it in a copy")

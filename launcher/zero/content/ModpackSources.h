@@ -59,6 +59,7 @@ class ResourceApiSource : public NetSource {
     void search(const ResourceAPI::SearchArgs& args, quint64 generation) override;
     void details(const ModpackItemPtr& item, quint64 generation) override;
     void versions(const ModpackItemPtr& item, quint64 generation) override;
+    void versionsFor(const ModpackItemPtr& item, quint64 generation, const VersionFilter& filter) override;
     void changelog(const ModpackItemPtr& item, const QString& versionId, quint64 generation) override;
     void requestCategories() override;
 
@@ -71,6 +72,8 @@ class ResourceApiSource : public NetSource {
     virtual QList<ModPlatform::Category> parseCategories(const QByteArray& data) const = 0;
 
    private:
+    /// The request behind versions() (`cache`: the answer is stored in the pack, signal versionsFinished) and versionsFor().
+    void requestVersions(const ModpackItemPtr& item, quint64 generation, const VersionFilter& filter, bool cache);
     Provider m_provider;
     const ResourceAPI& m_api;
     ModPlatform::ResourceType m_type;

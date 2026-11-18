@@ -702,6 +702,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ZeroMotion", QString());
         m_settings->registerSetting("ZeroUiSounds", true);       // interface sounds (Zero::Sound): on by default, low volume
         m_settings->registerSetting("ZeroUiSoundVolume", 35);    // 0..100
+        m_settings->registerSetting("ZeroUiSoundPack", "theme");  // "theme" | "minecraft" (the game's own sounds from the local assets)
         m_settings->registerSetting("ZeroExportFormat", QString("zip"));  // Library export chooser: "zip" | "mrpack" | "curseforge"
         m_settings->registerSetting("ZeroLibraryView", QString("grid"));  // Library page: "grid" | "list"
         m_settings->registerSetting("ZeroWorldsFavoritesOnly", false);  // Worlds page: show only favorite worlds

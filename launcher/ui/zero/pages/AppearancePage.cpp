@@ -11,6 +11,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSlider>
@@ -36,6 +37,7 @@
 #include "ui/zero/ZeroTransition.h"
 #include "ui/zero/pages/ThemeEditorPanel.h"
 #include "ui/zero/pages/ThemeLibrary.h"
+#include "zero/sound/MinecraftSoundCache.h"
 #include "zero/theme/ThemeArchive.h"
 #include "zero/theme/ThemeEditorModel.h"
 
@@ -527,6 +529,40 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
     m_soundsCaption->setWordWrap(true);
     col->addWidget(m_soundsCaption);
     col->addSpacing(Tokens::spaceMd);
+    // Sound pack (Minecraft-based themes only): ZERO's retro blips or the game's own sounds from the local assets.
+    m_packBox = new QWidget(column);
+    auto* packCol = new QVBoxLayout(m_packBox);
+    packCol->setContentsMargins(0, 0, 0, 0);
+    packCol->setSpacing(Tokens::spaceSm);
+    auto* packRow = new QHBoxLayout;
+    packRow->setContentsMargins(0, 0, 0, 0);
+    packRow->setSpacing(Tokens::spaceMd);
+    m_packLabel = makeLabel(tr("Sound pack"), Role::Body, m_packBox);
+    packRow->addWidget(m_packLabel);
+    m_packGroup = new QButtonGroup(this);
+    m_packRetro = new QRadioButton(tr("ZERO retro"), m_packBox);
+    m_packRetro->setProperty("zeroPack", QString::fromLatin1(Sound::kPackTheme));
+    m_packMinecraft = new QRadioButton(tr("Minecraft"), m_packBox);
+    m_packMinecraft->setProperty("zeroPack", QString::fromLatin1(Sound::kPackMinecraft));
+    for (auto* b : { m_packRetro, m_packMinecraft }) {
+        m_packGroup->addButton(b);
+        packRow->addWidget(b);
+    }
+    packRow->addStretch(1);
+    packCol->addLayout(packRow);
+    m_packCaption = makeLabel({}, Role::Caption, m_packBox, true);
+    m_packCaption->setWordWrap(true);
+    packCol->addWidget(m_packCaption);
+    col->addWidget(m_packBox);
+    col->addSpacing(Tokens::spaceMd);
+    connect(m_packGroup, &QButtonGroup::buttonClicked, this, [this](QAbstractButton* b) {
+        if (m_syncingSounds)
+            return;
+        const QString pack = b->property("zeroPack").toString();
+        m_previewWhenReady = pack == QLatin1String(Sound::kPackMinecraft);
+        APPLICATION->settings()->set(Sound::kPackSetting, pack);
+        syncSounds();  // plays the preview right away when the converted sounds are already there
+    });
     auto* volumeLine = new QHBoxLayout;
     volumeLine->setContentsMargins(0, 0, 0, 0);
     m_soundsVolumeLabel = makeLabel(tr("Volume"), Role::Body, column);
@@ -590,10 +626,17 @@ AppearancePage::AppearancePage(QWidget* parent) : ShellPage(parent)
     buildThemeCards();
     syncMotion();
     syncSounds();
-    for (const char* key : { Sound::kEnabledSetting, Sound::kVolumeSetting }) {
+    for (const char* key : { Sound::kEnabledSetting, Sound::kVolumeSetting, Sound::kPackSetting }) {
         if (auto setting = APPLICATION->settings()->getSetting(key))
             connect(setting.get(), &Setting::SettingChanged, this, [this](const Setting&, const QVariant&) { syncSounds(); });
     }
+
+    if (auto* cache = Sound::minecraftCache()) {
+        cache->refresh();
+        connect(cache, &Sound::Minecraft::Cache::changed, this, &AppearancePage::syncSounds);
+        syncSounds();
+    }
+    connect(&Theme::instance(), &Theme::changed, this, &AppearancePage::syncSounds);
 
     // Keep in sync with the theme changing elsewhere (Prism's settings dialog, the legacy menu) and with the setting.
     connect(&Theme::instance(), &Theme::changed, this, [this]() { QTimer::singleShot(0, this, &AppearancePage::syncCurrent); });
@@ -800,6 +843,32 @@ void AppearancePage::syncSounds()
     m_soundsVolume->setEnabled(on);
     m_soundsVolumeLabel->setEnabled(on);
     m_soundsValue->setEnabled(on);
+
+    // Sound pack: only for a Minecraft-based theme.
+    const bool minecraftTheme = Theme::current().styleId() == QLatin1String("minecraft");
+    m_packBox->setVisible(minecraftTheme);
+    auto* cache = Sound::minecraftCache();
+    const bool available = cache && cache->available();
+    const bool wantsMinecraft = settings->get(Sound::kPackSetting).toString() == QLatin1String(Sound::kPackMinecraft);
+    const bool preparing = cache && cache->state() == Sound::Minecraft::Cache::State::Preparing;
+    m_syncingSounds = true;
+    m_packRetro->setChecked(!(wantsMinecraft && available));
+    m_packMinecraft->setChecked(wantsMinecraft && available);
+    m_syncingSounds = false;
+    m_packLabel->setEnabled(on);
+    m_packRetro->setEnabled(on);
+    m_packMinecraft->setEnabled(on && available);
+    if (preparing && wantsMinecraft)
+        m_packCaption->setText(tr("Preparing the Minecraft sounds..."));
+    else if (available)
+        m_packCaption->setText(tr("Uses the Minecraft sounds already on this PC. They stay on your PC and are never shared."));
+    else
+        m_packCaption->setText(tr("Play any Minecraft version once so ZERO can use its sounds."));
+    if (m_previewWhenReady && cache && cache->state() == Sound::Minecraft::Cache::State::Ready) {
+        m_previewWhenReady = false;
+        Sound::preview(Sound::Event::Click);
+        QTimer::singleShot(220, qApp, []() { Sound::preview(Sound::Event::Success); });
+    }
 }
 
 void AppearancePage::syncMotion()

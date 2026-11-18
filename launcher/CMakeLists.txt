@@ -1084,6 +1084,10 @@ SET(LAUNCHER_SOURCES
     ui/zero/ZeroSmoothScroll.h
     ui/zero/ZeroSound.cpp
     ui/zero/ZeroSound.h
+    zero/sound/MinecraftSounds.cpp
+    zero/sound/MinecraftSounds.h
+    zero/sound/MinecraftSoundCache.cpp
+    zero/sound/MinecraftSoundCache.h
     ui/zero/ZeroReveal.cpp
     ui/zero/ZeroReveal.h
     ui/zero/ZeroSkeleton.cpp

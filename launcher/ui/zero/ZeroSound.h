@@ -31,6 +31,11 @@ inline constexpr int kEventCount = 7;
 inline constexpr const char* kEnabledSetting = "ZeroUiSounds";
 inline constexpr const char* kVolumeSetting = "ZeroUiSoundVolume";
 inline constexpr int kDefaultVolume = 35;
+/// "ZeroUiSoundPack": "theme" (default: the theme's own set) | "minecraft" (the game's own sounds, converted from the local assets;
+/// only for a theme whose set is "retro", and only once the converted files are ready).
+inline constexpr const char* kPackSetting = "ZeroUiSoundPack";
+inline constexpr const char* kPackTheme = "theme";
+inline constexpr const char* kPackMinecraft = "minecraft";
 
 /// The same event is not played more than once per this many ms, and at most this many sounds overlap.
 inline constexpr int kThrottleMs = 40;
@@ -50,6 +55,7 @@ double gain(Event event);
 struct Config {
     bool enabled = true;
     int volume = kDefaultVolume;  // 0..100
+    bool minecraftPack = false;   // ZeroUiSoundPack == "minecraft"
 };
 void setConfig(const Config& config);
 Config config();
@@ -61,7 +67,11 @@ Config config();
 QString setForSpec(const ThemeSpec& spec);
 /// ":/zero/sounds/<set>/<event>.wav" (the resource file); empty for "none" or an unknown set.
 QString resourcePath(const QString& set, Event event);
-/// What plays for `event` under `spec`: the theme's own file when it has one (local path), else the style's resource (":/...");
+/// Where the converted Minecraft sounds are (<dir>/<event>.wav) once they are ready; empty = not ready. Set by the cache.
+void setMinecraftDir(const QString& dir);
+QString minecraftDir();
+/// What plays for `event` under `spec`: the theme's own file when it has one (local path), else (set "retro", pack "minecraft" and
+/// the converted files ready) the converted Minecraft sound, else the style's resource (":/...");
 /// empty when the style is "none" and the event has no own file.
 QString sourceFor(const ThemeSpec& spec, Event event);
 
@@ -83,6 +93,14 @@ class Filter : public QObject {
    protected:
     bool eventFilter(QObject* watched, QEvent* ev) override;
 };
+
+namespace Minecraft {
+class Cache;
+}
+/// The Minecraft pack's converter (created by install() inside the Application); null before that.
+Minecraft::Cache* minecraftCache();
+/// Called when the user picks the pack (or the app starts with it): checks / builds the converted files.
+void preparePack();
 
 /// Installs the filter on `app` (idempotent) and, when `app` is the Application, binds the settings, arms playing and preloads the
 /// sound pool after the event loop starts. Returns the filter.

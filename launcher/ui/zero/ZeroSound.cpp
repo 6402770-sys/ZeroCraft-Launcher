@@ -23,6 +23,7 @@
 #include "Application.h"
 #include "settings/Setting.h"
 #include "settings/SettingsObject.h"
+#include "zero/sound/MinecraftSoundCache.h"
 #include "ui/zero/ZeroThemeState.h"
 #include "zero/theme/CustomTheme.h"
 
@@ -43,6 +44,8 @@ struct Engine {
     QSoundEffect* effects[kEventCount] = {};
     bool deviceKnown = false;
     bool deviceAvailable = false;
+    QString minecraftDir;
+    Minecraft::Cache* cache = nullptr;
 
     Engine() { resetThrottle(); }
     void resetThrottle()
@@ -268,7 +271,35 @@ QString sourceFor(const ThemeSpec& spec, Event event)
     const QString own = spec.soundFiles.value(eventId(event));
     if (!own.isEmpty() && QFileInfo(own).isFile())
         return own;
-    return resourcePath(setForSpec(spec), event);
+    const QString set = setForSpec(spec);
+    const Engine& e = engine();
+    if (set == QLatin1String("retro") && e.config.minecraftPack && !e.minecraftDir.isEmpty()) {
+        const QString converted = e.minecraftDir + QLatin1Char('/') + eventId(event) + QStringLiteral(".wav");
+        if (QFileInfo(converted).isFile())
+            return converted;
+    }
+    return resourcePath(set, event);
+}
+
+void setMinecraftDir(const QString& dir)
+{
+    engine().minecraftDir = dir;
+}
+
+QString minecraftDir()
+{
+    return engine().minecraftDir;
+}
+
+Minecraft::Cache* minecraftCache()
+{
+    return engine().cache;
+}
+
+void preparePack()
+{
+    if (engine().cache && engine().config.minecraftPack)
+        engine().cache->prepare();
 }
 
 void play(Event event)
@@ -371,9 +402,29 @@ QObject* install(QObject* app)
         Config c;
         c.enabled = application->settings()->get(kEnabledSetting).toBool();
         c.volume = application->settings()->get(kVolumeSetting).toInt();
+        c.minecraftPack = application->settings()->get(kPackSetting).toString() == QLatin1String(kPackMinecraft);
         setConfig(c);
     };
     sync();
+
+    // The Minecraft pack: converts the sounds of the game's local assets into <data>/zero/sounds/minecraft (asynchronously).
+    const QString dataRoot = application->dataRoot();
+    auto* cache = new Minecraft::Cache(dataRoot + QStringLiteral("/assets"), dataRoot + QStringLiteral("/zero/sounds/minecraft"), existing.data());
+    engine().cache = cache;
+    QObject::connect(cache, &Minecraft::Cache::changed, existing.data(), [cache]() {
+        setMinecraftDir(cache->state() == Minecraft::Cache::State::Ready ? cache->dir() : QString());
+        if (engine().armed && !engine().sink)
+            ensurePool();
+    });
+    if (auto setting = application->settings()->getSetting(kPackSetting))
+        QObject::connect(setting.get(), &Setting::SettingChanged, existing.data(), [sync](const Setting&, const QVariant&) {
+            sync();
+            preparePack();
+            // The converted files may already be ready (no Cache::changed then): rebuild the pool so the pick takes effect now.
+            if (engine().armed && !engine().sink)
+                ensurePool();
+        });
+
     for (const char* key : { kEnabledSetting, kVolumeSetting })
         if (auto setting = application->settings()->getSetting(key))
             QObject::connect(setting.get(), &Setting::SettingChanged, existing.data(), [sync](const Setting&, const QVariant&) { sync(); });
@@ -385,6 +436,7 @@ QObject* install(QObject* app)
         if (e.sink)
             return;
         ensurePool();
+        preparePack();
         QObject::connect(&Theme::instance(), &Theme::changed, QCoreApplication::instance(), []() { ensurePool(); });
         QObject::connect(new QMediaDevices(QCoreApplication::instance()), &QMediaDevices::audioOutputsChanged, QCoreApplication::instance(),
                          []() {

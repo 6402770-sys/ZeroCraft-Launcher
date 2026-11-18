@@ -134,6 +134,9 @@
 - `tests/ZeroTheme_test.cpp`, `tests/ZeroPixelFont_test.cpp` — theme engine v2 (specs, contrast, panel shapes, texture) and pixel font tests
 - `tests/ZeroPlayButton_test.cpp` — Play button state machine (cycle, failure, abort, crash, ignored clicks, stop request)
 - `tests/ZeroSound_test.cpp` — interface sounds: filter classification via a sink, throttle, off switch, theme -> set, custom sound files (save / export / import / duplicate), generated WAV format and limits
+- `launcher/zero/sound/MinecraftSounds.{h,cpp}` — Minecraft interface sound pack, pure part: event -> asset keys, resolution in the local game assets (indexes newest first, size check, fallbacks), `available`, trim / normalise, WAV writer (+ pitch header), manifest
+- `launcher/zero/sound/MinecraftSoundCache.{h,cpp}` — async `QAudioDecoder` conversion into `<data>/zero/sounds/minecraft/*.wav` + `manifest.json`; never ships game files
+- `tests/MinecraftSounds_test.cpp` — the pack: fake assets tree resolution, conditioning, WAV header / pitch, manifest, selection; real decode only when local assets exist
 - `scripts/zero/gen-ui-sounds.py` + `launcher/resources/zero/sounds/{retro,soft}/*.wav` — the generator and its checked-in output (registered in `zero.qrc`)
 - `tests/ZeroSmoothScroll_test.cpp` — smooth wheel: accumulation, motion off, edge propagation, Ctrl/touchpad pass-through, spin box, external change
 - `tests/ZeroMotion_test.cpp` — motion system: setting resolution + legacy migration, overlays (self-deleting, replaceable, nothing with motion off), ripple, toasts

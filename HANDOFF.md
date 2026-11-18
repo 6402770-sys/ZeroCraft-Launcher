@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-17 (session 18: B5 + owner QA round committed (`adc4f3b5a`, `f33fdfc9e`, `9dbeea9d5`, `12815bf77`); **Minecraft sound pack IN PROGRESS, uncommitted** — see Mission 004 › 🔴 RESUME HERE (Minecraft sound pack). Session 17: B4 `26c833081`. Session 16: B2 + B3 + Playtime. Session 15: pack rollback, modpack New/Update, Shader Packs page, UI sounds. Session 14: **1.0.1 PUBLISHED**; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-18 (session 19: **Minecraft sound pack finished and committed** — see Mission 004 › ✅ Minecraft sound pack. Session 18: B5 + owner QA round committed (`adc4f3b5a`, `f33fdfc9e`, `9dbeea9d5`, `12815bf77`). Session 17: B4 `26c833081`. Session 16: B2 + B3 + Playtime. Session 15: pack rollback, modpack New/Update, Shader Packs page, UI sounds. Session 14: **1.0.1 PUBLISHED**; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -810,7 +810,16 @@ Status per batch is logged below as it lands.
   - Owner QA still open: Undo of a modpack update with the instance window open on Mods; bring changes back again; tray favorites; the
     two pre-launch buttons; shader icons on the real instance; the cart with JEI on the 26.2 instance.
 - Owner retest (session 18): JEI in the cart, test copy, Undo, tray, shader icons all OK (`12815bf77`).
-- 🔴 **RESUME HERE: Minecraft sound pack (session 18, IN PROGRESS, uncommitted)**. Owner request: keep ZERO's generated sounds AND, for
+- ✅ **Minecraft sound pack DONE (session 19)**. Reviewed the stopped worker's tree and finished it: (1) real decode failed because
+  `decodeFile` called `cb(ok && !pcm.samples.isEmpty(), std::move(pcm))`: GCC builds the moved-into argument first, so the check saw
+  empty samples (fixed: decide `good` before the call); also no forced output format any more (`appendSamples` converts Float etc.).
+  (2) Switching the pack did nothing until a theme change when the cache was already Ready (no `changed()`): the setting handler now
+  rebuilds the pool. (3) Spanish strings added (zero_es.ts), filemap cp1252 dashes fixed. Verified: 114/114 tests; real conversion of
+  the 7 events from `%APPDATA%\ZEROLauncher\assets` into a temp dir (click 0.28 s 48 kHz, toggle-off 35280 Hz header, launch 1.75 s,
+  peaks ~-6 dBFS); the app started with `ZeroUiSoundPack=minecraft` on a temp `-d` writes the 7 WAVs + manifest itself; Appearance
+  screenshot (Minecraft theme, 1280x1700) shows "Paquete de sonidos: ZERO retro / Minecraft" + caption. Not heard on speakers (owner QA:
+  Apariencia › Sonidos de la interfaz › Minecraft, then click around; Play should give the level-up sound).
+  Original spec (kept for reference): Owner request: keep ZERO's generated sounds AND, for
   the Minecraft theme, a second pack with the real Minecraft sounds. Decided design: setting `ZeroUiSoundPack` ("theme" default |
   "minecraft"); Appearance › Interface sounds shows a "Sound pack" choice "ZERO retro" / "Minecraft" only while the theme is
   Minecraft-based. LEGAL RULE: never ship/commit Mojang files; read the user's local game assets (`<data>/assets/indexes/*.json` +

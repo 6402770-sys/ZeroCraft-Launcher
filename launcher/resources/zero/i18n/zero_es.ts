@@ -15645,6 +15645,30 @@ Configura tu cuenta según %1.</translation>
         <translation>Sonidos de la interfaz</translation>
     </message>
     <message>
+        <source>Sound pack</source>
+        <translation>Paquete de sonidos</translation>
+    </message>
+    <message>
+        <source>ZERO retro</source>
+        <translation>ZERO retro</translation>
+    </message>
+    <message>
+        <source>Minecraft</source>
+        <translation>Minecraft</translation>
+    </message>
+    <message>
+        <source>Preparing the Minecraft sounds...</source>
+        <translation>Preparando los sonidos de Minecraft...</translation>
+    </message>
+    <message>
+        <source>Uses the Minecraft sounds already on this PC. They stay on your PC and are never shared.</source>
+        <translation>Usa los sonidos de Minecraft que ya están en esta PC. Se quedan en tu PC y nunca se comparten.</translation>
+    </message>
+    <message>
+        <source>Play any Minecraft version once so ZERO can use its sounds.</source>
+        <translation>Jugá cualquier versión de Minecraft una vez para que ZERO pueda usar sus sonidos.</translation>
+    </message>
+    <message>
         <source>More appearance options</source>
         <translation>Más opciones de apariencia</translation>
     </message>

@@ -37,6 +37,7 @@ set(TEST_SOURCES
     ZeroMotion_test.cpp
     ZeroSmoothScroll_test.cpp
     ZeroSound_test.cpp
+    MinecraftSounds_test.cpp
     ZeroPlayButton_test.cpp
     ZeroShell_test.cpp
     ZeroVideoBackground_test.cpp

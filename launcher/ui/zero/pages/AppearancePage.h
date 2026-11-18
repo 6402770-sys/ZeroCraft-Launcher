@@ -16,6 +16,7 @@ class QLabel;
 class QMenu;
 class QPixmap;
 class QPushButton;
+class QRadioButton;
 class QResizeEvent;
 
 namespace Zero {
@@ -85,6 +86,13 @@ class AppearancePage : public ShellPage {
     QLabel* m_soundsVolumeLabel = nullptr;
     QLabel* m_soundsCaption = nullptr;
     QPushButton* m_soundsPreview = nullptr;
+    QWidget* m_packBox = nullptr;
+    QLabel* m_packLabel = nullptr;
+    QLabel* m_packCaption = nullptr;
+    QButtonGroup* m_packGroup = nullptr;
+    QRadioButton* m_packRetro = nullptr;
+    QRadioButton* m_packMinecraft = nullptr;
+    bool m_previewWhenReady = false;
     bool m_syncingSounds = false;
 };
 

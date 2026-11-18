@@ -148,7 +148,7 @@ void ResourceApiSource::requestVersions(const ModpackItemPtr& item, quint64 gene
     // failure, timeout) settles the request, and the timer settles it as a failure.
     auto done = std::make_shared<bool>(false);
     ResourceAPI::Callback<QVector<ModPlatform::IndexedVersion>> callbacks;
-    callbacks.onSucceed = [this, item, generation, done, cache](QVector<ModPlatform::IndexedVersion>& found) {
+    callbacks.onSucceed = [this, item, generation, done, cache, filter](QVector<ModPlatform::IndexedVersion>& found) {
         if (*done) {
             return;
         }
@@ -160,6 +160,7 @@ void ResourceApiSource::requestVersions(const ModpackItemPtr& item, quint64 gene
         }
         item->pack->versions = raw;
         item->pack->versionsLoaded = true;
+        item->versionsFilter = filter;
         QList<ModpackVersion> out;
         out.reserve(found.size());
         for (const auto& v : found) {

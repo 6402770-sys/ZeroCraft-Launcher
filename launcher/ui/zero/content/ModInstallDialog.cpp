@@ -329,7 +329,9 @@ bool ModInstallDialog::targetRunning() const
 void ModInstallDialog::requestVersions()
 {
     // What the item already carries (the details panel loaded it under the target's filter) needs no request.
-    if (m_item->pack && m_item->pack->versionsLoaded) {
+    // A list loaded under an earlier filter of the section (its target changed since) is asked again.
+    const bool stale = m_env.source && m_item->versionsFilter && *m_item->versionsFilter != m_env.source->versionFilter();
+    if (m_item->pack && m_item->pack->versionsLoaded && !stale) {
         setVersions(m_item->pack->versions);
         return;
     }

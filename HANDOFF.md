@@ -802,7 +802,7 @@ Status per batch is logged below as it lands.
   - **Per-instance background video REMOVED** (owner: not useful); theme video untouched.
   - **JEI "not for 26.x"**: not a version-parsing bug (26.x audited, handled everywhere). The cart reviewed against its target instance
     (26.2) but fetched versions with the Discover section's filter (another instance on 26.3), so JEI was skipped. Cart now asks
-    `ModpackSource::versionsFor(target filter)` when the filters differ. Owner has two instances both named "Axas Perfect Pack" (26.2 and
+    `ModpackSource::versionsFor(target filter)` when the filters differ. Owner retest still failed: the item's cached list had been loaded while the section was on 26.3, and the section was back on the target's 26.2 when the cart opened, so the cache looked valid. Now `ModpackItem::versionsFilter` records the filter a list was loaded for; the cart (and ModInstallDialog) only reuse a list loaded for the same filter (test `cacheLoadedForAnEarlierFilterIsAskedAgain`). Owner has two instances both named "Axas Perfect Pack" (26.2 and
     26.3): the cart bar shows only the name, which is ambiguous (UX idea, not done).
   - **Shader packs page icons**: rows with Modrinth/CurseForge metadata show the project icon (`zero/content/ShaderPackIcons`, one batched
     API call per provider per session, `RemoteImageCache`). Checked against the real Modrinth API; CurseForge shape not checked live.

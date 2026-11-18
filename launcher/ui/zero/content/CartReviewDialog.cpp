@@ -429,7 +429,11 @@ void CartReviewDialog::requestVersions(Row& row)
     want.mcVersions = { m_target.mcVersion };
     want.loaders = row.entry.kind == Kind::Mod ? m_target.loaders : ModPlatform::ModLoaderTypes();
     const bool sameFilter = source->versionFilter() == want;
-    if (sameFilter && row.entry.item->pack->versionsLoaded) {
+    // The list the item carries may come from an earlier filter of the section (its target changed since): it counts only when it was
+    // loaded for this target; a list of unknown origin counts when the section's filter is the target's.
+    const auto& loadedFor = row.entry.item->versionsFilter;
+    const bool cacheFits = loadedFor ? *loadedFor == want : sameFilter;
+    if (cacheFits && row.entry.item->pack->versionsLoaded) {
         setRowVersions(row, row.entry.item->pack->versions);
         return;
     }

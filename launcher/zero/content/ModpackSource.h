@@ -32,6 +32,14 @@
 namespace Zero::Content {
 
 /// One modpack in the Discover list.
+struct VersionFilter {
+    QStringList mcVersions;                ///< empty = any Minecraft version
+    ModPlatform::ModLoaderTypes loaders{};  ///< none = any loader
+
+    bool isEmpty() const { return mcVersions.isEmpty() && loaders == ModPlatform::ModLoaderTypes(); }
+    bool operator==(const VersionFilter& other) const { return mcVersions == other.mcVersions && loaders == other.loaders; }
+};
+
 struct ModpackItem {
     Provider provider = Provider::Modrinth;
     QString id;       ///< Modrinth project id, CurseForge numeric id, Technic slug
@@ -48,6 +56,9 @@ struct ModpackItem {
     QDateTime updated;
     QString websiteUrl;
     bool detailsLoaded = false;  ///< the provider's project details were merged in (long description, gallery, license ...)
+    /// The filter `pack->versions` was loaded under (set by the sources' versions()); unset = unknown. A section's target can change
+    /// while an item (e.g. one in the install cart) keeps its old list, so a cache only counts for the filter it was loaded for.
+    std::optional<VersionFilter> versionsFilter;
 
     /// Modrinth / CurseForge: every field the provider sent. Null for Technic.
     ModPlatform::IndexedPack::Ptr pack;
@@ -83,14 +94,6 @@ using ContentVersion = ModpackVersion;
 
 /// Narrows the versions request of a source (Mods: the target instance's Minecraft version and loaders). Empty = every version,
 /// which is what modpacks ask for.
-struct VersionFilter {
-    QStringList mcVersions;                ///< empty = any Minecraft version
-    ModPlatform::ModLoaderTypes loaders{};  ///< none = any loader
-
-    bool isEmpty() const { return mcVersions.isEmpty() && loaders == ModPlatform::ModLoaderTypes(); }
-    bool operator==(const VersionFilter& other) const { return mcVersions == other.mcVersions && loaders == other.loaders; }
-};
-
 // ---- item construction (pure) ----
 
 /// A Modrinth / CurseForge search hit or project as an item.

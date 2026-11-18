@@ -1313,6 +1313,25 @@ class ZeroInstallCartTest : public QObject {
         QCOMPARE(dialog->rowState(modKey(S("1"))), CartReviewDialog::RowState::Ready);
     }
 
+    void cacheLoadedForAnEarlierFilterIsAskedAgain()
+    {
+        // owner's case: JEI's list was loaded while the section was filtered for 26.3; the section (and the cart) now target 26.2
+        ReviewRig rig;
+        rig.target = makeTarget(S("t"), S("Target"), S("26.2"), ModPlatform::Fabric);
+        const auto jei = withVersions(makeMod(S("1"), S("JEI")), { ver(S("n1"), S("9.0"), Release::Release, { S("26.3") }) });
+        VersionFilter old;
+        old.mcVersions = { S("26.3") };
+        old.loaders = ModPlatform::Fabric;
+        jei->versionsFilter = old;
+        rig.cart.add(Kind::Mod, jei);
+        const auto dialog = rig.open();
+        QCOMPARE(rig.modrinth.versionCalls.size(), 1);  // the section's filter is the target's: a fresh versions() request
+        QCOMPARE(dialog->rowState(modKey(S("1"))), CartReviewDialog::RowState::Loading);
+        withVersions(jei, { ver(S("o1"), S("8.0"), Release::Release, { S("26.2") }) });
+        emit rig.modrinth.versionsFinished(rig.modrinth.versionCalls.at(0).generation, jei, {});
+        QTRY_COMPARE(dialog->rowState(modKey(S("1"))), CartReviewDialog::RowState::Ready);
+    }
+
     void resourcePackReviewFilterHasNoLoaders()
     {
         ReviewRig rig;

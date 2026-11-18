@@ -819,7 +819,7 @@ Status per batch is logged below as it lands.
   `item/book/open_flip1.ogg` (fallback `random/click.ogg`); success `random/orb.ogg`; error `mob/villager/no1.ogg` (fallback
   `note/bass.ogg`); launch `random/levelup.ogg` (all under `minecraft/sounds/`; verified present in the owner's indexes 32/34; there is
   no `item/book/page_turn*`). Retro set plays while converting or when assets are missing (option disabled + caption "Play any
-  Minecraft version once..."). A `savvy-medium` worker was implementing it when the session stopped: check `git status`
+  Minecraft version once..."). A `savvy-medium` worker was STOPPED by the owner's request while waiting for its build; its partial work is in the tree, uncommitted and unreviewed: new `launcher/zero/sound/MinecraftSounds.{h,cpp}` + `MinecraftSoundCache.{h,cpp}`, `tests/MinecraftSounds_test.cpp`, edits in `ZeroSound.*`, `AppearancePage.*`, `Application.cpp`, both CMakeLists, ARCHITECTURE.md, filemap.md (Spanish strings not done yet). Check `git status`
   (`launcher/zero/sound/` or `ZeroSound.*`, `AppearancePage.cpp`, `tests/ZeroSound_test.cpp`, zero_es.ts). If it is there: review the
   diff (no Mojang file in the repo!), `scripts/zero/build.sh test`, convert once against `%APPDATA%\ZEROLauncher\assets` into a temp
   dir and check the 7 WAVs, screenshot Appearance (Minecraft theme), commit, give the owner the run command

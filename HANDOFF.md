@@ -1,6 +1,6 @@
 # ZERO Launcher — Handoff
 
-Last updated: 2026-11-17 (session 18: Mission 004 **B5 done and committed** — Spanish translation + language picker, Discord Rich Presence; Mission 004 complete, see "Mission 004". Session 17: B4 `26c833081`. Session 16: B2 + B3 + B4 task 1 (Playtime). Session 15: owner list — pack rollback, modpack New/Update, smooth scroll, Shader Packs page, UI sounds; see "Session 15" before "Build & test". Session 14: **1.0.1 PUBLISHED**; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
+Last updated: 2026-11-17 (session 18: B5 + owner QA round committed (`adc4f3b5a`, `f33fdfc9e`, `9dbeea9d5`, `12815bf77`); **Minecraft sound pack IN PROGRESS, uncommitted** — see Mission 004 › 🔴 RESUME HERE (Minecraft sound pack). Session 17: B4 `26c833081`. Session 16: B2 + B3 + Playtime. Session 15: pack rollback, modpack New/Update, Shader Packs page, UI sounds. Session 14: **1.0.1 PUBLISHED**; 1.0.0 PUBLISHED 2026-11-13) · Branch `zero-development` (local only, never pushed) ·
 Base: Prism Launcher `develop` @ 00f216ce5 · Repo folder: `C:\Users\64027\Documents\GitHub\ZeroCraft Launcher`
 (renamed from `ZERO-Launcher`; the path now contains a space).
 
@@ -809,6 +809,21 @@ Status per batch is logged below as it lands.
   - Flaky under parallel load, not investigated: `ZeroResourcePacksPage` segfaulted once (passes alone and on rerun).
   - Owner QA still open: Undo of a modpack update with the instance window open on Mods; bring changes back again; tray favorites; the
     two pre-launch buttons; shader icons on the real instance; the cart with JEI on the 26.2 instance.
+- Owner retest (session 18): JEI in the cart, test copy, Undo, tray, shader icons all OK (`12815bf77`).
+- 🔴 **RESUME HERE: Minecraft sound pack (session 18, IN PROGRESS, uncommitted)**. Owner request: keep ZERO's generated sounds AND, for
+  the Minecraft theme, a second pack with the real Minecraft sounds. Decided design: setting `ZeroUiSoundPack` ("theme" default |
+  "minecraft"); Appearance › Interface sounds shows a "Sound pack" choice "ZERO retro" / "Minecraft" only while the theme is
+  Minecraft-based. LEGAL RULE: never ship/commit Mojang files; read the user's local game assets (`<data>/assets/indexes/*.json` +
+  `objects/<hh>/<hash>`), decode .ogg with `QAudioDecoder` into `<data>/zero/sounds/minecraft/<event>.wav` (+ manifest), async.
+  Mapping: click `random/click.ogg`; toggle-on `random/wood_click.ogg`; toggle-off same at 0.8x sample rate; navigate
+  `item/book/open_flip1.ogg` (fallback `random/click.ogg`); success `random/orb.ogg`; error `mob/villager/no1.ogg` (fallback
+  `note/bass.ogg`); launch `random/levelup.ogg` (all under `minecraft/sounds/`; verified present in the owner's indexes 32/34; there is
+  no `item/book/page_turn*`). Retro set plays while converting or when assets are missing (option disabled + caption "Play any
+  Minecraft version once..."). A `savvy-medium` worker was implementing it when the session stopped: check `git status`
+  (`launcher/zero/sound/` or `ZeroSound.*`, `AppearancePage.cpp`, `tests/ZeroSound_test.cpp`, zero_es.ts). If it is there: review the
+  diff (no Mojang file in the repo!), `scripts/zero/build.sh test`, convert once against `%APPDATA%\ZEROLauncher\assets` into a temp
+  dir and check the 7 WAVs, screenshot Appearance (Minecraft theme), commit, give the owner the run command
+  (`& "C:\Users\64027\Documents\GitHub\ZeroCraft Launcher\scripts\zero\run-dev.cmd"`). If missing or half done: finish it from this spec.
 
 ## Build & test
 - Build: `scripts/zero/build.sh` · Build + tests: `scripts/zero/build.sh test` · Run: `scripts/zero/run-dev.cmd`.

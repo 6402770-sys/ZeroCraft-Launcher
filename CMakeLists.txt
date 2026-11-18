@@ -194,7 +194,7 @@ set(Launcher_LEGACY_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" 
 ######## Set version numbers ########
 set(Launcher_VERSION_MAJOR 1)
 set(Launcher_VERSION_MINOR 0)
-set(Launcher_VERSION_PATCH 1)
+set(Launcher_VERSION_PATCH 2)
 
 # ZERO: scripts/zero/package.sh passes -DZERO_VERSION=X.Y.Z to build a release with another version than the one above.
 set(ZERO_VERSION "" CACHE STRING "Override the launcher version (X.Y.Z). Empty keeps the numbers above.")

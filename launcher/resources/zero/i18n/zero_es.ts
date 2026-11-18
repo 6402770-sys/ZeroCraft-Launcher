@@ -15666,7 +15666,7 @@ Configura tu cuenta según %1.</translation>
     </message>
     <message>
         <source>Play any Minecraft version once so ZERO can use its sounds.</source>
-        <translation>Jugá cualquier versión de Minecraft una vez para que ZERO pueda usar sus sonidos.</translation>
+        <translation>Juega cualquier versión de Minecraft una vez para que ZERO pueda usar sus sonidos.</translation>
     </message>
     <message>
         <source>More appearance options</source>
